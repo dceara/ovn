@@ -66,6 +66,7 @@ struct ovn_extend_table;
     OVNACT(ARP,               ovnact_nest)            \
     OVNACT(ICMP4,             ovnact_nest)            \
     OVNACT(ICMP6,             ovnact_nest)            \
+    OVNACT(IGMP,              ovnact_null)            \
     OVNACT(TCP_RESET,         ovnact_nest)            \
     OVNACT(ND_NA,             ovnact_nest)            \
     OVNACT(ND_NA_ROUTER,      ovnact_nest)            \
@@ -452,6 +453,12 @@ enum action_opcode {
         * The actions, in OpenFlow 1.3 format, follow the action_header.
         */
     ACTION_OPCODE_ND_NA_ROUTER,
+
+    /* "igmp".
+     *
+     * Snoop IGMP, learn the multicast participants
+     */
+    ACTION_OPCODE_IGMP,
 };
 
 /* Header. */
