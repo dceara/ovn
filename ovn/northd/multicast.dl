@@ -1,0 +1,104 @@
+import OVN_Northbound as nb
+import OVN_Southbound as sb
+import ovsdb
+import helpers
+import lswitch
+
+/* IP Multicast per switch information. */
+relation McastSwitchInfo(
+    dpname:             string,
+    enabled:            bool,
+    flood_unregistered: bool,
+    table_size:         integer //TODO: how do we enforce table size??
+)
+
+McastSwitchInfo(.dpname  = dpname,
+                .enabled = enabled,
+                .flood_unregistered = flood_unregistered,
+                .table_size = table_size) :-
+    nb.Logical_Switch(._uuid = ls_uuid, .other_config = other_config),
+    sb.Out_IP_Multicast(.datapath = dpname, .enabled = mcast_enabled,
+                        .table_size = mcast_table_size),
+    dpname == uuid2name(ls_uuid),
+    var enabled = {set_nth(mcast_enabled, 0) == Some{true}},
+    Some{var table_size} = set_nth(mcast_table_size, 0),
+    var flood_unregistered = map_get_bool_def(other_config, "mcast_flood_unregistered", false)
+    .
+
+/* IP_Multicast table */
+//TODO: how do we update seq_no????
+sb.Out_IP_Multicast(.datapath = uuid2name(ls_uuid),
+                    .enabled = set_singleton(mcast_snoop),
+                    .querier = set_singleton(mcast_querier),
+                    .eth_src = mcast_eth_src,
+                    .ip4_src = mcast_ip4_src,
+                    .table_size = set_singleton(mcast_table_size),
+                    .idle_timeout = set_singleton(mcast_idle_timeout),
+                    .query_interval = set_singleton(mcast_query_interval),
+                    .query_max_resp = set_singleton(mcast_query_max_resp),
+                    .seq_no = 0) :-
+   nb.Logical_Switch(._uuid = ls_uuid, .other_config = other_config),
+   sb.Out_Datapath_Binding(.external_ids = dp_external_ids),
+   Some{var dp_str} = map_get(dp_external_ids, "logical-switch"),
+   dp_str == uuid2str(ls_uuid),
+   var mcast_snoop = map_get_bool_def(other_config, "mcast_snoop", false),
+   var mcast_querier = map_get_bool_def(other_config, "mcast_querier", true),
+   var mcast_eth_src = map_get_str_def(other_config, "mcast_eth_src", ""), //TODO: is there a way to leave a field uninitialized??
+   var mcast_ip4_src = map_get_str_def(other_config, "mcast_ip4_src", ""), //TODO: is there a way to leave a field uninitialized??
+   var mcast_table_size = map_get_int_def(other_config, "mcast_table_size", 2048), //TODO: hardcoded
+   var mcast_idle_timeout = map_get_int_def(other_config, "mcast_idle_timeout", 300), //TODO: hardcoded and no min/max check
+   var mcast_query_interval = map_get_int_def(other_config, "mcast_query_interval", 150), //TODO: hardcoded and no min/max check
+   var mcast_query_max_resp = map_get_int_def(other_config, "mcast_query_max_response", 1) //TODO: hardcoded
+   .
+
+relation IgmpAggregatedGroup(
+    address: string,
+    dpname: string,
+    ports: Set<uuid>
+)
+
+function igmp_group_aggregate(g: Group<Set<uuid>>): Set<uuid> =
+{
+    var agg_ports: Set<uuid> = set_empty();
+    for (ports in g) {
+        agg_ports = set_union(agg_ports, ports)
+    };
+    agg_ports
+}
+
+IgmpAggregatedGroup(.address  = igmp_address,
+                    .dpname = dpname,
+                    .ports = ports) :-
+    nb.Logical_Switch(._uuid = ls_uuid),
+    sb.Datapath_Binding(._uuid = dp_uuid, .external_ids = external_ids),
+    sb.IGMP_Group(.address = igmp_address, .datapath = igmp_dp_uuid, .ports = igmp_ports),
+    Some{dp_uuid} == set_nth(igmp_dp_uuid, 0),
+    Some{var dp_ls_uuid} = map_get(external_ids, "logical-switch"),
+    dp_ls_uuid == uuid2str(ls_uuid),
+    var dpname = uuid2name(ls_uuid),
+    var ports = Aggregate((igmp_address, dpname), igmp_group_aggregate(igmp_ports))
+    .
+
+relation IgmpGroupPortBinding(
+    address: string,
+    dpname: string,
+    port: uuid
+)
+
+IgmpGroupPortBinding(.address = address, .dpname = dpname, .port = port) :-
+    IgmpAggregatedGroup(.address = address, .dpname = dpname, .ports = ports),
+    var port = FlatMap(ports)
+    .
+
+relation IgmpGroupPort(
+    address: string,
+    dpname: string,
+    port: Ref<SwitchPort>
+)
+
+IgmpGroupPort(address, dpname, port) :-
+    IgmpGroupPortBinding(.address = address, .dpname = dpname, .port = pb_uuid),
+    sb.Port_Binding(._uuid = pb_uuid, .logical_port = lpname),
+    port in &SwitchPort(.lsp = lsp),
+    lsp.name == lpname
+    .
