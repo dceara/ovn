@@ -63,6 +63,7 @@ ovn/northd/OVN_Southbound.dl: ovn/ovn-sb.ovsschema
 				-p Multicast_Group      \
 				--ro Port_Binding.chassis       \
 				--ro Port_Binding.encap         \
+				--ro IP_Multicast.seq_no        \
 				--ro SB_Global.ssl              \
 				--ro SB_Global.connections      \
 				--ro SB_Global.external_ids     \

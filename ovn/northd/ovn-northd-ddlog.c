@@ -258,14 +258,6 @@ ddlog_debug_dump(ddlog_prog ddlog OVS_UNUSED)
     ddlog_string_free(profile);
 #endif
 
-    ddlog_table_debug_dump(ddlog, "OVN_Southbound.Swizzled_Multicast_Group");
-    ddlog_table_debug_dump(ddlog, "OVN_Southbound.DeltaPlus_Multicast_Group");
-    ddlog_table_debug_dump(ddlog, "OVN_Southbound.DeltaMinus_Multicast_Group");
-    ddlog_table_debug_dump(ddlog, "OVN_Southbound.Update_Multicast_Group");
-    ddlog_table_debug_dump(ddlog, "AllocatedMulticastGroupTunKeys");
-    ddlog_table_debug_dump(ddlog, "NotYetAllocatedMulticastGroupTunKeys");
-    ddlog_table_debug_dump(ddlog, "MulticastGroupTunKeyAllocation");
-
 #if 0
     ddlog_table_debug_dump(ddlog, "lswitch.SwitchPortIPv4Address");
     ddlog_table_debug_dump(ddlog, "OVN_Southbound.Out_Port_Binding");

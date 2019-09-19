@@ -26,7 +26,6 @@ McastSwitchInfo(.dpname  = dpname,
     .
 
 /* IP_Multicast table */
-//TODO: how do we update seq_no????
 sb.Out_IP_Multicast(.datapath = uuid2name(ls_uuid),
                     .enabled = set_singleton(mcast_snoop),
                     .querier = set_singleton(mcast_querier),
@@ -35,8 +34,7 @@ sb.Out_IP_Multicast(.datapath = uuid2name(ls_uuid),
                     .table_size = set_singleton(mcast_table_size),
                     .idle_timeout = set_singleton(mcast_idle_timeout),
                     .query_interval = set_singleton(mcast_query_interval),
-                    .query_max_resp = set_singleton(mcast_query_max_resp),
-                    .seq_no = 0) :-
+                    .query_max_resp = set_singleton(mcast_query_max_resp)) :-
    nb.Logical_Switch(._uuid = ls_uuid, .other_config = other_config),
    sb.Out_Datapath_Binding(.external_ids = dp_external_ids),
    Some{var dp_str} = map_get(dp_external_ids, "logical-switch"),
