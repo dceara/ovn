@@ -49,54 +49,31 @@ sb.Out_IP_Multicast(.datapath = uuid2name(ls_uuid),
    var mcast_query_max_resp = map_get_int_def(other_config, "mcast_query_max_response", 1) //TODO: hardcoded
    .
 
+relation IgmpGroupPortSingle(
+    address: string,
+    dpname : string,
+    chassis: uuid,
+    sw_port: uuid
+)
+
+IgmpGroupPortSingle(address, dpname, chassis, lsp._uuid) :-
+    sb.IGMP_Group(.address = address, .chassis = igmp_chassis_set,
+                  .datapath = igmp_dp_set, .ports = pb_ports),
+    Some{var chassis} = set_nth(igmp_chassis_set, 0),
+    Some{var dp} = set_nth(igmp_dp_set, 0),
+    sb.UUIDMap_Datapath_Binding(dpname, Left{dp}),
+    &SwitchPort(.lsp = lsp),
+    var pb_port_uuid = FlatMap(pb_ports),
+    sb.Port_Binding(._uuid = pb_port_uuid, .logical_port = logical_port),
+    lsp.name == logical_port.
+
 relation IgmpAggregatedGroup(
     address: string,
-    dpname: string,
-    ports: Set<uuid>
+    dpname : string,
+    ports  : Set<uuid>
 )
 
-function igmp_group_aggregate(g: Group<Set<uuid>>): Set<uuid> =
-{
-    var agg_ports: Set<uuid> = set_empty();
-    for (ports in g) {
-        agg_ports = set_union(agg_ports, ports)
-    };
-    agg_ports
-}
+IgmpAggregatedGroup(address, dpname, ports) :-
+    IgmpGroupPortSingle(.address = address, .dpname = dpname, .sw_port = lsp_uuid),
+    var ports = Aggregate((address, dpname), group2set(lsp_uuid)).
 
-IgmpAggregatedGroup(.address  = igmp_address,
-                    .dpname = dpname,
-                    .ports = ports) :-
-    nb.Logical_Switch(._uuid = ls_uuid),
-    sb.Datapath_Binding(._uuid = dp_uuid, .external_ids = external_ids),
-    sb.IGMP_Group(.address = igmp_address, .datapath = igmp_dp_uuid, .ports = igmp_ports),
-    Some{dp_uuid} == set_nth(igmp_dp_uuid, 0),
-    Some{var dp_ls_uuid} = map_get(external_ids, "logical-switch"),
-    dp_ls_uuid == uuid2str(ls_uuid),
-    var dpname = uuid2name(ls_uuid),
-    var ports = Aggregate((igmp_address, dpname), igmp_group_aggregate(igmp_ports))
-    .
-
-relation IgmpGroupPortBinding(
-    address: string,
-    dpname: string,
-    port: uuid
-)
-
-IgmpGroupPortBinding(.address = address, .dpname = dpname, .port = port) :-
-    IgmpAggregatedGroup(.address = address, .dpname = dpname, .ports = ports),
-    var port = FlatMap(ports)
-    .
-
-relation IgmpGroupPort(
-    address: string,
-    dpname: string,
-    port: Ref<SwitchPort>
-)
-
-IgmpGroupPort(address, dpname, port) :-
-    IgmpGroupPortBinding(.address = address, .dpname = dpname, .port = pb_uuid),
-    sb.Port_Binding(._uuid = pb_uuid, .logical_port = lpname),
-    port in &SwitchPort(.lsp = lsp),
-    lsp.name == lpname
-    .

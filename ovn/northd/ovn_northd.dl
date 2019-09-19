@@ -553,14 +553,12 @@ sb.Out_Multicast_Group (.datapath   = uuid2name(ls),
 
 //TODO: comment
 sb.Out_Multicast_Group (.datapath   = datapath,
-                        .name       = igmp_address,
+                        .name       = address,
                         .tunnel_key = 0,
                         .ports      = set_map_uuid2name(port_ids)) :-
     &Switch(.dpname = dpname, .ls = ls),
-    IgmpGroupPort(.address = igmp_address, .dpname = dpname, .port = &SwitchPort{.lsp = lsp}),
-    var datapath = uuid2name(ls._uuid),
-    var port_ids = Aggregate((datapath, igmp_address), group2set(lsp._uuid))
-    .
+    IgmpAggregatedGroup(.address = address, .dpname = dpname, .ports = port_ids),
+    var datapath = uuid2name(ls._uuid).
 
 //TODO: comment tunkey allocation
 sb.OutProxy_Multicast_Group(.datapath = mcgroup.datapath,
@@ -4828,8 +4826,6 @@ PortTunKeyAllocation(port, tunkey) :-
  */
 
 // all tunnel keys already in use in the Realized table
-//TODO:
-output
 relation AllocatedMulticastGroupTunKeys(datapath: string, keys: Set<integer>)
 
 AllocatedMulticastGroupTunKeys(datapath_name, keys) :-
@@ -4838,8 +4834,6 @@ AllocatedMulticastGroupTunKeys(datapath_name, keys) :-
     var keys = Aggregate((datapath_name), group2set(tunkey)).
 
 // Multicast_Group's not yet in the Realized table
-//TODO:
-output
 relation NotYetAllocatedMulticastGroupTunKeys(datapath: string, all_logical_ids: Vec<string>)
 
 NotYetAllocatedMulticastGroupTunKeys(datapath, all_names) :-
@@ -4849,8 +4843,6 @@ NotYetAllocatedMulticastGroupTunKeys(datapath, all_names) :-
     var all_names = Aggregate((datapath), group2vec(name)).
 
 // Perform the allocation
-//TODO:
-output
 relation MulticastGroupTunKeyAllocation(group: string, datapath: string, tunkey: integer)
 
 // transfer existing allocations from the realized table
