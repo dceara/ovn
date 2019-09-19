@@ -1,7 +1,7 @@
 {
     "name": "OVN_Southbound",
     "version": "2.2.0",
-    "cksum": "2547593301 17496",
+    "cksum": "3014738539 17431",
     "tables": {
         "SB_Global": {
             "columns": {
@@ -313,8 +313,7 @@
         "IP_Multicast": {
             "columns": {
                 "datapath": {"type": {"key": {"type": "uuid",
-                                              "refTable": "Datapath_Binding",
-                                              "refType": "weak"}}},
+                                              "refTable": "Datapath_Binding"}}},
                 "enabled": {"type": {"key": "boolean", "min": 0, "max": 1}},
                 "querier": {"type": {"key": "boolean", "min": 0, "max": 1}},
                 "eth_src": {"type": "string"},

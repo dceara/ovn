@@ -95,7 +95,8 @@ static const char *sb_input_relations[] = {
     "DNS",
     "RBAC_Role",
     "RBAC_Permission",
-    "Gateway_Chassis"
+    "Gateway_Chassis",
+    "IP_Multicast"
 };
 
 
@@ -256,6 +257,14 @@ ddlog_debug_dump(ddlog_prog ddlog OVS_UNUSED)
     VLOG_INFO("DDlog profile:\n%s", profile);
     ddlog_string_free(profile);
 #endif
+
+    ddlog_table_debug_dump(ddlog, "OVN_Southbound.Swizzled_Multicast_Group");
+    ddlog_table_debug_dump(ddlog, "OVN_Southbound.DeltaPlus_Multicast_Group");
+    ddlog_table_debug_dump(ddlog, "OVN_Southbound.DeltaMinus_Multicast_Group");
+    ddlog_table_debug_dump(ddlog, "OVN_Southbound.Update_Multicast_Group");
+    ddlog_table_debug_dump(ddlog, "AllocatedMulticastGroupTunKeys");
+    ddlog_table_debug_dump(ddlog, "NotYetAllocatedMulticastGroupTunKeys");
+    ddlog_table_debug_dump(ddlog, "MulticastGroupTunKeyAllocation");
 
 #if 0
     ddlog_table_debug_dump(ddlog, "lswitch.SwitchPortIPv4Address");
@@ -879,6 +888,7 @@ get_sb_ops(struct northd_ctx *ctx)
     ddlog_table_update(&ds, ctx->ddlog, "OVN_Southbound", "DNS");
     ddlog_table_update(&ds, ctx->ddlog, "OVN_Southbound", "RBAC_Role");
     ddlog_table_update(&ds, ctx->ddlog, "OVN_Southbound", "RBAC_Permission");
+    ddlog_table_update(&ds, ctx->ddlog, "OVN_Southbound", "IP_Multicast");
 
     ds_chomp(&ds, ',');
 

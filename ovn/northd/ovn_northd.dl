@@ -5,6 +5,7 @@ import allocate
 import ovn
 import lswitch
 import lrouter
+import multicast
 import helpers
 import ipam
 
@@ -549,6 +550,38 @@ sb.Out_Multicast_Group (.datapath   = uuid2name(ls),
                         .tunnel_key = 65534,
                         .ports      = set_map_uuid2name(port_ids)) :-
     LogicalSwitchUnknownPorts(ls, port_ids).
+
+//TODO: comment
+sb.Out_Multicast_Group (.datapath   = datapath,
+                        .name       = igmp_address,
+                        .tunnel_key = 0,
+                        .ports      = set_map_uuid2name(port_ids)) :-
+    &Switch(.dpname = dpname, .ls = ls),
+    IgmpGroupPort(.address = igmp_address, .dpname = dpname, .port = &SwitchPort{.lsp = lsp}),
+    var datapath = uuid2name(ls._uuid),
+    var port_ids = Aggregate((datapath, igmp_address), group2set(lsp._uuid))
+    .
+
+//TODO: comment tunkey allocation
+sb.OutProxy_Multicast_Group(.datapath = mcgroup.datapath,
+                            .name = mcgroup.name,
+                            .tunnel_key = mcgroup.tunnel_key,
+                            .ports = mcgroup.ports) :-
+    sb.Swizzled_Multicast_Group[mcgroup],
+    mcgroup.tunnel_key != 0
+    .
+
+//TODO: comment tunkey allocation
+sb.OutProxy_Multicast_Group(.datapath = mcgroup.datapath,
+                            .name = mcgroup.name,
+                            .tunnel_key = tunnel_key,
+                            .ports = mcgroup.ports) :-
+    sb.Swizzled_Multicast_Group[mcgroup],
+    mcgroup.tunnel_key == 0,
+    sb.UUIDMap_Datapath_Binding(datapath_name, mcgroup.datapath),
+    MulticastGroupTunKeyAllocation(mcgroup.name, datapath_name, tunnel_key)
+    .
+
 
 /*
  * MAC binding: records inserted by hypervisors; northd removes records for deleted logical ports
@@ -2330,31 +2363,6 @@ function build_dhcpv4_action(
     }
 }
 
-function map_get_bool_def(m: Map<string, string>, k: string, def: bool): bool = {
-    match (map_get(m, k)) {
-        None -> def,
-        Some{x} -> {
-            if (def) {
-                str_to_lower(x) != "false"
-            } else {
-                str_to_lower(x) == "true"
-            }
-        }
-    }
-}
-
-function map_get_int_def(m: Map<string, string>, k: string, def: integer): integer = {
-    match (map_get(m, k)) {
-        None -> def,
-        Some{x} -> {
-            match (str_to_int(x, 10)) {
-                Some{v} -> v,
-                None -> def
-            }
-        }
-    }
-}
-
 function build_dhcpv6_action(
     lsp_json_key: string,
     dhcpv6_options: nb.DHCP_Options,
@@ -2605,14 +2613,48 @@ for (ls in nb.Logical_Switch) {
     }
 }
 
+//TODO: Comment
+for (&Switch(.dpname = dpname, .mcast_info = mcast_info) if (mcast_info.enabled)) {
+    Flow(.logical_datapath = dpname,
+         .stage            = switch_stage(IN, L2_LKUP),
+         .priority         = 100,
+         .__match          = "ip4 && ip.proto == 2",
+         .actions          = "igmp;",
+         .external_ids     = map_empty());
+    Flow(.logical_datapath = dpname,
+         .stage            = switch_stage(IN, L2_LKUP),
+         .priority         = 85,
+         .__match          = "ip4 && ip4.dst == 224.0.0.0/24",
+         .actions          = "outport = \"${mC_FLOOD()}\"; output;",
+         .external_ids     = map_empty());
+    if (not mcast_info.flood_unregistered) {
+        Flow(.logical_datapath = dpname,
+         .stage            = switch_stage(IN, L2_LKUP),
+         .priority         = 80,
+         .__match          = "ip4 && ip4.mcast",
+         .actions          = "drop;",
+         .external_ids     = map_empty())
+    }
+}
+
+//TODO: Comment
+for (IgmpAggregatedGroup(.address = address, .dpname = dpname)) {
+    var bla = {warn("DEBUG DEBUG should generate flow for group ${address}")} in //TODO: remove debug log
+    Flow(.logical_datapath = dpname,
+         .stage            = switch_stage(IN, L2_LKUP),
+         .priority         = 90,
+         .__match          = "eth.mcast && ip4 && ip4.dst == ${address}",
+         .actions          = "outport = \"${address}\"; output;",
+         .external_ids     = map_empty())
+}
 
 /* Ingress table 16: Destination lookup, broadcast and multicast handling
  * (priority 100). */
 for (ls in nb.Logical_Switch) {
     var lsname = uuid2name(ls._uuid) in
     Flow(.logical_datapath = lsname,
-         .stage         = switch_stage(IN, L2_LKUP),
-         .priority         = 100,
+         .stage            = switch_stage(IN, L2_LKUP),
+         .priority         = 70,
          .__match          = "eth.mcast",
          .actions          = "outport = \"${mC_FLOOD()}\"; output;",
          .external_ids     = map_empty())
@@ -4778,6 +4820,60 @@ PortTunKeyAllocation(port, tunkey) :-
     not AllocatedPortTunKeys(datapath, _),
     var allocation = FlatMap(allocate(set_empty(): Set<bit<64>>, unallocated, 64'h1, 64'hffff)),
     (var port, var tunkey) = allocation.
+
+/*
+ * Multicast group tunnel_key allocation:
+ *
+ * Tunnel-keys in a per-datapath space in the range 32768...65533
+ */
+
+// all tunnel keys already in use in the Realized table
+//TODO:
+output
+relation AllocatedMulticastGroupTunKeys(datapath: string, keys: Set<integer>)
+
+AllocatedMulticastGroupTunKeys(datapath_name, keys) :-
+    sb.Multicast_Group(.datapath = datapath_uuid, .tunnel_key = tunkey),
+    sb.UUIDMap_Datapath_Binding(datapath_name, Left{datapath_uuid}),
+    var keys = Aggregate((datapath_name), group2set(tunkey)).
+
+// Multicast_Group's not yet in the Realized table
+//TODO:
+output
+relation NotYetAllocatedMulticastGroupTunKeys(datapath: string, all_logical_ids: Vec<string>)
+
+NotYetAllocatedMulticastGroupTunKeys(datapath, all_names) :-
+    sb.Out_Multicast_Group(.name = name, .datapath = datapath, .tunnel_key = tunnel_key),
+    sb.UUIDMap_Datapath_Binding(datapath, Left{datapath_uuid}),
+    not sb.Multicast_Group(.name = name, .datapath = datapath_uuid),
+    var all_names = Aggregate((datapath), group2vec(name)).
+
+// Perform the allocation
+//TODO:
+output
+relation MulticastGroupTunKeyAllocation(group: string, datapath: string, tunkey: integer)
+
+// transfer existing allocations from the realized table
+MulticastGroupTunKeyAllocation(group, datapath_name, tunkey) :-
+    sb.UUIDMap_Datapath_Binding(datapath_name, Left{datapath}),
+    sb.Multicast_Group(.name = group,
+                       .datapath = datapath,
+                       .tunnel_key = tunkey).
+
+// Case 1: AllocatedMulticastGroupTunKeys(datapath) is not empty (i.e., contains
+// a single record that stores a set of allocated keys)
+MulticastGroupTunKeyAllocation(group, datapath, tunkey) :-
+    AllocatedMulticastGroupTunKeys(datapath, allocated),
+    NotYetAllocatedMulticastGroupTunKeys(datapath, unallocated),
+    var allocation = FlatMap(allocate(allocated, unallocated, 64'd32768, 64'd65533)),
+    (var group, var tunkey) = allocation.
+
+// Case 2: AllocatedMulticastGroupTunKeys(datapath) relation is empty
+MulticastGroupTunKeyAllocation(group, datapath, tunkey) :-
+    NotYetAllocatedMulticastGroupTunKeys(datapath, unallocated),
+    not AllocatedMulticastGroupTunKeys(datapath, _),
+    var allocation = FlatMap(allocate(set_empty(): Set<bit<64>>, unallocated, 64'd32768, 64'd65533)),
+    (var group, var tunkey) = allocation.
 
 /*
  * Queue ID allocation

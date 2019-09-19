@@ -3,6 +3,7 @@ import OVN_Southbound as sb
 import ovsdb
 import ovn
 import lrouter
+import multicast
 import helpers
 import ipam
 
@@ -130,20 +131,25 @@ relation &Switch(
     has_dns_records:   bool,
     has_localnet_port: bool,
     subnet:            Option<(ovs_be32/*subnet*/, ovs_be32/*mask*/, bit<32>/*start_ipv4*/, bit<32>/*total_ipv4s*/)>,
-    ipv6_prefix:       Option<in6_addr>
+    ipv6_prefix:       Option<in6_addr>,
+    mcast_info:        McastSwitchInfo  //TODO: use reference here?
 )
 
 &Switch(.ls                = ls,
-        .dpname            = uuid2name(ls._uuid),
+        .dpname            = dpname,
         .has_stateful_acl  = has_stateful_acl,
         .has_dns_records   = has_dns_records,
         .has_localnet_port = has_localnet_port,
         .subnet            = subnet,
-        .ipv6_prefix       = ipv6_prefix) :-
+        .ipv6_prefix       = ipv6_prefix,
+        .mcast_info        = mcast_info) :-
     nb.Logical_Switch[ls],
     LogicalSwitchHasStatefulACL(ls._uuid, has_stateful_acl),
     LogicalSwitchHasDNSRecords(ls._uuid, has_dns_records),
     LogicalSwitchHasLocalnetPort(ls._uuid, has_localnet_port),
+    McastSwitchInfo[mcast_info],
+    var dpname = uuid2name(ls._uuid),
+    dpname == mcast_info.dpname,
     var subnet: Option<(ovs_be32, ovs_be32, bit<32>, bit<32>)> =
         match (map_get(ls.other_config, "subnet")) {
             None -> None,
