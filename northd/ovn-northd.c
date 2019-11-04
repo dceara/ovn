@@ -4288,11 +4288,7 @@ build_empty_lb_event_flow(struct ovn_datapath *od, struct hmap *lflows,
     }
 
     struct ds match = DS_EMPTY_INITIALIZER;
-    char *meter = "", *action;
-
-    if (meter_groups && shash_find(meter_groups, "event-elb")) {
-        meter = "event-elb";
-    }
+    char *action;
 
     if (addr_family == AF_INET) {
         ds_put_format(&match, "ip4.dst == %s && %s",
@@ -4306,13 +4302,16 @@ build_empty_lb_event_flow(struct ovn_datapath *od, struct hmap *lflows,
                       port);
     }
     action = xasprintf("trigger_event(event = \"%s\", "
-                       "meter = \"%s\", vip = \"%s\", "
+                       "vip = \"%s\", "
                        "protocol = \"%s\", "
                        "load_balancer = \"" UUID_FMT "\");",
                        event_to_string(OVN_EVENT_EMPTY_LB_BACKENDS),
-                       meter, node->key, lb->protocol,
+                       node->key, lb->protocol,
                        UUID_ARGS(&lb->header_.uuid));
-    ovn_lflow_add(lflows, od, pl, 130, ds_cstr(&match), action);
+
+    const struct nbrec_copp *copp = (od->nbr ? od->nbr->copp : od->nbs->copp);
+    ovn_lflow_add_ctrl(lflows, od, pl, 130, ds_cstr(&match), action,
+                       copp_meter_get(COPP_EVENT_ELB, copp, meter_groups));
     ds_destroy(&match);
     free(action);
 }
