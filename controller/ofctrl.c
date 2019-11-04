@@ -67,13 +67,15 @@ struct ovn_flow {
     struct ofpact *ofpacts;
     size_t ofpacts_len;
     uint64_t cookie;
+    uint32_t ctrl_meter_id; /* Meter to be used for controller actions. */
 };
 
 static struct ovn_flow *ovn_flow_alloc(uint8_t table_id, uint16_t priority,
                                        uint64_t cookie,
                                        const struct match *match,
                                        const struct ofpbuf *actions,
-                                       const struct uuid *sb_uuid);
+                                       const struct uuid *sb_uuid,
+                                       uint32_t meter_id);
 static uint32_t ovn_flow_match_hash(const struct ovn_flow *);
 static struct ovn_flow *ovn_flow_lookup(struct hmap *flow_table,
                                         const struct ovn_flow *target,
@@ -660,10 +662,11 @@ ofctrl_check_and_add_flow(struct ovn_desired_flow_table *flow_table,
                           uint64_t cookie, const struct match *match,
                           const struct ofpbuf *actions,
                           const struct uuid *sb_uuid,
+                          uint32_t meter_id,
                           bool log_duplicate_flow)
 {
     struct ovn_flow *f = ovn_flow_alloc(table_id, priority, cookie, match,
-                                        actions, sb_uuid);
+                                        actions, sb_uuid, meter_id);
 
     ovn_flow_log(f, "ofctrl_add_flow");
 
@@ -715,8 +718,18 @@ ofctrl_add_flow(struct ovn_desired_flow_table *desired_flows,
                 const struct match *match, const struct ofpbuf *actions,
                 const struct uuid *sb_uuid)
 {
+    ofctrl_add_flow_meter(desired_flows, table_id, priority, cookie,
+                          match, actions, sb_uuid, NX_CTLR_NO_METER);
+}
+
+void
+ofctrl_add_flow_meter(struct ovn_desired_flow_table *desired_flows,
+                      uint8_t table_id, uint16_t priority, uint64_t cookie,
+                      const struct match *match, const struct ofpbuf *actions,
+                      const struct uuid *sb_uuid, uint32_t meter_id)
+{
     ofctrl_check_and_add_flow(desired_flows, table_id, priority, cookie,
-                              match, actions, sb_uuid, true);
+                              match, actions, sb_uuid, meter_id, true);
 }
 
 void
@@ -724,10 +737,11 @@ ofctrl_add_or_append_flow(struct ovn_desired_flow_table *desired_flows,
                           uint8_t table_id, uint16_t priority, uint64_t cookie,
                           const struct match *match,
                           const struct ofpbuf *actions,
-                          const struct uuid *sb_uuid)
+                          const struct uuid *sb_uuid,
+                          uint32_t meter_id)
 {
     struct ovn_flow *f = ovn_flow_alloc(table_id, priority, cookie, match,
-                                        actions, sb_uuid);
+                                        actions, sb_uuid, meter_id);
 
     ovn_flow_log(f, "ofctrl_add_or_append_flow");
 
@@ -762,7 +776,7 @@ ofctrl_add_or_append_flow(struct ovn_desired_flow_table *desired_flows,
 static struct ovn_flow *
 ovn_flow_alloc(uint8_t table_id, uint16_t priority, uint64_t cookie,
                const struct match *match, const struct ofpbuf *actions,
-               const struct uuid *sb_uuid)
+               const struct uuid *sb_uuid, uint32_t meter_id)
 {
     struct ovn_flow *f = xmalloc(sizeof *f);
     f->table_id = table_id;
@@ -774,6 +788,7 @@ ovn_flow_alloc(uint8_t table_id, uint16_t priority, uint64_t cookie,
     f->match_hmap_node.hash = ovn_flow_match_hash(f);
     f->uuid_hindex_node.hash = uuid_hash(&f->sb_uuid);
     f->cookie = cookie;
+    f->ctrl_meter_id = meter_id;
 
     return f;
 }
@@ -799,6 +814,7 @@ ofctrl_dup_flow(struct ovn_flow *src)
     dst->sb_uuid = src->sb_uuid;
     dst->match_hmap_node.hash = src->match_hmap_node.hash;
     dst->uuid_hindex_node.hash = uuid_hash(&src->sb_uuid);
+    dst->ctrl_meter_id = src->ctrl_meter_id;
     return dst;
 }
 
@@ -814,6 +830,7 @@ ovn_flow_lookup(struct hmap *flow_table, const struct ovn_flow *target,
                              flow_table) {
         if (f->table_id == target->table_id
             && f->priority == target->priority
+            && f->ctrl_meter_id == target->ctrl_meter_id
             && minimatch_equal(&f->match, &target->match)) {
             if (!cmp_sb_uuid || uuid_equals(&target->sb_uuid, &f->sb_uuid)) {
                 return f;

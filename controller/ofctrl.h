@@ -74,7 +74,15 @@ void ofctrl_add_or_append_flow(struct ovn_desired_flow_table *desired_flows,
                                uint8_t table_id, uint16_t priority,
                                uint64_t cookie, const struct match *match,
                                const struct ofpbuf *actions,
-                               const struct uuid *sb_uuid);
+                               const struct uuid *sb_uuid,
+                               uint32_t meter_id);
+
+void ofctrl_add_flow_meter(struct ovn_desired_flow_table *desired_flows,
+                           uint8_t table_id, uint16_t priority,
+                           uint64_t cookie, const struct match *match,
+                           const struct ofpbuf *actions,
+                           const struct uuid *sb_uuid,
+                           uint32_t meter_id);
 
 void ofctrl_remove_flows(struct ovn_desired_flow_table *, const struct uuid *);
 
@@ -86,7 +94,8 @@ void ofctrl_check_and_add_flow(struct ovn_desired_flow_table *,
                                uint8_t table_id, uint16_t priority,
                                uint64_t cookie, const struct match *,
                                const struct ofpbuf *ofpacts,
-                               const struct uuid *, bool log_duplicate_flow);
+                               const struct uuid *, uint32_t meter_id,
+                               bool log_duplicate_flow);
 
 bool ofctrl_is_connected(void);
 void ofctrl_set_probe_interval(int probe_interval);

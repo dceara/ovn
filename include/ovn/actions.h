@@ -645,6 +645,8 @@ struct ovnact_encode_params {
                                    resubmit. */
     uint8_t mac_lookup_ptable;  /* OpenFlow table for
                                    'lookup_arp'/'lookup_nd' to resubmit. */
+    uint32_t ctrl_meter_id;     /* Meter to be used if the resulting flow
+                                   sends packets to controller. */
 };
 
 void ovnacts_encode(const struct ovnact[], size_t ovnacts_len,
