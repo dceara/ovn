@@ -27,6 +27,7 @@
 #include "jsonrpc.h"
 #include "openvswitch/json.h"
 #include "lib/acl-log.h"
+#include "lib/copp.h"
 #include "lib/ovn-nb-idl.h"
 #include "lib/ovn-util.h"
 #include "packets.h"
@@ -752,6 +753,48 @@ HA chassis group commands:\n\
 chassis with optional PRIORITY to the HA chassis group GRP\n\
   ha-chassis-group-del-chassis GRP CHASSIS Deletes the HA chassis\
 CHASSIS from the HA chassis group GRP\n\
+\n\
+Control Plane Protection Policy commands:\n\
+  ls-copp-add SWITCH PROTO METER\n\
+                            Add a copp policy for PROTO packets on SWITCH\n\
+                            based on an existing METER.\n\
+  ls-copp-del SWITCH [PROTO]\n\
+                            Delete the copp policy for PROTO packets on\n\
+                            SWITCH. If PROTO is not specified, delete all\n\
+                            copp policies on SWITCH.\n\
+  ls-copp-list SWITCH\n\
+                            List all copp policies defined for control\n\
+                            protocols on SWITCH.\n\
+  lsp-copp-add PORT PROTO METER\n\
+                            Add a copp policy for PROTO packets on switch\n\
+                            PORT based on an existing METER.\n\
+  lsp-copp-del PORT [PROTO]\n\
+                            Delete the copp policy for PROTO packets on\n\
+                            switch PORT. If PROTO is not specified, delete\n\
+                            all copp policies on switch PORT.\n\
+  lsp-copp-list PORT\n\
+                            List all copp policies defined for control\n\
+                            protocols on switch PORT.\n\
+  lr-copp-add ROUTER PROTO METER\n\
+                            Add a copp policy for PROTO packets on ROUTER\n\
+                            based on an existing METER.\n\
+  lr-copp-del ROUTER [PROTO]\n\
+                            Delete the copp policy for PROTO packets on\n\
+                            ROUTER. If PROTO is not specified, delete all\n\
+                            copp policies on ROUTER.\n\
+  lr-copp-list ROUTER\n\
+                            List all copp policies defined for control\n\
+                            protocols on ROUTER.\n\
+  lrp-copp-add PORT PROTO METER\n\
+                            Add a copp policy for PROTO packets on router\n\
+                            PORT based on an existing METER.\n\
+  lrp-copp-del PORT [PROTO]\n\
+                            Delete the copp policy for PROTO packets on\n\
+                            router PORT. If PROTO is not specified, delete\n\
+                            all copp policies on router PORT.\n\
+  lrp-copp-list PORT\n\
+                            List all copp policies defined for control\n\
+                            protocols on router PORT.\n\
 \n\
 %s\
 %s\
@@ -4853,6 +4896,353 @@ nbctl_lr_route_list(struct ctl_context *ctx)
     free(ipv6_routes);
 }
 
+static char *
+copp_proto_validate(const char *proto_name, bool per_port)
+{
+    for (size_t i = COPP_PROTO_FIRST; i < COPP_PROTO_MAX; i++) {
+        if (!strcmp(proto_name, copp_proto_get(i))) {
+            if (per_port && !copp_port_meter_supported(i)) {
+                break;
+            }
+            return NULL;
+        }
+    }
+
+    struct ds usage = DS_EMPTY_INITIALIZER;
+
+    ds_put_cstr(&usage, "Invalid control protocol. Allowed values: ");
+    for (size_t i = COPP_PROTO_FIRST; i < COPP_PROTO_MAX; i++) {
+        if (per_port && !copp_port_meter_supported(i)) {
+            continue;
+        }
+        ds_put_format(&usage, "%s, ", copp_proto_get(i));
+    }
+    ds_chomp(&usage, ' ');
+    ds_chomp(&usage, ',');
+    ds_put_cstr(&usage, ".");
+
+    char *usage_str = xstrdup(ds_cstr(&usage));
+    ds_destroy(&usage);
+    return usage_str;
+}
+
+static const struct nbrec_copp *
+copp_add_meter(struct ctl_context *ctx, const struct nbrec_copp *copp,
+               const char *proto_name, const char *meter)
+{
+    if (!copp) {
+        copp = nbrec_copp_insert(ctx->txn);
+    }
+
+    struct smap meters;
+    smap_init(&meters);
+    smap_clone(&meters, &copp->meters);
+    smap_replace(&meters, proto_name, meter);
+    nbrec_copp_set_meters(copp, &meters);
+    smap_destroy(&meters);
+
+    return copp;
+}
+
+static void
+copp_del_meter(const struct nbrec_copp *copp, const char *proto_name)
+{
+    if (!copp) {
+        return;
+    }
+
+    if (proto_name) {
+        if (smap_get(&copp->meters, proto_name)) {
+            struct smap meters;
+            smap_init(&meters);
+            smap_clone(&meters, &copp->meters);
+            smap_remove(&meters, proto_name);
+            nbrec_copp_set_meters(copp, &meters);
+            smap_destroy(&meters);
+        }
+    } else {
+        nbrec_copp_delete(copp);
+    }
+}
+
+static void
+copp_list(struct ctl_context *ctx, const struct nbrec_copp *copp)
+{
+    if (!copp) {
+        return;
+    }
+
+    struct smap_node *node;
+
+    SMAP_FOR_EACH (node, &copp->meters) {
+        ds_put_format(&ctx->output, "%s: %s\n", node->key, node->value);
+    }
+}
+
+static void
+nbctl_ls_copp_add(struct ctl_context *ctx)
+{
+    const char *ls_name = ctx->argv[1];
+    const char *proto_name = ctx->argv[2];
+    const char *meter = ctx->argv[3];
+
+    char *error = copp_proto_validate(proto_name, false);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_logical_switch *ls = NULL;
+    error = ls_by_name_or_uuid(ctx, ls_name, true, &ls);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_copp *copp =
+        copp_add_meter(ctx, ls->copp, proto_name, meter);
+    nbrec_logical_switch_set_copp(ls, copp);
+}
+
+static void
+nbctl_ls_copp_del(struct ctl_context *ctx)
+{
+    const char *ls_name = ctx->argv[1];
+    const char *proto_name = NULL;
+    char *error;
+
+    if (ctx->argc == 3) {
+        proto_name = ctx->argv[2];
+        error = copp_proto_validate(proto_name, false);
+        if (error) {
+            ctx->error = error;
+            return;
+        }
+    }
+
+    const struct nbrec_logical_switch *ls = NULL;
+    error = ls_by_name_or_uuid(ctx, ls_name, true, &ls);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_del_meter(ls->copp, proto_name);
+}
+
+static void
+nbctl_ls_copp_list(struct ctl_context *ctx)
+{
+    const char *ls_name = ctx->argv[1];
+
+    const struct nbrec_logical_switch *ls = NULL;
+    char *error = ls_by_name_or_uuid(ctx, ls_name, true, &ls);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_list(ctx, ls->copp);
+}
+
+static void
+nbctl_lsp_copp_add(struct ctl_context *ctx)
+{
+    const char *lsp_name = ctx->argv[1];
+    const char *proto_name = ctx->argv[2];
+    const char *meter = ctx->argv[3];
+
+    char *error = copp_proto_validate(proto_name, true);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_logical_switch_port *lsp = NULL;
+    error = lsp_by_name_or_uuid(ctx, lsp_name, true, &lsp);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_copp *copp =
+        copp_add_meter(ctx, lsp->copp, proto_name, meter);
+    nbrec_logical_switch_port_set_copp(lsp, copp);
+}
+
+static void
+nbctl_lsp_copp_del(struct ctl_context *ctx)
+{
+    const char *lsp_name = ctx->argv[1];
+    const char *proto_name = NULL;
+    char *error;
+
+    if (ctx->argc == 3) {
+        proto_name = ctx->argv[2];
+        error = copp_proto_validate(proto_name, true);
+        if (error) {
+            ctx->error = error;
+            return;
+        }
+    }
+
+    const struct nbrec_logical_switch_port *lsp = NULL;
+    error = lsp_by_name_or_uuid(ctx, lsp_name, true, &lsp);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_del_meter(lsp->copp, proto_name);
+}
+
+static void
+nbctl_lsp_copp_list(struct ctl_context *ctx)
+{
+    const char *lsp_name = ctx->argv[1];
+
+    const struct nbrec_logical_switch_port *lsp = NULL;
+    char *error = lsp_by_name_or_uuid(ctx, lsp_name, true, &lsp);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_list(ctx, lsp->copp);
+}
+
+static void
+nbctl_lr_copp_add(struct ctl_context *ctx)
+{
+    const char *lr_name = ctx->argv[1];
+    const char *proto_name = ctx->argv[2];
+    const char *meter = ctx->argv[3];
+
+    char *error = copp_proto_validate(proto_name, false);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_logical_router *lr = NULL;
+    error = lr_by_name_or_uuid(ctx, lr_name, true, &lr);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_copp *copp =
+        copp_add_meter(ctx, lr->copp, proto_name, meter);
+    nbrec_logical_router_set_copp(lr, copp);
+}
+
+static void
+nbctl_lr_copp_del(struct ctl_context *ctx)
+{
+    const char *lr_name = ctx->argv[1];
+    const char *proto_name = NULL;
+    char *error;
+
+    if (ctx->argc == 3) {
+        proto_name = ctx->argv[2];
+        error = copp_proto_validate(proto_name, false);
+        if (error) {
+            ctx->error = error;
+            return;
+        }
+    }
+
+    const struct nbrec_logical_router *lr = NULL;
+    error = lr_by_name_or_uuid(ctx, lr_name, true, &lr);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_del_meter(lr->copp, proto_name);
+}
+
+static void
+nbctl_lr_copp_list(struct ctl_context *ctx)
+{
+    const char *lr_name = ctx->argv[1];
+
+    const struct nbrec_logical_router *lr = NULL;
+    char *error = lr_by_name_or_uuid(ctx, lr_name, true, &lr);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_list(ctx, lr->copp);
+}
+
+static void
+nbctl_lrp_copp_add(struct ctl_context *ctx)
+{
+    const char *lrp_name = ctx->argv[1];
+    const char *proto_name = ctx->argv[2];
+    const char *meter = ctx->argv[3];
+
+    char *error = copp_proto_validate(proto_name, true);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_logical_router_port *lrp = NULL;
+    error = lrp_by_name_or_uuid(ctx, lrp_name, true, &lrp);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    const struct nbrec_copp *copp =
+        copp_add_meter(ctx, lrp->copp, proto_name, meter);
+    nbrec_logical_router_port_set_copp(lrp, copp);
+}
+
+static void
+nbctl_lrp_copp_del(struct ctl_context *ctx)
+{
+    const char *lrp_name = ctx->argv[1];
+    const char *proto_name = NULL;
+    char *error;
+
+    if (ctx->argc == 3) {
+        proto_name = ctx->argv[2];
+        error = copp_proto_validate(proto_name, true);
+        if (error) {
+            ctx->error = error;
+            return;
+        }
+    }
+
+    const struct nbrec_logical_router_port *lrp = NULL;
+    error = lrp_by_name_or_uuid(ctx, lrp_name, true, &lrp);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_del_meter(lrp->copp, proto_name);
+}
+
+static void
+nbctl_lrp_copp_list(struct ctl_context *ctx)
+{
+    const char *lrp_name = ctx->argv[1];
+
+    const struct nbrec_logical_router_port *lrp = NULL;
+    char *error = lrp_by_name_or_uuid(ctx, lrp_name, true, &lrp);
+    if (error) {
+        ctx->error = error;
+        return;
+    }
+
+    copp_list(ctx, lrp->copp);
+}
+
 static void
 verify_connections(struct ctl_context *ctx)
 {
@@ -5779,6 +6169,28 @@ static const struct ctl_command_syntax nbctl_commands[] = {
     NULL, nbctl_dhcp_options_set_options, NULL, "", RW },
     {"dhcp-options-get-options", 1, 1, "DHCP_OPT_UUID", NULL,
      nbctl_dhcp_options_get_options, NULL, "", RO },
+
+    /* Control plane protection commands */
+    {"ls-copp-add", 3, 3, "SWITCH PROTO METER", NULL, nbctl_ls_copp_add, NULL,
+       "", RW},
+    {"ls-copp-del", 1, 2, "SWITCH [PROTO]", NULL, nbctl_ls_copp_del, NULL,
+       "", RW},
+    {"ls-copp-list", 1, 1, "SWITCH", NULL, nbctl_ls_copp_list, NULL, "", RO},
+    {"lsp-copp-add", 3, 3, "PORT PROTO METER", NULL, nbctl_lsp_copp_add, NULL,
+       "", RW},
+    {"lsp-copp-del", 1, 2, "PORT [PROTO]", NULL, nbctl_lsp_copp_del, NULL,
+       "", RW},
+    {"lsp-copp-list", 1, 1, "PORT", NULL, nbctl_lsp_copp_list, NULL, "", RO},
+    {"lr-copp-add", 3, 3, "ROUTER PROTO METER", NULL, nbctl_lr_copp_add, NULL,
+       "", RW},
+    {"lr-copp-del", 1, 2, "ROUTER [PROTO]", NULL, nbctl_lr_copp_del, NULL,
+       "", RW},
+    {"lr-copp-list", 1, 1, "ROUTER", NULL, nbctl_lr_copp_list, NULL, "", RO},
+    {"lrp-copp-add", 3, 3, "PORT PROTO METER", NULL, nbctl_lrp_copp_add, NULL,
+       "", RW},
+    {"lrp-copp-del", 1, 2, "PORT [PROTO]", NULL, nbctl_lrp_copp_del, NULL,
+       "", RW},
+    {"lrp-copp-list", 1, 1, "PORT", NULL, nbctl_lrp_copp_list, NULL, "", RO},
 
     /* Connection commands. */
     {"get-connection", 0, 0, "", pre_connection, cmd_get_connection, NULL, "", RO},

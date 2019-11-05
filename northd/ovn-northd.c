@@ -29,6 +29,7 @@
 #include "openvswitch/json.h"
 #include "ovn/lex.h"
 #include "lib/chassis-index.h"
+#include "lib/copp.h"
 #include "lib/ip-mcast-index.h"
 #include "lib/mcast-group-index.h"
 #include "lib/ovn-l7.h"
@@ -3351,6 +3352,7 @@ struct ovn_lflow {
     char *match;
     char *actions;
     char *stage_hint;
+    char *ctrl_meter;
     const char *where;
 };
 
@@ -3371,14 +3373,15 @@ ovn_lflow_equal(const struct ovn_lflow *a, const struct ovn_lflow *b)
             && a->stage == b->stage
             && a->priority == b->priority
             && !strcmp(a->match, b->match)
-            && !strcmp(a->actions, b->actions));
+            && !strcmp(a->actions, b->actions)
+            && nullable_string_is_equal(a->ctrl_meter, b->ctrl_meter));
 }
 
 static void
 ovn_lflow_init(struct ovn_lflow *lflow, struct ovn_datapath *od,
                enum ovn_stage stage, uint16_t priority,
-               char *match, char *actions, char *stage_hint,
-               const char *where)
+               char *match, char *actions, char *ctrl_meter,
+               char *stage_hint, const char *where)
 {
     lflow->od = od;
     lflow->stage = stage;
@@ -3386,6 +3389,7 @@ ovn_lflow_init(struct ovn_lflow *lflow, struct ovn_datapath *od,
     lflow->match = match;
     lflow->actions = actions;
     lflow->stage_hint = stage_hint;
+    lflow->ctrl_meter = ctrl_meter;
     lflow->where = where;
 }
 
@@ -3394,36 +3398,44 @@ static void
 ovn_lflow_add_at(struct hmap *lflow_map, struct ovn_datapath *od,
                  enum ovn_stage stage, uint16_t priority,
                  const char *match, const char *actions,
-                 const char *stage_hint, const char *where)
+                 const char *ctrl_meter, const char *stage_hint,
+                 const char *where)
 {
     ovs_assert(ovn_stage_to_datapath_type(stage) == ovn_datapath_get_type(od));
 
     struct ovn_lflow *lflow = xmalloc(sizeof *lflow);
     ovn_lflow_init(lflow, od, stage, priority,
                    xstrdup(match), xstrdup(actions),
+                   nullable_xstrdup(ctrl_meter),
                    nullable_xstrdup(stage_hint), where);
     hmap_insert(lflow_map, &lflow->hmap_node, ovn_lflow_hash(lflow));
 }
 
 /* Adds a row with the specified contents to the Logical_Flow table. */
 #define ovn_lflow_add_with_hint(LFLOW_MAP, OD, STAGE, PRIORITY, MATCH, \
-                                ACTIONS, STAGE_HINT) \
+                                ACTIONS, CTRL_METER, STAGE_HINT) \
     ovn_lflow_add_at(LFLOW_MAP, OD, STAGE, PRIORITY, MATCH, ACTIONS, \
-                     STAGE_HINT, OVS_SOURCE_LOCATOR)
+                     CTRL_METER, STAGE_HINT, OVS_SOURCE_LOCATOR)
 
 #define ovn_lflow_add(LFLOW_MAP, OD, STAGE, PRIORITY, MATCH, ACTIONS) \
     ovn_lflow_add_with_hint(LFLOW_MAP, OD, STAGE, PRIORITY, MATCH, \
-                            ACTIONS, NULL)
+                            ACTIONS, NULL, NULL)
+
+#define ovn_lflow_add_ctrl(LFLOW_MAP, OD, STAGE, PRIORITY, MATCH, ACTIONS, \
+                           CTRL_METER) \
+    ovn_lflow_add_with_hint(LFLOW_MAP, OD, STAGE, PRIORITY, MATCH, \
+                            ACTIONS, CTRL_METER, NULL)
 
 static struct ovn_lflow *
 ovn_lflow_find(struct hmap *lflows, struct ovn_datapath *od,
                enum ovn_stage stage, uint16_t priority,
-               const char *match, const char *actions, uint32_t hash)
+               const char *match, const char *actions, const char *ctrl_meter,
+               uint32_t hash)
 {
     struct ovn_lflow target;
     ovn_lflow_init(&target, od, stage, priority,
                    CONST_CAST(char *, match), CONST_CAST(char *, actions),
-                   NULL, NULL);
+                   CONST_CAST(char *, ctrl_meter), NULL, NULL);
 
     struct ovn_lflow *lflow;
     HMAP_FOR_EACH_WITH_HASH (lflow, hmap_node, hash, lflows) {
@@ -3442,6 +3454,7 @@ ovn_lflow_destroy(struct hmap *lflows, struct ovn_lflow *lflow)
         free(lflow->match);
         free(lflow->actions);
         free(lflow->stage_hint);
+        free(lflow->ctrl_meter);
         free(lflow);
     }
 }
@@ -4528,7 +4541,7 @@ consider_acl(struct hmap *lflows, struct ovn_datapath *od,
             ovn_lflow_add_with_hint(lflows, od, stage,
                                     acl->priority + OVN_ACL_PRI_OFFSET,
                                     acl->match, ds_cstr(&actions),
-                                    stage_hint);
+                                    NULL, stage_hint);
             ds_destroy(&actions);
         } else {
             struct ds match = DS_EMPTY_INITIALIZER;
@@ -4557,7 +4570,7 @@ consider_acl(struct hmap *lflows, struct ovn_datapath *od,
                                     acl->priority + OVN_ACL_PRI_OFFSET,
                                     ds_cstr(&match),
                                     ds_cstr(&actions),
-                                    stage_hint);
+                                    NULL, stage_hint);
 
             /* Match on traffic in the request direction for an established
              * connection tracking entry that has not been marked for
@@ -4577,7 +4590,7 @@ consider_acl(struct hmap *lflows, struct ovn_datapath *od,
             ovn_lflow_add_with_hint(lflows, od, stage,
                                     acl->priority + OVN_ACL_PRI_OFFSET,
                                     ds_cstr(&match), ds_cstr(&actions),
-                                    stage_hint);
+                                    NULL, stage_hint);
 
             ds_destroy(&match);
             ds_destroy(&actions);
@@ -8843,7 +8856,8 @@ build_lflows(struct northd_context *ctx, struct hmap *datapaths,
             = !strcmp(sbflow->pipeline, "ingress") ? P_IN : P_OUT;
         struct ovn_lflow *lflow = ovn_lflow_find(
             &lflows, od, ovn_stage_build(dp_type, pipeline, sbflow->table_id),
-            sbflow->priority, sbflow->match, sbflow->actions, sbflow->hash);
+            sbflow->priority, sbflow->match, sbflow->actions,
+            sbflow->controller_meter, sbflow->hash);
         if (lflow) {
             ovn_lflow_destroy(&lflows, lflow);
         } else {
@@ -8862,6 +8876,7 @@ build_lflows(struct northd_context *ctx, struct hmap *datapaths,
         sbrec_logical_flow_set_priority(sbflow, lflow->priority);
         sbrec_logical_flow_set_match(sbflow, lflow->match);
         sbrec_logical_flow_set_actions(sbflow, lflow->actions);
+        sbrec_logical_flow_set_controller_meter(sbflow, lflow->ctrl_meter);
 
         /* Trim the source locator lflow->where, which looks something like
          * "ovn/northd/ovn-northd.c:1234", down to just the part following the
@@ -10272,6 +10287,8 @@ main(int argc, char *argv[])
     add_column_noalert(ovnsb_idl_loop.idl, &sbrec_logical_flow_col_priority);
     add_column_noalert(ovnsb_idl_loop.idl, &sbrec_logical_flow_col_match);
     add_column_noalert(ovnsb_idl_loop.idl, &sbrec_logical_flow_col_actions);
+    add_column_noalert(ovnsb_idl_loop.idl,
+                       &sbrec_logical_flow_col_controller_meter);
 
     ovsdb_idl_add_table(ovnsb_idl_loop.idl, &sbrec_table_multicast_group);
     add_column_noalert(ovnsb_idl_loop.idl,
