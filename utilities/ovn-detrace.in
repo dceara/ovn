@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import functools
 import getopt
+import json
+import jsonpickle
 import os
 import re
 import sys
@@ -49,12 +50,10 @@ The following options are also available:
   -V, --version               display version information
   --ovnsb=DATABASE            use DATABASE as southbound DB
   --ovnnb=DATABASE            use DATABASE as northbound DB
-  --ovsdb=DATABASE            use DATABASE as OVS DB\
+  --ovsdb=DATABASE            use DATABASE as OVS DB
+  --json                      output json instead of plain text\
 """ % {'argv0': argv0})
     sys.exit(0)
-
-print_p = functools.partial(print, '  * ')
-print_h = functools.partial(print, '   * ')
 
 def datapath_str(datapath):
     return '"%s" (%s)' % (str(datapath.external_ids.get('name')),
@@ -65,6 +64,104 @@ def chassis_str(chassis):
         return ''
     ch = chassis[0]
     return 'chassis-name "%s", chassis-str "%s"' % (ch.name, ch.hostname)
+
+class TraceRecord(object):
+    def __init__(self):
+        self._flow = ''
+        self._actions = ''
+        self._datapath = ''
+        self._pipeline = ''
+        self._stage = ''
+        self._sbrec = ''
+        self._nbrec = ''
+        self._logs = []
+
+    def add_flow(self, flow_line):
+        if flow_line.startswith('Datapath actions: '):
+            self._actions += flow_line[len('Datapath actions: ') :]
+            return
+
+        if self._flow:
+            self._flow += '\n'
+        self._flow += flow_line
+
+    def add_log(self, log):
+        self._logs.append(log)
+
+class TraceOutputs(object):
+    def __init__(self):
+        self._records = []
+
+    def add_record(self):
+        record = TraceRecord()
+        self._records.append(record)
+        return record
+
+class RawPrinter(object):
+    def __init__(self):
+        pass
+
+    def print_datapath(self, datapath, pipeline=None):
+        print('  * Logical datapath: %s%s' %
+                (datapath_str(datapath), '[%s]' % pipeline if pipeline else ''))
+
+    def print_sbrec(self, record, stage=None):
+        print('  * ' + record)
+
+    def print_nbrec(self, record):
+        print('   * ' + record)
+
+    def print_extra(self, msg):
+        print(msg)
+
+    def begin_record(self):
+        pass
+
+    def print_flow(self, flow_line):
+        print(flow_line)
+
+    def end_record(self):
+        pass
+
+    def dump(self):
+        return None
+
+class JsonPrinter(RawPrinter):
+    def __init__(self):
+        super(JsonPrinter, self).__init__()
+        self._output = TraceOutputs()
+        self._record = None
+
+    def print_datapath(self, datapath, pipeline=None):
+        self._record._datapath = datapath_str(datapath)
+        if pipeline:
+            self._record._pipeline = pipeline
+
+    def print_sbrec(self, sbrec_record, stage=None):
+        self._record._sbrec = sbrec_record
+        if stage:
+            self._record._stage = stage
+
+    def print_nbrec(self, nbrec_record):
+        self._record._nbrec = nbrec_record
+
+    def print_extra(self, msg):
+        self._record.add_log(msg)
+
+    def begin_record(self):
+        self._record = self._output.add_record()
+
+    def print_flow(self, flow_line):
+        self._record.add_flow(flow_line)
+
+    def end_record(self):
+        self._record = None
+
+    def dump(self):
+        return jsonpickle.encode(self._output)
+
+# By default print (indented) output to stdout.
+printer = RawPrinter()
 
 class OVSDB(object):
     @staticmethod
@@ -147,14 +244,14 @@ class ACLHintHandler(CookieHandlerByUUUID):
                                      acl.action)
         if acl.log:
             output += ' (log)'
-        print_h(output)
+        printer.print_nbrec(output)
 
 class LSPHintHandler(CookieHandlerByUUUID):
     def __init__(self, ovnnb_db):
         super(LSPHintHandler, self).__init__(ovnnb_db, 'Logical_Switch_Port')
 
     def print_record(self, lsp):
-        print_h('Logical Switch Port: %s type %s (addresses %s, dynamic addresses %s, security %s' % (
+        printer.print_nbrec('Logical Switch Port: %s type %s (addresses %s, dynamic addresses %s, security %s' % (
                     lsp.name, lsp.type, lsp.addresses, lsp.dynamic_addresses,
                     lsp.port_security))
 
@@ -163,35 +260,37 @@ class LRPHintHandler(CookieHandlerByUUUID):
         super(LRPHintHandler, self).__init__(ovnnb_db, 'Logical_Router_Port')
 
     def print_record(self, lrp):
-        print_h('Logical Router Port: %s mac %s networks %s ipv6_ra_configs %s' % (
-                    lrp.name, lrp.mac, lrp.networks, lrp.ipv6_ra_configs))
+        printer.print_nbrec('Logical Router Port: %s mac %s networks %s ipv6_ra_configs %s' % (
+                                lrp.name, lrp.mac, lrp.networks,
+                                lrp.ipv6_ra_configs))
 
 class LoadBalancerHintHandler(CookieHandlerByUUUID):
     def __init__(self, ovnnb_db):
         super(LoadBalancerHintHandler, self).__init__(ovnnb_db, 'Load_Balancer')
 
     def print_record(self, lb):
-        print_h('Load Balancer: %s protocol %s vips %s ip_port_mappings %s' % (
-                    lb.name, lb.protocol, lb.vips, lb.ip_port_mappings))
+        printer.print_nbrec('Load Balancer: %s protocol %s vips %s ip_port_mappings %s' % (
+                                lb.name, lb.protocol, lb.vips,
+                                lb.ip_port_mappings))
 
 class NATHintHandler(CookieHandlerByUUUID):
     def __init__(self, ovnnb_db):
         super(NATHintHandler, self).__init__(ovnnb_db, 'NAT')
 
     def print_record(self, nat):
-        print_h('NAT: external IP %s external_mac %s logical_ip %s logical_port %s type %s' % (
-                    nat.external_ip, nat.external_mac, nat.logical_ip,
-                    nat.logical_port, nat.type))
+        printer.print_nbrec('NAT: external IP %s external_mac %s logical_ip %s logical_port %s type %s' % (
+                                nat.external_ip, nat.external_mac,
+                                nat.logical_ip, nat.logical_port,
+                                nat.type))
 
 class StaticRouteHintHandler(CookieHandlerByUUUID):
     def __init__(self, ovnnb_db):
         super(StaticRouteHintHandler, self).__init__(ovnnb_db,
                                                      'Logical_Router_Static_Route')
-
     def print_record(self, route):
-        print_h('Route: %s via %s (port %s), policy=%s' % (
-                    route.ip_prefix, route.nexthop, route.output_port,
-                    route.policy))
+        printer.print_nbrec('Route: %s via %s (port %s), policy=%s' % (
+                                route.ip_prefix, route.nexthop, route.output_port,
+                                route.policy))
 
 class LogicalFlowHandler(CookieHandlerByUUUID):
     def __init__(self, ovnnb_db, ovnsb_db):
@@ -205,17 +304,16 @@ class LogicalFlowHandler(CookieHandlerByUUUID):
         ]
 
     def print_record(self, lflow):
-        print_p('Logical datapath: %s [%s]' %
-                    (datapath_str(lflow.logical_datapath), lflow.pipeline))
-        print_p('Logical flow: table=%s (%s), priority=%s, '
-                'match=(%s), actions=(%s)' %
-                    (lflow.table_id, lflow.external_ids.get('stage-name'),
-                     lflow.priority,
-                     str(lflow.match).strip('"'),
-                     str(lflow.actions).strip('"')))
+        printer.print_datapath(lflow.logical_datapath, lflow.pipeline)
+        stage = lflow.external_ids.get('stage-name')
+        printer.print_sbrec('Logical flow: table=%s (%s), priority=%s, '
+                            'match=(%s), actions=(%s)' %
+                                (lflow.table_id, stage, lflow.priority,
+                                 str(lflow.match).strip('"'),
+                                 str(lflow.actions).strip('"')),
+                            stage)
 
     def print_hint(self, lflow, ovnnb_db):
-
         external_ids = lflow.external_ids
         hint = external_ids.get('stage-hint')
         if not hint:
@@ -223,7 +321,7 @@ class LogicalFlowHandler(CookieHandlerByUUUID):
         for handler in self._hint_handlers:
             for i, record in enumerate(handler.get_records(hint)):
                 if i > 0:
-                    print_h('[Duplicate uuid hint]')
+                    printer.print_extra('[Duplicate uuid hint]')
                 handler.print_record(record)
 
 class PortBindingHandler(CookieHandlerByUUUID):
@@ -231,19 +329,21 @@ class PortBindingHandler(CookieHandlerByUUUID):
         super(PortBindingHandler, self).__init__(ovnsb_db, 'Port_Binding')
 
     def print_record(self, pb):
-        print_p('Logical datapath: %s' % (datapath_str(pb.datapath)))
-        print_p('Port Binding: logical_port "%s", tunnel_key %ld, %s' %
-                    (pb.logical_port, pb.tunnel_key,
-                     chassis_str(pb.chassis)))
+        printer.print_datapath(pb.datapath)
+        printer.print_sbrec(
+            'Port Binding: logical_port "%s", tunnel_key %ld, %s' %
+                (pb.logical_port, pb.tunnel_key,
+                 chassis_str(pb.chassis)))
 
 class MacBindingHandler(CookieHandlerByUUUID):
     def __init__(self, ovnsb_db):
         super(MacBindingHandler, self).__init__(ovnsb_db, 'MAC_Binding')
 
     def print_record(self, mb):
-        print_p('Logical datapath: %s' % (datapath_str(mb.datapath)))
-        print_p('MAC Binding: ip "%s", logical_port "%s", mac "%s"' %
-                    (mb.ip, mb.logical_port, mb.mac))
+        printer.print_datapath(mb.datapath)
+        printer.print_sbrec(
+            'MAC Binding: ip "%s", logical_port "%s", mac "%s"' %
+                (mb.ip, mb.logical_port, mb.mac))
 
 class MulticastGroupHandler(CookieHandlerByUUUID):
     def __init__(self, ovnsb_db):
@@ -253,16 +353,17 @@ class MulticastGroupHandler(CookieHandlerByUUUID):
     def print_record(self, mc):
         mc_ports = ', '.join([pb.logical_port for pb in mc.ports])
 
-        print_p('Logical datapath: %s' % (datapath_str(mc.datapath)))
-        print_p('Multicast Group: name "%s", tunnel_key %ld ports: (%s)' %
-                    (mc.name, mc.tunnel_key, mc_ports))
+        printer.print_datapath(mc.datapath)
+        printer.print_sbrec(
+            'Multicast Group: name "%s", tunnel_key %ld ports: (%s)' %
+                (mc.name, mc.tunnel_key, mc_ports))
 
 class ChassisHandler(CookieHandlerByUUUID):
     def __init__(self, ovnsb_db):
         super(ChassisHandler, self).__init__(ovnsb_db, 'Chassis')
 
     def print_record(self, chassis):
-        print_p('Chassis: %s' % (chassis_str([chassis])))
+        printer.print_sbrec('Chassis: %s' % (chassis_str([chassis])))
 
 class OvsInterfaceHandler(CookieHandler):
     def __init__(self, ovs_db):
@@ -274,21 +375,25 @@ class OvsInterfaceHandler(CookieHandler):
                                         str(intf.ofport[0]) == ofport)
 
     def print_record(self, intf):
-        print_p('OVS Interface: %s (%s)' %
-            (intf.name, intf.external_ids.get('iface-id')))
+        printer.print_sbrec(
+            'OVS Interface: %s (%s)' %
+                (intf.name, intf.external_ids.get('iface-id')))
 
 def print_record_from_cookie(ovnnb_db, cookie_handlers, cookie):
     for handler in cookie_handlers:
         for i, record in enumerate(handler.get_records(cookie)):
             if i > 0:
-                handler.print('[Duplicate uuid cookie]')
+                printer.print_extra('[Duplicate uuid cookie]')
             handler.print_record(record)
             handler.print_hint(record, ovnnb_db)
 
+
 def main():
+    global printer
+
     try:
         options, args = getopt.gnu_getopt(sys.argv[1:], 'hV',
-                                          ['help', 'version', 'ovs',
+                                          ['help', 'version', 'ovs', 'json',
                                            'ovnsb=', 'ovnnb=', 'ovsdb='])
     except (getopt.GetoptError, geo):
         sys.stderr.write("%s: %s\n" % (argv0, geo.msg))
@@ -312,6 +417,8 @@ def main():
             ovs_db = value
         elif key in ['--ovs']:
             ovs = True
+        elif key in ['--json']:
+            printer = JsonPrinter()
         else:
             sys.exit(0)
 
@@ -365,16 +472,22 @@ def main():
 
     regex_table_id = re.compile(r'^ *[0-9]+\.')
     cookies = []
+    printer.begin_record()
     while True:
         line = sys.stdin.readline()
-        if len(cookies) > 0:
-            # Print record info when the current flow block ends.
-            if regex_table_id.match(line) or line.strip() == '':
-                for cookie, handlers in cookies:
-                    print_record_from_cookie(ovsdb_ovnnb, handlers, cookie)
-                cookies = []
 
-        print(line.strip())
+        # Print record info when the current flow block ends.
+        new_block = regex_table_id.match(line)
+        if new_block or line.strip() == '':
+            for cookie, handlers in cookies:
+                print_record_from_cookie(ovsdb_ovnnb, handlers, cookie)
+            cookies = []
+
+        if new_block:
+            printer.end_record()
+            printer.begin_record()
+
+        printer.print_flow(line.strip())
         if line == '':
             break
 
@@ -382,7 +495,11 @@ def main():
             m = regex.match(line)
             if m:
                 cookies.append((m.group(1), handlers))
+    printer.end_record()
 
+    output = printer.dump()
+    if output:
+        print(output)
 
 if __name__ == "__main__":
     main()
