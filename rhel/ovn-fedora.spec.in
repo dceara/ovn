@@ -401,6 +401,7 @@ fi
 %{_bindir}/ovn-sbctl
 %{_bindir}/ovn-trace
 %{_bindir}/ovn-detrace
+%{_bindir}/ovn-global-trace
 %{_bindir}/ovn-appctl
 %{_datadir}/ovn/scripts/ovn-ctl
 %{_datadir}/ovn/scripts/ovn-lib
@@ -412,6 +413,7 @@ fi
 %{_mandir}/man8/ovn-nbctl.8*
 %{_mandir}/man8/ovn-trace.8*
 %{_mandir}/man1/ovn-detrace.1*
+%{_mandir}/man1/ovn-global-trace.1*
 %{_mandir}/man8/ovn-appctl.8*
 %{_mandir}/man7/ovn-architecture.7*
 %{_mandir}/man8/ovn-sbctl.8*

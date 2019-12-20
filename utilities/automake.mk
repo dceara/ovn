@@ -9,17 +9,20 @@ man_MANS += \
     utilities/ovn-sbctl.8 \
     utilities/ovn-trace.8 \
     utilities/ovn-detrace.1 \
+	utilities/ovn-global-trace.1 \
     utilities/ovn-appctl.8
 
 MAN_ROOTS += \
     utilities/ovn-sbctl.8.in \
-    utilities/ovn-detrace.1.in
+    utilities/ovn-detrace.1.in \
+    utilities/ovn-global-trace.1.in
 
 # Docker drivers
 bin_SCRIPTS += \
     utilities/ovn-docker-overlay-driver \
     utilities/ovn-docker-underlay-driver \
-    utilities/ovn-detrace
+    utilities/ovn-detrace \
+    utilities/ovn-global-trace
 
 EXTRA_DIST += \
     utilities/ovn-ctl \
@@ -31,6 +34,7 @@ EXTRA_DIST += \
     utilities/ovn-appctl.8.xml \
     utilities/ovn-trace.8.xml \
     utilities/ovn-detrace.in \
+    utilities/ovn-global-trace.in \
     utilities/ovndb-servers.ocf \
     utilities/checkpatch.py \
     utilities/docker/Makefile \
@@ -54,6 +58,8 @@ CLEANFILES += \
     utilities/ovn-trace.8 \
     utilities/ovn-detrace.1 \
     utilities/ovn-detrace \
+    utilities/ovn-global-trace.1 \
+    utilities/ovn-global-trace \
     utilities/ovn-appctl.8 \
     utilities/ovn-appctl \
     utilities/ovn-sim

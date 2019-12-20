@@ -10,6 +10,16 @@ lib/common-syn.man:
 lib/common.man:
 lib/ovs.tmac:
 
+utilities/ovn-global-trace.1: \
+	utilities/ovn-global-trace.1.in \
+	lib/common-syn.man \
+	lib/common.man \
+	lib/ovs.tmac
+utilities/ovn-global-trace.1.in:
+lib/common-syn.man:
+lib/common.man:
+lib/ovs.tmac:
+
 utilities/ovn-sbctl.8: \
 	utilities/ovn-sbctl.8.in \
 	lib/common.man \

@@ -9,6 +9,8 @@
 /ovn-trace.8
 /ovn-detrace
 /ovn-detrace.1
+/ovn-global-trace
+/ovn-global-trace.1
 /ovn-docker-overlay-driver
 /ovn-docker-underlay-driver
 /ovn-lib

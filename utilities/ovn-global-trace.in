@@ -1,0 +1,552 @@
+#! @PYTHON3@
+#
+# Copyright (c) 2019, Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at:
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import functools
+import getopt
+import json
+import jsonpickle
+import os
+import re
+import subprocess
+import sys
+import textwrap
+import time
+
+from graphviz import Digraph
+
+try:
+    from ovs.db import idl
+    from ovs import jsonrpc
+    from ovs.poller import Poller
+    from ovs.stream import Stream
+    from ovs import dirs
+except Exception:
+    print("ERROR: Please install the correct Open vSwitch python support")
+    print("       libraries (@VERSION@).")
+    print("       Alternatively, check that your PYTHONPATH is pointing to")
+    print("       the correct location.")
+    sys.exit(1)
+
+argv0 = sys.argv[0]
+
+def usage():
+    print("""\
+%(argv0)s:
+usage: %(argv0)s --input-lsp <LSP> --input-pkt <PKT>
+where LSP is the logical switch port from which to start the trace and
+PKT is the OpenFlow description of the packet to be traced through the
+network.
+
+The following options are also available:
+  -h, --help                  display this help message
+  -V, --version               display version information
+  --ovnsb=DATABASE            use DATABASE as southbound DB
+  --ovnnb=DATABASE            use DATABASE as northbound DB
+  --node-cmd                  use CMD <node> <cmd> to remotely run cmd
+  --json                      dump output in JSON format
+  --dot                       dump output in Graphviz dot format\
+""" % {'argv0': argv0})
+    sys.exit(0)
+
+# XXX: FIXME: Duplicated in ovn-detrace.in
+class TraceRecord(object):
+    def __init__(self):
+        self._flow = ''
+        self._actions = ''
+        self._datapath = ''
+        self._pipeline = ''
+        self._stage = ''
+        self._sbrec = ''
+        self._nbrec = ''
+        self._logs = []
+
+# XXX: FIXME: Duplicated in ovn-detrace.in
+class TraceOutputs(object):
+    def __init__(self):
+        self._records = []
+
+# XXX: FIXME: Duplicated in ovn-detrace.in
+class OVSDB(object):
+    @staticmethod
+    def wait_for_db_change(idl):
+        seq = idl.change_seqno
+        stop = time.time() + 10
+        while idl.change_seqno == seq and not idl.run():
+            poller = Poller()
+            idl.wait(poller)
+            poller.block()
+            if time.time() >= stop:
+                raise Exception('Retry Timeout')
+
+    def __init__(self, db_sock, schema_name):
+        self._db_sock = db_sock
+        self._txn = None
+        schema = self._get_schema(schema_name)
+        schema.register_all()
+        self._idl_conn = idl.Idl(db_sock, schema)
+        OVSDB.wait_for_db_change(self._idl_conn)  # Initial Sync with DB
+
+    def _get_schema(self, schema_name):
+        error, strm = Stream.open_block(Stream.open(self._db_sock))
+        if error:
+            raise Exception("Unable to connect to %s" % self._db_sock)
+        rpc = jsonrpc.Connection(strm)
+        req = jsonrpc.Message.create_request('get_schema', [schema_name])
+        error, resp = rpc.transact_block(req)
+        rpc.close()
+
+        if error or resp.error:
+            raise Exception('Unable to retrieve schema.')
+        return idl.SchemaHelper(None, resp.result)
+
+    def get_table(self, table_name):
+        return self._idl_conn.tables[table_name]
+
+    def _find_rows(self, table_name, find_fn):
+        return filter(find_fn, self.get_table(table_name).rows.values())
+
+    def _find_rows_by_name(self, table_name, value):
+        return self._find_rows(table_name, lambda row: row.name == value)
+
+    def find_rows_by_partial_uuid(self, table_name, value):
+        return self._find_rows(table_name,
+                               lambda row: str(row.uuid).startswith(value))
+
+class OVSDBTable(object):
+    def __init__(self, db, table):
+        self._db = db
+        self._table = table
+
+    def get_records(self, cookie):
+        return []
+
+class SbrecPortBinding(OVSDBTable):
+    def __init__(self, db):
+        super(SbrecPortBinding, self).__init__(db, 'Port_Binding')
+
+    def get_records(self, lsp_name):
+        return self._db._find_rows(
+            self._table, lambda row: row.logical_port == lsp_name)
+
+class SbrecEncap(OVSDBTable):
+    def __init__(self, db):
+        super(SbrecEncap, self).__init__(db, 'Encap')
+
+    def get_records(self, ip):
+        return self._db._find_rows(self._table, lambda row: row.ip == ip)
+
+class SbrecChassis(OVSDBTable):
+    def __init__(self, db):
+        super(SbrecChassis, self).__init__(db, 'Chassis')
+
+    def get_records(self, name):
+        return self._db._find_rows(self._table, lambda row: row.name == name)
+
+class OvsInterface(OVSDBTable):
+    def __init__(self, db):
+        super(OvsInterface, self).__init__(db, 'Interface')
+
+    def get_records(self, lsp_name):
+        return self._db._find_rows(
+            self._table,
+            lambda row: row.external_ids.get('iface-id') == lsp_name)
+
+#TODO:
+def parse_oflow_pkt(pkt):
+    fields = {}
+    regex = re.compile(r'^(.*)=(.*)')
+    for item in pkt.split(','):
+        m = regex.match(item)
+        if m:
+            fields[m.group(1)] = m.group(2)
+        else:
+            fields[''] = ','.join([fields.get('', ''), item]).strip(',')
+
+    return fields
+
+#TODO:
+def build_oflow(fields):
+    fields_str = [
+        '%s%s%s' % (f, '=' if f else '', v) for f, v in fields.items()
+    ]
+    return ','.join(fields_str)
+
+# TODO: translates datapath actions to oflow fields
+def update_pkt(fields, actions):
+    tunneled = False
+
+    for action_name, action in actions:
+        if action_name == 'tunnel':
+            tunneled = True
+
+        action_handlers[action_name](action, fields)
+    return tunneled
+
+#TODO:
+def normalize_action(action):
+    actions = []
+    # TODO: skip 'set'
+    if action.startswith('set('):
+        action = action[len('set(') : len(action) - 1]
+
+    # TODO: comment
+    sep_index = action.find('(')
+    if sep_index == -1:
+        return actions
+
+    act = action[0 : sep_index]
+    # TODO: special case for tunnel
+    if act == 'tunnel':
+        actions = [(act, action[sep_index + 1 : len(action) - 1])]
+    else:
+        regex_action = re.compile(r'^(.*)\((.*)\)')
+        m = regex_action.match(action)
+        if m:
+            actions = [(m.group(1), inner_action) for inner_action in m.group(2).split(',')]
+
+    return actions
+
+# TODO: comment
+def action_eth_handler(action, fields):
+    regex = re.compile('^(.*)=(.*)')
+    for item in action.split(','):
+        m = regex.match(item)
+        if not m:
+            continue
+        if m.group(1) == 'src':
+            fields['dl_src'] = m.group(2)
+        elif m.group(1) == 'dst':
+            fields['dl_dst'] = m.group(2)
+
+def action_ip_handler(action, fields):
+    regex = re.compile('^(.*)=(.*)')
+    for item in action.split(','):
+        m = regex.match(item)
+        if not m:
+            continue
+        if m.group(1) == 'src':
+            fields['nw_src'] = m.group(2)
+        elif m.group(1) == 'dst':
+            fields['nw_dst'] = m.group(2)
+        elif m.group(1) == 'ttl':
+            fields['nw_ttl'] = m.group(2)
+
+def action_nat_handler(action, fields):
+    regex = re.compile('^(.*)=(.*)')
+    for item in action.split(','):
+        m = regex.match(item)
+        if not m:
+            continue
+        sep_index = m.group(2).find(':')
+        if sep_index != -1:
+            ip = m.group(2)[0 : sep_index]
+            port = m.group(2)[sep_index + 1 : ]
+        else:
+            ip = m.group(2)
+            port = None
+
+        if m.group(1) == 'src':
+            fields['nw_src'] = ip
+            if port:
+                fields['tp_src'] = port
+        elif m.group(1) == 'dst':
+            fields['nw_dst'] = ip
+            if port:
+                fields['tp_dst'] = port
+
+def action_tunnel_handler(action, fields):
+    tun_regex = re.compile(r'.*tun_id=(.*?),')
+    m = tun_regex.match(action)
+    if m:
+        fields['tun_id'] = m.group(1)
+    tun_regex = re.compile(r'.*,dst=(.*?),')
+    m = tun_regex.match(action)
+    if m:
+        fields['tun_dst'] = m.group(1)
+    tun_regex = re.compile(r'.*,ttl=(.*?),')
+    m = tun_regex.match(action)
+    if m:
+        fields['tun_ttl'] = m.group(1)
+    tun_regex = re.compile(r'.*geneve\({.*?,(0x.*?)}\),')
+    m = tun_regex.match(action)
+    if m:
+        fields['tun_metadata0'] = m.group(1)
+
+# TODO: comment
+action_handlers = {
+    'eth'   : action_eth_handler,
+    'ipv4'  : action_ip_handler,
+    'ipv6'  : action_ip_handler,
+    'nat'   : action_nat_handler,
+    'tunnel': action_tunnel_handler
+}
+
+# TODO: comment, helper function to strip an action
+def action_strip(action_name, action):
+    depth = 0
+    for i in range(0, len(action)):
+        if action[i] == '(':
+            depth += 1
+        if action[i] == ')':
+            depth -= 1
+            if depth == 0:
+                return action[len(action_name) + 1 : i]
+    sys.stderr.write('Failed to rstrip action ' + action + '\n')
+    sys.exit(1)
+
+#TODO: comment and not so efficient
+def parse_actions(dp_actions):
+    parsed_actions = []
+    for action_name, _ in action_handlers.items():
+        match = r'%s\(' % action_name
+        for index in [m.start() for m in re.finditer(match, dp_actions)]:
+            parsed_actions.append((action_name, action_strip(action_name, dp_actions[index : ])))
+    return parsed_actions
+
+#TODO: hardcoded
+dp_hash=1
+
+def get_remote_ofport(node_cmd_args, condition):
+    ofport_args = node_cmd_args + [
+        'ovs-vsctl', '--bare', '--columns', 'ofport',
+        'find', 'interface', condition
+    ]
+    ofport = subprocess.check_output(ofport_args)
+    return ofport.strip().decode()
+
+def trace_node(ovnnb_db, ovnsb_db, pkt_fields, ofport, input_flow, node_cmds):
+
+    trace_args = node_cmds + [
+        'ovs-appctl', 'ofproto/trace', 'br-int',
+        'in_port=%s,dp_hash=%s,%s' % (ofport, dp_hash, input_flow)
+    ]
+    appctl_proc = subprocess.Popen(trace_args,stdout=subprocess.PIPE)
+
+    detrace_args = ['ovn-detrace', '--json']
+    if ovnnb_db:
+        detrace_args += ['--ovnnb', ovnnb_db]
+    if ovnsb_db:
+        detrace_args += ['--ovnsb', ovnsb_db]
+    pkt_trace = subprocess.check_output(detrace_args, stdin=appctl_proc.stdout)
+    pkt_trace = pkt_trace.strip().decode()
+
+    pkt_actions = []
+    output = jsonpickle.decode(pkt_trace)
+    for record in output._records:
+        pkt_actions += parse_actions(record._actions)
+
+    #TODO: update pkt_fields and return it
+    return update_pkt(pkt_fields, pkt_actions), output
+
+def trace(ovnnb_db, ovnsb_db, ovsdb_ovnsb, input_lsp, input_pkt, node_cmd):
+    # Parse the fields in the input OpenFlow packet description.
+    pkt_fields = parse_oflow_pkt(input_pkt)
+
+    # TODO: get chassis where port is bound
+    sbrec_pbs = list(SbrecPortBinding(ovsdb_ovnsb).get_records(input_lsp))
+    if len(sbrec_pbs) == 0:
+        sys.stderr.write('Port %s not found in Southbound DB.' % input_lsp)
+        sys.exit(1)
+
+    if len(sbrec_pbs[0].chassis) != 1:
+        sys.stderr.write('Port %s is not bound on any chassis.' % input_lsp)
+        sys.exit(1)
+
+    chassis = sbrec_pbs[0].chassis[0]
+    node_cmd_args = [] if not node_cmd else [node_cmd, chassis.hostname]
+
+    #TODO: FIXME There might be multiple encaps..
+    chassis_encap_ip = chassis.encaps[0].ip
+
+    # TODO: find openflow input port on remote chassis
+    ofport = get_remote_ofport(node_cmd_args,
+                               'external_ids:iface-id=%s' % input_lsp)
+
+    outputs = []
+    while True:
+        input_flow = build_oflow(pkt_fields)
+
+        tunneled, output = trace_node(ovnnb_db, ovnsb_db, pkt_fields, ofport,
+                                      input_flow, node_cmd_args)
+        outputs.append((chassis.hostname, output))
+
+        # Stop if the packet was delivered locally or dropped.
+        if not tunneled:
+            return outputs
+
+        encap_src_ip = chassis_encap_ip
+
+        #TODO: find chassis that is the tunnel destination
+        encap_ip = pkt_fields['tun_dst']
+        sbrec_encap = list(SbrecEncap(ovsdb_ovnsb).get_records(encap_ip))
+        if len(sbrec_encap) != 1:
+            sys.stderr.write('Could not find Encap for IP %s.' % encap_ip)
+            sys.exit(1)
+
+        chassis_name = sbrec_encap[0].chassis_name
+        sbrec_chassis = list(SbrecChassis(ovsdb_ovnsb).get_records(chassis_name))
+        if len(sbrec_chassis) != 1:
+            sys.stderr.write('Could not find Chassis %s for Encap IP %s' %
+                (chassis_name, encap_ip))
+            sys.exit(1)
+
+        chassis = sbrec_chassis[0]
+        #TODO: update cmd args
+        node_cmd_args = [] if not node_cmd else [node_cmd, chassis.hostname]
+        #TODO: FIXME There might be multiple encaps..
+        chassis_encap_ip = chassis.encaps[0].ip
+
+        #TODO: find ofport on remote chassis corresponding to the tunnel
+        ofport = get_remote_ofport(node_cmd_args,
+                                   'options:remote_ip=%s' % encap_src_ip)
+
+#TODO: for debug
+def dump_dot_node(host, output, dot):
+    # TODO: graph generation should be more abstract
+    dot.node(host, 'Chassis: ' + host)
+    for i, record in enumerate(output._records):
+        with dot.subgraph(name='cluster-%s-%d' % (host, i), node_attr={'shape': 'box'}) as dot_rec:
+            flow_lines = record._flow.split('\n')
+            flow_lines = ['\\n'.join(textwrap.wrap(l)) for l in flow_lines]
+            flow = '\\n'.join(flow_lines)
+            sbrec = '\\n'.join(textwrap.wrap(record._sbrec, width=60))
+            nbrec = '\\n'.join(textwrap.wrap(record._nbrec, width=60))
+            nbrec = '\\n'.join([
+                'Datapath: %s' % record._datapath,
+                'Pipeline: %s' % record._pipeline,
+                'Stage: %s' % record._stage,
+                nbrec])
+            dot_rec.node('%s-flow%d'  % (host, i), flow)
+            dot_rec.node('%s-sbrec%d' % (host, i), sbrec)
+            dot_rec.node('%s-nbrec%d' % (host, i), nbrec)
+            dot_rec.edge('%s-sbrec%d' % (host, i), '%s-flow%d'  % (host, i))
+            dot_rec.edge('%s-nbrec%d' % (host, i), '%s-sbrec%d' % (host, i))
+
+    dot.edge(host, '%s-nbrec0' % host, constraint='false')
+    for i in range(0, len(output._records) - 1):
+        dot.edge('%s-flow%d'  % (host, i), '%s-flow%d' %  (host, i + 1), constraint='false')
+
+def dump_dot(outputs):
+    dot = Digraph(name='pkt-trace', node_attr={'shape': 'box', 'style': 'rounded'})
+    dot.attr(rankdir='LR')
+    for (host, output) in outputs:
+        dump_dot_node(host, output, dot)
+    return dot.source
+
+def dump_json(outputs):
+    node_outputs = {
+        'nodes': [output for _, output in outputs]
+    }
+    return jsonpickle.encode(node_outputs)
+
+def dump_raw_node(output):
+    for record in output._records:
+        print(record._flow)
+        if record._sbrec:
+            print('  * ' + record._sbrec)
+        if record._nbrec:
+            print('   * ' + record._nbrec)
+
+def dump_raw(outputs):
+    for (host, output) in outputs:
+        print('Chassis(\"%s\")' % host)
+        print('---------' + '-' * len(host) + '--')
+        dump_raw_node(output)
+    return None
+
+def main():
+    try:
+        options, args = getopt.gnu_getopt(sys.argv[1:], 'hV',
+                                          ['help', 'version',
+                                           'ovnsb=', 'ovnnb=',
+                                           'input-lsp=', 'input-pkt=',
+                                           'node-cmd=',
+                                           'dot', 'json'])
+    except (getopt.GetoptError, geo):
+        sys.stderr.write("%s: %s\n" % (argv0, geo.msg))
+        sys.exit(1)
+
+    ovnsb_db    = None
+    ovnnb_db    = None
+    input_lsp   = None
+    input_pkt   = None
+    node_cmd    = None
+
+    # By default output raw text.
+    out_fun = dump_raw
+
+    for key, value in options:
+        if key in ['-h', '--help']:
+            usage()
+        elif key in ['-V', '--version']:
+            print("%s (OVN) @VERSION@" % argv0)
+        elif key in ['--ovnsb']:
+            ovnsb_db = value
+        elif key in ['--ovnnb']:
+            ovnnb_db = value
+        elif key in ['--input-lsp']:
+            input_lsp = value
+        elif key in ['--input-pkt']:
+            input_pkt = value
+        elif key in ['--node-cmd']:
+            node_cmd = value
+        elif key in ['--dot']:
+            out_fun = dump_dot
+        elif key in ['--json']:
+            out_fun = dump_json
+        else:
+            sys.exit(0)
+
+    if len(args) != 0:
+        sys.stderr.write("%s: non-option argument not supported "
+                         "(use --help for help)\n" % argv0)
+        sys.exit(1)
+
+    ovn_rundir = os.getenv('OVN_RUNDIR', '@OVN_RUNDIR@')
+
+    if not ovnsb_db:
+        ovnsb_db = os.getenv('OVN_SB_DB')
+        if not ovnsb_db:
+            ovnsb_db = 'unix:%s/ovnsb_db.sock' % ovn_rundir
+
+    if not ovnnb_db:
+        ovnnb_db = os.getenv('OVN_NB_DB')
+        if not ovnnb_db:
+            ovnnb_db = 'unix:%s/ovnnb_db.sock' % ovn_rundir
+
+    ovsdb_ovnsb = OVSDB(ovnsb_db, 'OVN_Southbound')
+    ovsdb_ovnnb = OVSDB(ovnnb_db, 'OVN_Northbound')
+
+    if not input_lsp:
+        sys.stderr.write('%s: --input-lsp not specified\n' % argv0)
+
+    if not input_pkt:
+        sys.stderr.write('%s: --input-pkt not specified\n' % argv0)
+
+    outputs = trace(ovnnb_db, ovnsb_db, ovsdb_ovnsb, input_lsp, input_pkt,
+                    node_cmd)
+
+    output = out_fun(outputs)
+    if output:
+        print(output)
+
+if __name__ == "__main__":
+    main()
+
+
+# Local variables:
+# mode: python
+# End:
