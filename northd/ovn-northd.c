@@ -11478,22 +11478,29 @@ ovn_db_run(struct northd_context *ctx,
            struct ovsdb_idl_index *sbrec_chassis_by_name,
            struct ovsdb_idl_loop *ovnsb_idl_loop)
 {
+    static long long int backoff_start;
+
     //TODO: if cpu overloaded retry in a 0.1sec with a max retry cap of 1 sec
     if (northd_is_cpu_usage_high()) {
-        static int retry_count = 0;
-        #define MAX_NORTHD_BACKOFF_RETRY 10
-        #define NORTHD_BACKOFF_MS 100
+        #define NORTHD_BACKOFF_MS 1000
 
-        retry_count++;
-        if (retry_count != MAX_NORTHD_BACKOFF_RETRY) {
-            VLOG_INFO("ovn-northd HIGH CPU backing off for %dms, retry %d.",
-                      NORTHD_BACKOFF_MS, retry_count);
-            poll_timer_wait(NORTHD_BACKOFF_MS);
+        long long int now = time_msec();
+
+
+        if (backoff_start == 0) {
+            backoff_start = now;
+        }
+
+        if (now - backoff_start <= NORTHD_BACKOFF_MS) {
+            long long int backoff = NORTHD_BACKOFF_MS - (now - backoff_start);
+            VLOG_INFO("ovn-northd HIGH CPU backing off for %lldms",
+                      backoff);
+            poll_timer_wait(backoff);
             return;
-        } else {
-            retry_count = 0;
         }
     }
+
+    backoff_start = 0;
 
     struct hmap datapaths, ports;
     struct ovs_list lr_list;
