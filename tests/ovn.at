@@ -9815,10 +9815,14 @@ check as gw2 ovs-vsctl set open . external-ids:ovn-bridge-mappings=phys:br-phys
 check as ext1 ovs-vsctl set open . external-ids:ovn-bridge-mappings=phys:br-phys
 
 wait_for_ports_up
-AT_CHECK([ovn-nbctl --wait=sb sync], [0], [ignore])
+check ovn-nbctl --wait=sb sync
 
 ovn-sbctl dump-flows > sbflows
 AT_CAPTURE_FILE([sbflows])
+
+# Wait until the ARP for 172.16.1.3 is learned and propagated to openflows.
+wait_row_count MAC_Binding 1 ip=172.16.1.3 logical_port=alice
+check ovn-nbctl --wait=hv sync
 
 reset_pcap_file() {
     local iface=$1
@@ -9917,10 +9921,17 @@ test_ip_packet()
     fi
 }
 
+gw1_ch_uuid=$(fetch_column Chassis _uuid name=gw1)
+gw2_ch_uuid=$(fetch_column Chassis _uuid name=gw2)
+
+AS_BOX([test_ip_packet gw1 gw2 0])
+# Wait until ovn-controller catches up and then send the packet.
+wait_column "$gw1_ch_uuid" Port_Binding chassis logical_port=cr-alice
+check ovn-nbctl --wait=hv sync
 test_ip_packet gw1 gw2 0
 
 AT_CHECK(
-  [ovn-nbctl --wait=hv \
+  [ovn-nbctl \
     --id=@gc0 create Gateway_Chassis name=alice_gw1 \
                                      chassis_name=gw1 \
                                      priority=10 -- \
@@ -9932,6 +9943,10 @@ AT_CHECK(
 <1>
 ])
 
+AS_BOX([test_ip_packet gw2 gw1 0])
+# Wait until ovn-controller catches up and then send the packet.
+wait_column "$gw2_ch_uuid" Port_Binding chassis logical_port=cr-alice
+check ovn-nbctl --wait=hv sync
 test_ip_packet gw2 gw1 0
 
 # Get the claim count of both gw1 and gw2.
@@ -9952,6 +9967,10 @@ OVS_WAIT_UNTIL([test $gw1_claim_ct = `cat gw1/ovn-controller.log \
 AT_CHECK([test $gw2_claim_ct = `cat gw2/ovn-controller.log | \
 grep -c "cr-alice: Claiming"`])
 
+AS_BOX([test_ip_packet gw1 gw2 1])
+# Wait until ovn-controller catches up and then send the packet.
+wait_column "$gw1_ch_uuid" Port_Binding chassis logical_port=cr-alice
+check ovn-nbctl --wait=hv sync
 test_ip_packet gw1 gw2 1
 
 as gw2
@@ -10086,7 +10105,8 @@ AT_CAPTURE_FILE([sbflows])
 hv1_ch_uuid=$(fetch_column Chassis _uuid name=hv1)
 wait_column "$hv1_ch_uuid" HA_Chassis_Group ref_chassis
 
-# Allow some time for ovn-northd and ovn-controller to catch up.
+# Wait until the ARP for 172.16.1.3 is learned and propagated to openflows.
+wait_row_count MAC_Binding 1 ip=172.16.1.3 logical_port=alice
 check ovn-nbctl --wait=hv sync
 
 reset_pcap_file() {
@@ -10159,9 +10179,16 @@ grep actions=mod_dl_dst:f0:00:00:01:02:04 | wc -l` -eq 1
     AT_CHECK([grep $expected packets | sort], [0], [])
 }
 
+gw1_ch_uuid=$(fetch_column Chassis _uuid name=gw1)
+gw2_ch_uuid=$(fetch_column Chassis _uuid name=gw2)
+
+AS_BOX([test_ip_packet gw1 gw2])
+# Wait until ovn-controller catches up and then send the packet.
+wait_column "$gw1_ch_uuid" Port_Binding chassis logical_port=cr-alice
+check ovn-nbctl --wait=hv sync
 test_ip_packet gw1 gw2
 
-ovn-nbctl --wait=hv \
+ovn-nbctl \
     --id=@gc0 create Gateway_Chassis name=alice_gw1 \
                                      chassis_name=gw1 \
                                      priority=10 -- \
@@ -10170,6 +10197,10 @@ ovn-nbctl --wait=hv \
                                      priority=20 -- \
     set Logical_Router_Port alice 'gateway_chassis=[@gc0,@gc1]'
 
+AS_BOX([test_ip_packet gw2 gw1])
+# Wait until ovn-controller catches up and then send the packet.
+wait_column "$gw2_ch_uuid" Port_Binding chassis logical_port=cr-alice
+check ovn-nbctl --wait=hv sync
 test_ip_packet gw2 gw1
 
 OVN_CLEANUP([hv1],[gw1],[gw2],[ext1])
