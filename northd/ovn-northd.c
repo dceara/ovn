@@ -12636,7 +12636,7 @@ ovnnb_db_run(struct northd_context *ctx,
     northd_probe_interval_sb = get_probe_interval(ovnsb_db, nb);
 
     use_logical_dp_groups = smap_get_bool(&nb->options,
-                                          "use_logical_dp_groups", false);
+                                          "use_logical_dp_groups", true);
     /* deprecated, use --event instead */
     controller_event_en = smap_get_bool(&nb->options,
                                         "controller_event", false);
