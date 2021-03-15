@@ -66,6 +66,7 @@ enum mff_log_flags_bits {
     MLF_LOOKUP_MAC_BIT = 6,
     MLF_LOOKUP_LB_HAIRPIN_BIT = 7,
     MLF_LOOKUP_FDB_BIT = 8,
+    MLF_SWITCH_DP_BIT = 13,
 };
 
 /* MFF_LOG_FLAGS_REG flag assignments */
@@ -102,6 +103,9 @@ enum mff_log_flags {
 
     /* Indicate that the lookup in the fdb table was successful. */
     MLF_LOOKUP_FDB = (1 << MLF_LOOKUP_FDB_BIT),
+
+    //TODO
+    MLF_SWITCH_DP = (1 << MLF_SWITCH_DP_BIT),
 };
 
 /* OVN logical fields

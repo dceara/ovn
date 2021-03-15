@@ -4787,7 +4787,7 @@ build_lswitch_input_port_sec_op(
     if (queue_id) {
         ds_put_format(actions, "set_queue(%s); ", queue_id);
     }
-    ds_put_cstr(actions, "next;");
+    ds_put_cstr(actions, "flags[13] = 1; next;");
     ovn_lflow_add_with_hint(lflows, op->od, S_SWITCH_IN_PORT_SEC_L2, 50,
                             ds_cstr(match), ds_cstr(actions),
                             &op->nbsp->header_);
@@ -11922,7 +11922,7 @@ ovn_dp_group_find(const struct hmap *dp_groups,
 
 static struct sbrec_logical_dp_group *
 ovn_sb_insert_logical_dp_group(struct northd_context *ctx,
-                                     const struct hmapx *od)
+                               const struct hmapx *od)
 {
     struct sbrec_logical_dp_group *dp_group;
     const struct sbrec_datapath_binding **sb;
@@ -11967,6 +11967,23 @@ ovn_sb_set_lflow_logical_dp_group(
     sbrec_logical_flow_set_logical_dp_group(sbflow, dpg->dp_group);
 }
 
+//TODO
+static void
+populate_all_switches_routers(const struct hmap *datapaths,
+                              struct hmapx *all_switches,
+                              struct hmapx *all_routers)
+{
+    struct ovn_datapath *od;
+
+    HMAP_FOR_EACH (od, key_node, datapaths) {
+        if (od->nbs) {
+            hmapx_add(all_switches, od);
+        } else {
+            hmapx_add(all_routers, od);
+        }
+    }
+}
+
 /* Updates the Logical_Flow and Multicast_Group tables in the OVN_SB database,
  * constructing their contents based on the OVN_NB database. */
 static void
@@ -11982,6 +11999,11 @@ build_lflows(struct northd_context *ctx, struct hmap *datapaths,
                                     port_groups, &lflows, mcgroups,
                                     igmp_groups, meter_groups, lbs,
                                     bfd_connections);
+
+    //TODO: all switches & all routers
+    struct hmapx all_switches = HMAPX_INITIALIZER(&all_switches);
+    struct hmapx all_routers = HMAPX_INITIALIZER(&all_routers);
+    populate_all_switches_routers(datapaths, &all_switches, &all_routers);
 
     /* Collecting all unique datapath groups. */
     struct hmap dp_groups = HMAP_INITIALIZER(&dp_groups);
@@ -12147,6 +12169,29 @@ build_lflows(struct northd_context *ctx, struct hmap *datapaths,
     }
     hmap_destroy(&lflows);
 
+    //TODO
+    const struct sbrec_logical_dp_group *sb_dpg;
+    SBREC_LOGICAL_DP_GROUP_FOR_EACH (sb_dpg, ctx->ovnsb_idl) {
+        struct hmapx od_group = HMAPX_INITIALIZER(&od_group);
+
+        for (size_t i = 0; i < sb_dpg->n_datapaths; i++) {
+            struct ovn_datapath *dpg_od = ovn_datapath_from_sbrec(datapaths, sb_dpg->datapaths[i]);
+
+            if (!dpg_od) {
+                continue;
+            }
+            hmapx_add(&od_group, dpg_od);
+        }
+
+        if (hmapx_equals(&od_group, &all_switches)) {
+            sbrec_logical_dp_group_update_options_setkey(sb_dpg, "all-switches", "true");
+        } else if (hmapx_equals(&od_group, &all_routers)) {
+            sbrec_logical_dp_group_update_options_setkey(sb_dpg, "all-routers", "true");
+        }
+
+        hmapx_destroy(&od_group);
+    }
+
     struct ovn_dp_group *dpg;
     HMAP_FOR_EACH_POP (dpg, node, &dp_groups) {
         hmapx_destroy(&dpg->map);
@@ -12188,6 +12233,9 @@ build_lflows(struct northd_context *ctx, struct hmap *datapaths,
         ovn_multicast_update_sbrec(mc, sbmc);
         ovn_multicast_destroy(mcgroups, mc);
     }
+
+    hmapx_destroy(&all_switches);
+    hmapx_destroy(&all_routers);
 }
 
 static void
@@ -13823,6 +13871,8 @@ main(int argc, char *argv[])
                         &sbrec_table_logical_dp_group);
     add_column_noalert(ovnsb_idl_loop.idl,
                        &sbrec_logical_dp_group_col_datapaths);
+    add_column_noalert(ovnsb_idl_loop.idl,
+                       &sbrec_logical_dp_group_col_options);
 
     ovsdb_idl_add_table(ovnsb_idl_loop.idl, &sbrec_table_multicast_group);
     add_column_noalert(ovnsb_idl_loop.idl,

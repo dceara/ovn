@@ -1,7 +1,7 @@
 {
     "name": "OVN_Southbound",
     "version": "20.17.0",
-    "cksum": "669123379 26536",
+    "cksum": "4100141711 26752",
     "tables": {
         "SB_Global": {
             "columns": {
@@ -119,7 +119,11 @@
                     {"type": {"key": {"type": "uuid",
                                       "refTable": "Datapath_Binding",
                                       "refType": "weak"},
-                              "min": 0, "max": "unlimited"}}},
+                              "min": 0, "max": "unlimited"}},
+                "options": {"type": {"key": "string",
+                                     "value": "string",
+                                     "min": 0,
+                                     "max": "unlimited"}}},
             "isRoot": false},
         "Multicast_Group": {
             "columns": {

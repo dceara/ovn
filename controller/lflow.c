@@ -31,6 +31,7 @@
 #include "lib/ovn-l7.h"
 #include "lib/ovn-sb-idl.h"
 #include "lib/extend-table.h"
+#include "hmapx.h"
 #include "packets.h"
 #include "physical.h"
 #include "simap.h"
@@ -312,13 +313,23 @@ lflow_resource_destroy_lflow(struct lflow_resource_ref *lfrr,
     free(lfrn);
 }
 
-/* Adds the logical flows from the Logical_Flow table to flow tables. */
-static void
-add_logical_flows(struct lflow_ctx_in *l_ctx_in,
-                  struct lflow_ctx_out *l_ctx_out)
-{
-    const struct sbrec_logical_flow *lflow;
+//TODO
+static bool
+consider_logical_flow__(const struct sbrec_logical_flow *lflow,
+                        const struct sbrec_datapath_binding *dp,
+                        struct hmap *dhcp_opts, struct hmap *dhcpv6_opts,
+                        struct hmap *nd_ra_opts,
+                        struct controller_event_options *controller_event_opts,
+                        struct lflow_ctx_in *l_ctx_in,
+                        struct lflow_ctx_out *l_ctx_out);
 
+//TODO
+static void
+add_logical_flows__(const struct hmap *local_datapaths,
+                    struct hmapx *local_dp_groups,
+                    struct lflow_ctx_in *l_ctx_in,
+                    struct lflow_ctx_out *l_ctx_out)
+{
     struct hmap dhcp_opts = HMAP_INITIALIZER(&dhcp_opts);
     struct hmap dhcpv6_opts = HMAP_INITIALIZER(&dhcpv6_opts);
     const struct sbrec_dhcp_options *dhcp_opt_row;
@@ -327,7 +338,6 @@ add_logical_flows(struct lflow_ctx_in *l_ctx_in,
         dhcp_opt_add(&dhcp_opts, dhcp_opt_row->name, dhcp_opt_row->code,
                      dhcp_opt_row->type);
     }
-
 
     const struct sbrec_dhcpv6_options *dhcpv6_opt_row;
     SBREC_DHCPV6_OPTIONS_TABLE_FOR_EACH (dhcpv6_opt_row,
@@ -342,21 +352,90 @@ add_logical_flows(struct lflow_ctx_in *l_ctx_in,
     struct controller_event_options controller_event_opts;
     controller_event_opts_init(&controller_event_opts);
 
-    SBREC_LOGICAL_FLOW_TABLE_FOR_EACH (lflow, l_ctx_in->logical_flow_table) {
-        if (!consider_logical_flow(lflow, &dhcp_opts, &dhcpv6_opts,
-                                   &nd_ra_opts, &controller_event_opts,
-                                   l_ctx_in, l_ctx_out)) {
-            static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 5);
-            VLOG_ERR_RL(&rl, "Conjunction id overflow when processing lflow "
-                        UUID_FMT, UUID_ARGS(&lflow->header_.uuid));
-            l_ctx_out->conj_id_overflow = true;
+    struct local_datapath *ldp;
+    HMAP_FOR_EACH (ldp, hmap_node, local_datapaths) {
+        const struct sbrec_datapath_binding *dp = ldp->datapath;
+        struct sbrec_logical_flow *lf_row =
+            sbrec_logical_flow_index_init_row(
+                l_ctx_in->sbrec_logical_flow_by_logical_datapath);
+        sbrec_logical_flow_index_set_logical_datapath(lf_row, dp);
+
+        const struct sbrec_logical_flow *lflow;
+        SBREC_LOGICAL_FLOW_FOR_EACH_EQUAL (lflow, lf_row,
+                                           l_ctx_in->sbrec_logical_flow_by_logical_datapath) {
+            if (!consider_logical_flow__(lflow, dp, &dhcp_opts, &dhcpv6_opts,
+                                        &nd_ra_opts, &controller_event_opts,
+                                        l_ctx_in, l_ctx_out)) {
+                l_ctx_out->conj_id_overflow = true;
+                sbrec_logical_flow_index_destroy_row(lf_row);
+                goto lflow_processing_end;
+            }
         }
+        sbrec_logical_flow_index_destroy_row(lf_row);
     }
+
+    struct hmapx_node *ldp_node;
+    HMAPX_FOR_EACH (ldp_node, local_dp_groups) {
+        struct sbrec_logical_dp_group *ldpg = ldp_node->data;
+        struct sbrec_logical_flow *lf_row =
+            sbrec_logical_flow_index_init_row(
+                l_ctx_in->sbrec_logical_flow_by_logical_datapath);
+        sbrec_logical_flow_index_set_logical_dp_group(lf_row, ldpg);
+
+        const struct sbrec_logical_flow *lflow;
+        SBREC_LOGICAL_FLOW_FOR_EACH_EQUAL (lflow, lf_row,
+                                           l_ctx_in->sbrec_logical_flow_by_logical_datapath) {
+            if (smap_get_bool(&lflow->logical_dp_group->options, "all-switches", false) ||
+                    smap_get_bool(&lflow->logical_dp_group->options, "all-routers", false)) {
+                if (!consider_logical_flow__(lflow, NULL, &dhcp_opts, &dhcpv6_opts,
+                                            &nd_ra_opts, &controller_event_opts,
+                                            l_ctx_in, l_ctx_out)) {
+                    l_ctx_out->conj_id_overflow = true;
+                    sbrec_logical_flow_index_destroy_row(lf_row);
+                    goto lflow_processing_end;
+                }
+            } else {
+                for (size_t i = 0; i < ldpg->n_datapaths; i++) {
+                    if (!consider_logical_flow__(lflow, ldpg->datapaths[i], &dhcp_opts, &dhcpv6_opts,
+                                                &nd_ra_opts, &controller_event_opts,
+                                                l_ctx_in, l_ctx_out)) {
+                        l_ctx_out->conj_id_overflow = true;
+                        sbrec_logical_flow_index_destroy_row(lf_row);
+                        goto lflow_processing_end;
+                    }
+                }
+            }
+        }
+        sbrec_logical_flow_index_destroy_row(lf_row);
+    }
+lflow_processing_end:
 
     dhcp_opts_destroy(&dhcp_opts);
     dhcp_opts_destroy(&dhcpv6_opts);
     nd_ra_opts_destroy(&nd_ra_opts);
     controller_event_opts_destroy(&controller_event_opts);
+}
+
+/* Adds the logical flows from the Logical_Flow table to flow tables. */
+static void
+add_logical_flows(struct lflow_ctx_in *l_ctx_in,
+                  struct lflow_ctx_out *l_ctx_out)
+{
+    struct hmapx _local_dp_groups = HMAPX_INITIALIZER(&_local_dp_groups);
+
+    const struct sbrec_logical_dp_group *ldpg;
+    SBREC_LOGICAL_DP_GROUP_TABLE_FOR_EACH (ldpg,
+                                           l_ctx_in->logical_dp_group_table) {
+        for (size_t i = 0; i < ldpg->n_datapaths; i++) {
+            if (get_local_datapath(l_ctx_in->local_datapaths, ldpg->datapaths[i]->tunnel_key)) {
+                hmapx_add(&_local_dp_groups, CONST_CAST(struct sbrec_logical_dp_group *, ldpg));
+                break;
+            }
+        }
+    }
+
+    add_logical_flows__(l_ctx_in->local_datapaths, &_local_dp_groups, l_ctx_in, l_ctx_out);
+    hmapx_destroy(&_local_dp_groups);
 }
 
 bool
@@ -579,7 +658,7 @@ add_matches_to_flow_table(const struct sbrec_logical_flow *lflow,
         .lookup_port = lookup_port_cb,
         .tunnel_ofport = tunnel_ofport_cb,
         .aux = &aux,
-        .is_switch = datapath_is_switch(dp),
+        .is_switch = dp ? datapath_is_switch(dp) : smap_get_bool(&lflow->logical_dp_group->options, "all-switches", false),
         .group_table = l_ctx_out->group_table,
         .meter_table = l_ctx_out->meter_table,
         .lflow_uuid = lflow->header_.uuid,
@@ -600,24 +679,35 @@ add_matches_to_flow_table(const struct sbrec_logical_flow *lflow,
 
     struct expr_match *m;
     HMAP_FOR_EACH (m, hmap_node, matches) {
-        match_set_metadata(&m->match, htonll(dp->tunnel_key));
-        if (datapath_is_switch(dp)) {
-            unsigned int reg_index
-                = (ingress ? MFF_LOG_INPORT : MFF_LOG_OUTPORT) - MFF_REG0;
-            int64_t port_id = m->match.flow.regs[reg_index];
-            if (port_id) {
-                int64_t dp_id = dp->tunnel_key;
-                char buf[16];
-                get_unique_lport_key(dp_id, port_id, buf, sizeof(buf));
-                lflow_resource_add(l_ctx_out->lfrr, REF_TYPE_PORTBINDING, buf,
-                                   &lflow->header_.uuid);
-                if (!sset_contains(l_ctx_in->local_lport_ids, buf)) {
-                    VLOG_DBG("lflow "UUID_FMT
-                             " port %s in match is not local, skip",
-                             UUID_ARGS(&lflow->header_.uuid),
-                             buf);
-                    continue;
+        if (dp) {
+            match_set_metadata(&m->match, htonll(dp->tunnel_key));
+            if (datapath_is_switch(dp)) {
+                unsigned int reg_index
+                    = (ingress ? MFF_LOG_INPORT : MFF_LOG_OUTPORT) - MFF_REG0;
+                int64_t port_id = m->match.flow.regs[reg_index];
+                if (port_id) {
+                    int64_t dp_id = dp->tunnel_key;
+                    char buf[16];
+                    get_unique_lport_key(dp_id, port_id, buf, sizeof(buf));
+                    lflow_resource_add(l_ctx_out->lfrr, REF_TYPE_PORTBINDING, buf,
+                                    &lflow->header_.uuid);
+                    if (!sset_contains(l_ctx_in->local_lport_ids, buf)) {
+                        VLOG_DBG("lflow "UUID_FMT
+                                " port %s in match is not local, skip",
+                                UUID_ARGS(&lflow->header_.uuid),
+                                buf);
+                        continue;
+                    }
                 }
+            }
+        } else {
+            ovs_assert(lflow->logical_dp_group);
+            if (smap_get_bool(&lflow->logical_dp_group->options, "all-switches", false)) {
+                match_set_reg_masked(&m->match, MFF_LOG_FLAGS - MFF_REG0, MLF_SWITCH_DP, MLF_SWITCH_DP);
+            } else if (smap_get_bool(&lflow->logical_dp_group->options, "all-routers", false)) {
+                match_set_reg_masked(&m->match, MFF_LOG_FLAGS - MFF_REG0, 0, MLF_SWITCH_DP);
+            } else {
+                OVS_NOT_REACHED();
             }
         }
         if (!m->n) {
@@ -669,7 +759,7 @@ convert_match_to_expr(const struct sbrec_logical_flow *lflow,
 
     struct expr *e = expr_parse_string(lflow->match, &symtab, addr_sets,
                                        port_groups, &addr_sets_ref,
-                                       &port_groups_ref, dp->tunnel_key,
+                                       &port_groups_ref, dp ? dp->tunnel_key : 0,
                                        &error);
     const char *addr_set_name;
     SSET_FOR_EACH (addr_set_name, &addr_sets_ref) {
@@ -719,7 +809,7 @@ consider_logical_flow__(const struct sbrec_logical_flow *lflow,
     /* Determine translation of logical table IDs to physical table IDs. */
     bool ingress = !strcmp(lflow->pipeline, "ingress");
 
-    if (!get_local_datapath(l_ctx_in->local_datapaths, dp->tunnel_key)) {
+    if (dp && !get_local_datapath(l_ctx_in->local_datapaths, dp->tunnel_key)) {
         VLOG_DBG("lflow "UUID_FMT" is not for local datapath, skip",
                  UUID_ARGS(&lflow->header_.uuid));
         return true;
@@ -915,25 +1005,27 @@ consider_logical_flow(const struct sbrec_logical_flow *lflow,
     const struct sbrec_datapath_binding *dp = lflow->logical_datapath;
     bool ret = true;
 
-    if (!dp_group && !dp) {
-        VLOG_DBG("lflow "UUID_FMT" has no datapath binding, skip",
-                 UUID_ARGS(&lflow->header_.uuid));
-        return true;
-    }
-    ovs_assert(!dp_group || !dp);
-
     if (dp && !consider_logical_flow__(lflow, dp,
                                        dhcp_opts, dhcpv6_opts, nd_ra_opts,
                                        controller_event_opts,
                                        l_ctx_in, l_ctx_out)) {
         ret = false;
     }
-    for (size_t i = 0; dp_group && i < dp_group->n_datapaths; i++) {
-        if (!consider_logical_flow__(lflow, dp_group->datapaths[i],
-                                     dhcp_opts,  dhcpv6_opts, nd_ra_opts,
-                                     controller_event_opts,
-                                     l_ctx_in, l_ctx_out)) {
-            ret = false;
+    if (dp_group) {
+        if (smap_get_bool(&lflow->logical_dp_group->options, "all-switches", false) ||
+                smap_get_bool(&lflow->logical_dp_group->options, "all-routers", false)) {
+            return consider_logical_flow__(lflow, NULL, dhcp_opts,  dhcpv6_opts, nd_ra_opts,
+                                            controller_event_opts,
+                                            l_ctx_in, l_ctx_out);
+        } else {
+            for (size_t i = 0; i < dp_group->n_datapaths; i++) {
+                if (!consider_logical_flow__(lflow, dp_group->datapaths[i],
+                                            dhcp_opts,  dhcpv6_opts, nd_ra_opts,
+                                            controller_event_opts,
+                                            l_ctx_in, l_ctx_out)) {
+                    ret = false;
+                }
+            }
         }
     }
     return ret;
@@ -1651,7 +1743,6 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
                      dhcp_opt_row->type);
     }
 
-
     const struct sbrec_dhcpv6_options *dhcpv6_opt_row;
     SBREC_DHCPV6_OPTIONS_TABLE_FOR_EACH (dhcpv6_opt_row,
                                          l_ctx_in->dhcpv6_options_table) {
@@ -1702,7 +1793,12 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
         sbrec_logical_flow_index_set_logical_dp_group(lf_row, ldpg);
         SBREC_LOGICAL_FLOW_FOR_EACH_EQUAL (
             lflow, lf_row, l_ctx_in->sbrec_logical_flow_by_logical_dp_group) {
-            if (!consider_logical_flow__(lflow, dp, &dhcp_opts, &dhcpv6_opts,
+            const struct sbrec_datapath_binding *dp_ = dp;
+            if (smap_get_bool(&lflow->logical_dp_group->options, "all-switches", false) ||
+                    smap_get_bool(&lflow->logical_dp_group->options, "all-routers", false)) {
+                dp_ = NULL;
+            }
+            if (!consider_logical_flow__(lflow, dp_, &dhcp_opts, &dhcpv6_opts,
                                          &nd_ra_opts, &controller_event_opts,
                                          l_ctx_in, l_ctx_out)) {
                 handled = false;
