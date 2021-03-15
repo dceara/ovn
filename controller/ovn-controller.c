@@ -2195,7 +2195,7 @@ flow_output_physical_flow_changes_handler(struct engine_node *node, void *data)
     if (pfc_data->recompute_physical_flows) {
         /* This indicates that we need to recompute the physical flows. */
         physical_clear_unassoc_flows_with_db(&fo->flow_table);
-        physical_clear_dp_flows(&p_ctx, &rt_data->ct_updated_datapaths,
+        physical_clear_dp_flows(&rt_data->ct_updated_datapaths,
                                 &fo->flow_table);
         physical_run(&p_ctx, &fo->flow_table);
         return true;

@@ -41,4 +41,6 @@ mcast_group_lookup(struct ovsdb_idl_index *mcgroup_index,
                    const char *name,
                    const struct sbrec_datapath_binding *datapath);
 
+struct ovsdb_idl_index *mcast_group_index_by_dp_create(struct ovsdb_idl *);
+
 #endif /* lib/mcast-group-index.h */

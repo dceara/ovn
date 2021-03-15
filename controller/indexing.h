@@ -22,6 +22,7 @@ struct ovsdb_idl_index;
 
 extern struct ovsdb_idl_index *sbrec_chassis_by_name;
 extern struct ovsdb_idl_index *sbrec_chassis_private_by_name;
+extern struct ovsdb_idl_index *sbrec_multicast_group_by_dp;
 extern struct ovsdb_idl_index *sbrec_multicast_group_by_name_dp;
 extern struct ovsdb_idl_index *sbrec_logical_flow_by_dp;
 extern struct ovsdb_idl_index *sbrec_logical_flow_by_dp_group;

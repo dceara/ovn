@@ -25,6 +25,7 @@
 
 struct ovsdb_idl_index *sbrec_chassis_by_name;
 struct ovsdb_idl_index *sbrec_chassis_private_by_name;
+struct ovsdb_idl_index *sbrec_multicast_group_by_dp;
 struct ovsdb_idl_index *sbrec_multicast_group_by_name_dp;
 struct ovsdb_idl_index *sbrec_logical_flow_by_dp;
 struct ovsdb_idl_index *sbrec_logical_flow_by_dp_group;
@@ -42,6 +43,8 @@ void indexing_init(struct ovsdb_idl *idl)
 {
     sbrec_chassis_by_name = chassis_index_create(idl);
     sbrec_chassis_private_by_name = chassis_private_index_create(idl);
+    sbrec_multicast_group_by_dp =
+        mcast_group_index_by_dp_create(idl);
     sbrec_multicast_group_by_name_dp = mcast_group_index_create(idl);
     sbrec_logical_flow_by_dp =
         ovsdb_idl_index_create1(idl, &sbrec_logical_flow_col_logical_datapath);

@@ -25,6 +25,12 @@ mcast_group_index_create(struct ovsdb_idl *idl)
                                    &sbrec_multicast_group_col_datapath);
 }
 
+struct ovsdb_idl_index *
+mcast_group_index_by_dp_create(struct ovsdb_idl *idl)
+{
+    return ovsdb_idl_index_create1(idl, &sbrec_multicast_group_col_datapath);
+}
+
 const struct sbrec_multicast_group *
 mcast_group_lookup(struct ovsdb_idl_index *mcgroup_index,
                    const char *name,

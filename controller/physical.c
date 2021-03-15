@@ -19,6 +19,7 @@
 #include "encaps.h"
 #include "flow.h"
 #include "ha-chassis.h"
+#include "indexing.h"
 #include "lflow.h"
 #include "lport.h"
 #include "chassis.h"
@@ -1601,22 +1602,39 @@ physical_run(struct physical_ctx *p_ctx,
     put_chassis_mac_conj_id_flow(p_ctx->chassis_table, p_ctx->chassis,
                                  &ofpacts, flow_table);
 
-    /* Set up flows in table 0 for physical-to-logical translation and in table
-     * 64 for logical-to-physical translation. */
-    const struct sbrec_port_binding *binding;
-    SBREC_PORT_BINDING_TABLE_FOR_EACH (binding, p_ctx->port_binding_table) {
-        consider_port_binding(p_ctx->mff_ovn_geneve, p_ctx->ct_zones,
-                              p_ctx->active_tunnels, p_ctx->local_datapaths,
-                              binding, p_ctx->chassis,
-                              flow_table, &ofpacts);
-    }
+    struct local_datapath *ld;
+    HMAP_FOR_EACH (ld, hmap_node, p_ctx->local_datapaths) {
+        /* Set up flows in table 0 for physical-to-logical translation and in
+         * table 64 for logical-to-physical translation.
+         */
+        struct sbrec_port_binding *target_pb =
+            sbrec_port_binding_index_init_row(sbrec_port_binding_by_dp);
+        sbrec_port_binding_index_set_datapath(target_pb, ld->datapath);
 
-    /* Handle output to multicast groups, in tables 32 and 33. */
-    const struct sbrec_multicast_group *mc;
-    SBREC_MULTICAST_GROUP_TABLE_FOR_EACH (mc, p_ctx->mc_group_table) {
-        consider_mc_group(p_ctx->mff_ovn_geneve, p_ctx->ct_zones,
-                          p_ctx->local_datapaths, p_ctx->chassis,
-                          mc, flow_table);
+        const struct sbrec_port_binding *binding;
+        SBREC_PORT_BINDING_FOR_EACH_EQUAL (binding, target_pb,
+                                           sbrec_port_binding_by_dp) {
+            consider_port_binding(p_ctx->mff_ovn_geneve, p_ctx->ct_zones,
+                                  p_ctx->active_tunnels, p_ctx->local_datapaths,
+                                  binding, p_ctx->chassis,
+                                  flow_table, &ofpacts);
+
+        }
+        sbrec_port_binding_index_destroy_row(target_pb);
+
+        /* Handle output to multicast groups, in tables 32 and 33. */
+        struct sbrec_multicast_group *target_mc =
+            sbrec_multicast_group_index_init_row(sbrec_multicast_group_by_dp);
+        sbrec_multicast_group_index_set_datapath(target_mc, ld->datapath);
+
+        const struct sbrec_multicast_group *mc;
+        SBREC_MULTICAST_GROUP_FOR_EACH_EQUAL (mc, target_mc,
+                                              sbrec_multicast_group_by_dp) {
+            consider_mc_group(p_ctx->mff_ovn_geneve, p_ctx->ct_zones,
+                              p_ctx->local_datapaths, p_ctx->chassis,
+                              mc, flow_table);
+        }
+        sbrec_multicast_group_index_destroy_row(target_mc);
     }
 
     /* Table 0, priority 100.
@@ -1667,11 +1685,13 @@ physical_run(struct physical_ctx *p_ctx,
             continue;
         }
 
-        SBREC_PORT_BINDING_TABLE_FOR_EACH (binding,
-                                           p_ctx->port_binding_table) {
-            if (strcmp(binding->type, "vtep")) {
-                continue;
-            }
+        struct sbrec_port_binding *target_pb =
+            sbrec_port_binding_index_init_row(sbrec_port_binding_by_type);
+        sbrec_port_binding_index_set_type(target_pb, "vtep");
+
+        const struct sbrec_port_binding *binding;
+            SBREC_PORT_BINDING_FOR_EACH_EQUAL (binding, target_pb,
+                                               sbrec_port_binding_by_type) {
 
             if (!binding->chassis ||
                 !encaps_tunnel_id_match(tun->chassis_id,
@@ -1700,6 +1720,7 @@ physical_run(struct physical_ctx *p_ctx,
                             binding->header_.uuid.parts[0],
                             &match, &ofpacts, hc_uuid);
         }
+        sbrec_port_binding_index_destroy_row(target_pb);
     }
 
     /* Table 32, priority 150.
@@ -1876,19 +1897,24 @@ physical_clear_unassoc_flows_with_db(struct ovn_desired_flow_table *flow_table)
 }
 
 void
-physical_clear_dp_flows(struct physical_ctx *p_ctx,
-                        struct hmapx *ct_updated_datapaths,
+physical_clear_dp_flows(struct hmapx *ct_updated_datapaths,
                         struct ovn_desired_flow_table *flow_table)
 {
-    const struct sbrec_port_binding *binding;
-    SBREC_PORT_BINDING_TABLE_FOR_EACH (binding, p_ctx->port_binding_table) {
-        if (!hmapx_find(ct_updated_datapaths, binding->datapath)) {
-            continue;
+    const struct hmapx_node *node;
+    HMAPX_FOR_EACH (node, ct_updated_datapaths) {
+        struct sbrec_port_binding *target_pb =
+            sbrec_port_binding_index_init_row(sbrec_port_binding_by_dp);
+        sbrec_port_binding_index_set_datapath(target_pb, node->data);
+
+        const struct sbrec_port_binding *binding;
+        SBREC_PORT_BINDING_FOR_EACH_EQUAL (binding, target_pb,
+                                           sbrec_port_binding_by_dp) {
+            const struct sbrec_port_binding *peer = get_binding_peer(binding);
+            ofctrl_remove_flows(flow_table, &binding->header_.uuid);
+            if (peer) {
+                ofctrl_remove_flows(flow_table, &peer->header_.uuid);
+            }
         }
-        const struct sbrec_port_binding *peer = get_binding_peer(binding);
-        ofctrl_remove_flows(flow_table, &binding->header_.uuid);
-        if (peer) {
-            ofctrl_remove_flows(flow_table, &peer->header_.uuid);
-        }
+        sbrec_port_binding_index_destroy_row(target_pb);
     }
 }
