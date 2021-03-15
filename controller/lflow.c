@@ -314,46 +314,10 @@ static void
 add_logical_flows(struct lflow_ctx_in *l_ctx_in,
                   struct lflow_ctx_out *l_ctx_out)
 {
-    const struct sbrec_logical_flow *lflow;
-
-    struct hmap dhcp_opts = HMAP_INITIALIZER(&dhcp_opts);
-    struct hmap dhcpv6_opts = HMAP_INITIALIZER(&dhcpv6_opts);
-    const struct sbrec_dhcp_options *dhcp_opt_row;
-    SBREC_DHCP_OPTIONS_TABLE_FOR_EACH (dhcp_opt_row,
-                                       l_ctx_in->dhcp_options_table) {
-        dhcp_opt_add(&dhcp_opts, dhcp_opt_row->name, dhcp_opt_row->code,
-                     dhcp_opt_row->type);
+    struct local_datapath *ldp;
+    HMAP_FOR_EACH (ldp, hmap_node, l_ctx_in->local_datapaths) {
+        lflow_add_flows_for_datapath(ldp->datapath, l_ctx_in, l_ctx_out, false);
     }
-
-
-    const struct sbrec_dhcpv6_options *dhcpv6_opt_row;
-    SBREC_DHCPV6_OPTIONS_TABLE_FOR_EACH (dhcpv6_opt_row,
-                                         l_ctx_in->dhcpv6_options_table) {
-       dhcp_opt_add(&dhcpv6_opts, dhcpv6_opt_row->name, dhcpv6_opt_row->code,
-                    dhcpv6_opt_row->type);
-    }
-
-    struct hmap nd_ra_opts = HMAP_INITIALIZER(&nd_ra_opts);
-    nd_ra_opts_init(&nd_ra_opts);
-
-    struct controller_event_options controller_event_opts;
-    controller_event_opts_init(&controller_event_opts);
-
-    SBREC_LOGICAL_FLOW_TABLE_FOR_EACH (lflow, l_ctx_in->logical_flow_table) {
-        if (!consider_logical_flow(lflow, &dhcp_opts, &dhcpv6_opts,
-                                   &nd_ra_opts, &controller_event_opts,
-                                   l_ctx_in, l_ctx_out)) {
-            static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 5);
-            VLOG_ERR_RL(&rl, "Conjunction id overflow when processing lflow "
-                        UUID_FMT, UUID_ARGS(&lflow->header_.uuid));
-            l_ctx_out->conj_id_overflow = true;
-        }
-    }
-
-    dhcp_opts_destroy(&dhcp_opts);
-    dhcp_opts_destroy(&dhcpv6_opts);
-    nd_ra_opts_destroy(&nd_ra_opts);
-    controller_event_opts_destroy(&controller_event_opts);
 }
 
 bool
@@ -1623,7 +1587,8 @@ lflow_destroy(void)
 bool
 lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
                              struct lflow_ctx_in *l_ctx_in,
-                             struct lflow_ctx_out *l_ctx_out)
+                             struct lflow_ctx_out *l_ctx_out,
+                             bool add_lb)
 {
     bool handled = true;
     struct hmap dhcp_opts = HMAP_INITIALIZER(&dhcp_opts);
@@ -1634,7 +1599,6 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
         dhcp_opt_add(&dhcp_opts, dhcp_opt_row->name, dhcp_opt_row->code,
                      dhcp_opt_row->type);
     }
-
 
     const struct sbrec_dhcpv6_options *dhcpv6_opt_row;
     SBREC_DHCPV6_OPTIONS_TABLE_FOR_EACH (dhcpv6_opt_row,
@@ -1704,10 +1668,13 @@ lflow_processing_end:
 
     /* Add load balancer hairpin flows if the datapath has any load balancers
      * associated. */
+    //TODO
+    if (add_lb) {
     for (size_t i = 0; i < dp->n_load_balancers; i++) {
         consider_lb_hairpin_flows(dp->load_balancers[i],
                                   l_ctx_in->local_datapaths,
                                   l_ctx_out->flow_table);
+    }
     }
 
     return handled;

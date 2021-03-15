@@ -2237,7 +2237,7 @@ flow_output_runtime_data_handler(struct engine_node *node,
     HMAP_FOR_EACH (tdp, node, tracked_dp_bindings) {
         if (tdp->is_new) {
             if (!lflow_add_flows_for_datapath(tdp->dp, &l_ctx_in,
-                                              &l_ctx_out)) {
+                                              &l_ctx_out, true)) {
                 return false;
             }
         } else {
