@@ -31,6 +31,7 @@ struct ovsdb_idl_index *sbrec_logical_flow_by_dp_group;
 struct ovsdb_idl_index *sbrec_port_binding_by_name;
 struct ovsdb_idl_index *sbrec_port_binding_by_key;
 struct ovsdb_idl_index *sbrec_port_binding_by_dp;
+struct ovsdb_idl_index *sbrec_port_binding_by_type;
 struct ovsdb_idl_index *sbrec_datapath_binding_by_key;
 struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip;
 struct ovsdb_idl_index *sbrec_ip_multicast_by_dp;
@@ -53,6 +54,8 @@ void indexing_init(struct ovsdb_idl *idl)
                                 &sbrec_port_binding_col_datapath);
     sbrec_port_binding_by_dp =
         ovsdb_idl_index_create1(idl, &sbrec_port_binding_col_datapath);
+    sbrec_port_binding_by_type =
+        ovsdb_idl_index_create1(idl, &sbrec_port_binding_col_type);
     sbrec_datapath_binding_by_key =
         ovsdb_idl_index_create1(idl, &sbrec_datapath_binding_col_tunnel_key);
     sbrec_mac_binding_by_lport_ip =

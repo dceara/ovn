@@ -2781,7 +2781,6 @@ main(int argc, char *argv[])
                             ovsrec_bridge_table_get(ovs_idl_loop.idl),
                             ovsrec_open_vswitch_table_get(ovs_idl_loop.idl),
                             ovsrec_port_table_get(ovs_idl_loop.idl),
-                            sbrec_port_binding_table_get(ovnsb_idl_loop.idl),
                             br_int, chassis, &runtime_data->local_datapaths);
                         pinctrl_run(ovnsb_idl_txn,
                                     sbrec_dns_table_get(ovnsb_idl_loop.idl),

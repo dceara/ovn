@@ -28,6 +28,7 @@ extern struct ovsdb_idl_index *sbrec_logical_flow_by_dp_group;
 extern struct ovsdb_idl_index *sbrec_port_binding_by_name;
 extern struct ovsdb_idl_index *sbrec_port_binding_by_key;
 extern struct ovsdb_idl_index *sbrec_port_binding_by_dp;
+extern struct ovsdb_idl_index *sbrec_port_binding_by_type;
 extern struct ovsdb_idl_index *sbrec_datapath_binding_by_key;
 extern struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip;
 extern struct ovsdb_idl_index *sbrec_ip_multicast_by_dp;
