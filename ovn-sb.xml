@@ -2476,6 +2476,10 @@ tcp.flags = RST;
         List of <ref table="Datapath_Binding"/> entries.
       </p>
     </column>
+
+    <column name="options">
+      TODO
+    </column>
   </table>
 
   <table name="Multicast_Group" title="Logical Port Multicast Groups">
