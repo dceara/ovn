@@ -43,7 +43,6 @@ struct sset;
 #define OVN_GENEVE_LEN 4
 
 struct physical_ctx {
-    struct ovsdb_idl_index *sbrec_port_binding_by_name;
     const struct sbrec_port_binding_table *port_binding_table;
     const struct sbrec_multicast_group_table *mc_group_table;
     const struct ovsrec_bridge *br_int;

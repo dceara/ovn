@@ -18,6 +18,7 @@
 
 #include "chassis.h"
 
+#include "indexing.h"
 #include "lib/smap.h"
 #include "lib/sset.h"
 #include "lib/vswitch-idl.h"
@@ -522,7 +523,6 @@ chassis_build_encaps(struct ovsdb_idl_txn *ovnsb_idl_txn,
  */
 static bool
 chassis_get_record(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                   struct ovsdb_idl_index *sbrec_chassis_by_name,
                    const char *chassis_id,
                    const struct sbrec_chassis **chassis_rec)
 {
@@ -628,13 +628,11 @@ chassis_update(const struct sbrec_chassis *chassis_rec,
  * Returns the local chassis record.
  */
 static const struct sbrec_chassis_private *
-chassis_private_get_record(
-    struct ovsdb_idl_txn *ovnsb_idl_txn,
-    struct ovsdb_idl_index *sbrec_chassis_pvt_by_name,
-    const char *chassis_id)
+chassis_private_get_record(struct ovsdb_idl_txn *ovnsb_idl_txn,
+                           const char *chassis_id)
 {
     const struct sbrec_chassis_private *chassis_p =
-            chassis_private_lookup_by_name(sbrec_chassis_pvt_by_name,
+            chassis_private_lookup_by_name(sbrec_chassis_private_by_name,
                                            chassis_id);
 
     if (!chassis_p && ovnsb_idl_txn) {
@@ -661,8 +659,6 @@ chassis_private_update(const struct sbrec_chassis_private *chassis_pvt,
 /* Returns this chassis's Chassis record, if it is available. */
 const struct sbrec_chassis *
 chassis_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
-            struct ovsdb_idl_index *sbrec_chassis_by_name,
-            struct ovsdb_idl_index *sbrec_chassis_private_by_name,
             const struct ovsrec_open_vswitch_table *ovs_table,
             const char *chassis_id,
             const struct ovsrec_bridge *br_int,
@@ -680,8 +676,7 @@ chassis_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
     }
 
     const struct sbrec_chassis *chassis_rec = NULL;
-    bool existed = chassis_get_record(ovnsb_idl_txn, sbrec_chassis_by_name,
-                                      chassis_id, &chassis_rec);
+    bool existed = chassis_get_record(ovnsb_idl_txn, chassis_id, &chassis_rec);
 
     /* If we found (or created) a record, update it with the correct config
      * and store the current chassis_id for fast lookup in case it gets
@@ -699,9 +694,7 @@ chassis_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
         }
 
         *chassis_private =
-            chassis_private_get_record(ovnsb_idl_txn,
-                                       sbrec_chassis_private_by_name,
-                                       chassis_id);
+            chassis_private_get_record(ovnsb_idl_txn, chassis_id);
         if (*chassis_private) {
             chassis_private_update(*chassis_private, chassis_rec, chassis_id);
         }

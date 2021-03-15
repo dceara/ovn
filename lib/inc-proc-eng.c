@@ -165,31 +165,6 @@ engine_add_input(struct engine_node *node, struct engine_node *input,
     node->n_inputs ++;
 }
 
-struct ovsdb_idl_index *
-engine_ovsdb_node_get_index(struct engine_node *node, const char *name)
-{
-    struct ed_type_ovsdb_table *ed = node->data;
-    for (size_t i = 0; i < ed->n_indexes; i++) {
-        if (!strcmp(ed->indexes[i].name, name)) {
-            return ed->indexes[i].index;
-        }
-    }
-    OVS_NOT_REACHED();
-    return NULL;
-}
-
-void
-engine_ovsdb_node_add_index(struct engine_node *node, const char *name,
-                            struct ovsdb_idl_index *index)
-{
-    struct ed_type_ovsdb_table *ed = node->data;
-    ovs_assert(ed->n_indexes < ENGINE_MAX_OVSDB_INDEX);
-
-    ed->indexes[ed->n_indexes].name = name;
-    ed->indexes[ed->n_indexes].index = index;
-    ed->n_indexes ++;
-}
-
 void
 engine_set_node_state_at(struct engine_node *node,
                          enum engine_node_state state,

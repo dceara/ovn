@@ -93,8 +93,6 @@ igmp_group_create(struct ovsdb_idl_txn *idl_txn,
 
 void
 igmp_group_update_ports(const struct sbrec_igmp_group *g,
-                        struct ovsdb_idl_index *datapaths,
-                        struct ovsdb_idl_index *port_bindings,
                         const struct mcast_snooping *ms OVS_UNUSED,
                         const struct mcast_group *mc_group)
     OVS_REQ_RDLOCK(ms->rwlock)
@@ -118,7 +116,7 @@ igmp_group_update_ports(const struct sbrec_igmp_group *g,
     LIST_FOR_EACH (bundle, bundle_node, &mc_group->bundle_lru) {
         uint32_t port_key = (uintptr_t)bundle->port;
         const struct sbrec_port_binding *sbrec_port =
-            lport_lookup_by_key(datapaths, port_bindings, dp_key, port_key);
+            lport_lookup_by_key(dp_key, port_key);
         if (!sbrec_port) {
             continue;
         }

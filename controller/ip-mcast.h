@@ -38,8 +38,6 @@ struct sbrec_igmp_group *igmp_group_create(
     const struct sbrec_chassis *chassis);
 
 void igmp_group_update_ports(const struct sbrec_igmp_group *g,
-                             struct ovsdb_idl_index *datapaths,
-                             struct ovsdb_idl_index *port_bindings,
                              const struct mcast_snooping *ms,
                              const struct mcast_group *mc_group)
     OVS_REQ_RDLOCK(ms->rwlock);

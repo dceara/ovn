@@ -25,6 +25,7 @@
 #include "encaps.h"
 #include "flow.h"
 #include "ha-chassis.h"
+#include "indexing.h"
 #include "lport.h"
 #include "mac-learn.h"
 #include "nx-match.h"
@@ -177,8 +178,7 @@ static struct pinctrl pinctrl;
 static void init_buffered_packets_map(void);
 static void destroy_buffered_packets_map(void);
 static void
-run_buffered_binding(struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
-                     const struct hmap *local_datapaths)
+run_buffered_binding(const struct hmap *local_datapaths)
     OVS_REQUIRES(pinctrl_mutex);
 
 static void pinctrl_handle_put_mac_binding(const struct flow *md,
@@ -187,11 +187,7 @@ static void pinctrl_handle_put_mac_binding(const struct flow *md,
     OVS_REQUIRES(pinctrl_mutex);
 static void init_put_mac_bindings(void);
 static void destroy_put_mac_bindings(void);
-static void run_put_mac_bindings(
-    struct ovsdb_idl_txn *ovnsb_idl_txn,
-    struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-    struct ovsdb_idl_index *sbrec_port_binding_by_key,
-    struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip)
+static void run_put_mac_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn)
     OVS_REQUIRES(pinctrl_mutex);
 static void wait_put_mac_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn);
 static void send_mac_binding_buffered_pkts(struct rconn *swconn)
@@ -202,9 +198,6 @@ static void destroy_send_garps_rarps(void);
 static void send_garp_rarp_wait(long long int send_garp_rarp_time);
 static void send_garp_rarp_prepare(
     struct ovsdb_idl_txn *ovnsb_idl_txn,
-    struct ovsdb_idl_index *sbrec_port_binding_by_datapath,
-    struct ovsdb_idl_index *sbrec_port_binding_by_name,
-    struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
     const struct ovsrec_bridge *,
     const struct sbrec_chassis *,
     const struct hmap *local_datapaths,
@@ -259,11 +252,7 @@ static void ip_mcast_querier_wait(long long int query_time);
 static void ip_mcast_sync(
     struct ovsdb_idl_txn *ovnsb_idl_txn,
     const struct sbrec_chassis *chassis,
-    const struct hmap *local_datapaths,
-    struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-    struct ovsdb_idl_index *sbrec_port_binding_by_key,
-    struct ovsdb_idl_index *sbrec_igmp_groups,
-    struct ovsdb_idl_index *sbrec_ip_multicast)
+    const struct hmap *local_datapaths)
     OVS_REQUIRES(pinctrl_mutex);
 static void pinctrl_ip_mcast_handle(
     struct rconn *swconn,
@@ -280,8 +269,6 @@ static void init_put_vport_bindings(void);
 static void destroy_put_vport_bindings(void);
 static void run_put_vport_bindings(
     struct ovsdb_idl_txn *ovnsb_idl_txn,
-    struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-    struct ovsdb_idl_index *sbrec_port_binding_by_key,
     const struct sbrec_chassis *chassis)
     OVS_REQUIRES(pinctrl_mutex);
 static void wait_put_vport_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn);
@@ -296,7 +283,6 @@ static void destroy_svc_monitors(void);
 static void sync_svc_monitors(
     struct ovsdb_idl_txn *ovnsb_idl_txn,
     const struct sbrec_service_monitor_table *svc_mon_table,
-    struct ovsdb_idl_index *sbrec_port_binding_by_name,
     const struct sbrec_chassis *our_chassis)
     OVS_REQUIRES(pinctrl_mutex);
 static void svc_monitors_run(struct rconn *swconn,
@@ -336,21 +322,16 @@ pinctrl_handle_bfd_msg(struct rconn *swconn, const struct flow *ip_flow,
                        OVS_REQUIRES(pinctrl_mutex);
 static void bfd_monitor_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
                             const struct sbrec_bfd_table *bfd_table,
-                            struct ovsdb_idl_index *sbrec_port_binding_by_name,
                             const struct sbrec_chassis *chassis,
                             const struct sset *active_tunnels)
                             OVS_REQUIRES(pinctrl_mutex);
 static void init_fdb_entries(void);
 static void destroy_fdb_entries(void);
-static const struct sbrec_fdb *fdb_lookup(
-    struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac,
-    uint32_t dp_key, const char *mac);
+static const struct sbrec_fdb *fdb_lookup(uint32_t dp_key, const char *mac);
 static void run_put_fdb(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                        struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac,
                         const struct fdb_entry *fdb_e)
                         OVS_REQUIRES(pinctrl_mutex);
-static void run_put_fdbs(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                        struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac)
+static void run_put_fdbs(struct ovsdb_idl_txn *ovnsb_idl_txn)
                         OVS_REQUIRES(pinctrl_mutex);
 static void wait_put_fdbs(struct ovsdb_idl_txn *ovnsb_idl_txn);
 static void pinctrl_handle_put_fdb(const struct flow *md,
@@ -1248,7 +1229,6 @@ fill_ipv6_prefix_state(struct ovsdb_idl_txn *ovnsb_idl_txn,
 #define IPV6_PREFIXD_STALE_TIMEOUT  180000LL
 static void
 prepare_ipv6_prefixd(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                     struct ovsdb_idl_index *sbrec_port_binding_by_name,
                      const struct hmap *local_datapaths,
                      const struct sbrec_chassis *chassis,
                      const struct sset *active_tunnels)
@@ -1278,15 +1258,14 @@ prepare_ipv6_prefixd(struct ovsdb_idl_txn *ovnsb_idl_txn,
             }
 
             const struct sbrec_port_binding *peer
-                = lport_lookup_by_name(sbrec_port_binding_by_name, peer_s);
+                = lport_lookup_by_name(peer_s);
             if (!peer) {
                 continue;
             }
 
             char *redirect_name = xasprintf("cr-%s", pb->logical_port);
-            bool resident = lport_is_chassis_resident(
-                    sbrec_port_binding_by_name, chassis, active_tunnels,
-                    redirect_name);
+            bool resident = lport_is_chassis_resident(chassis, active_tunnels,
+                                                      redirect_name);
             free(redirect_name);
             if (!resident && strcmp(pb->type, "l3gateway")) {
                 continue;
@@ -3313,14 +3292,6 @@ pinctrl_set_br_int_name(char *br_int_name)
 /* Called by ovn-controller. */
 void
 pinctrl_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
-            struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-            struct ovsdb_idl_index *sbrec_port_binding_by_datapath,
-            struct ovsdb_idl_index *sbrec_port_binding_by_key,
-            struct ovsdb_idl_index *sbrec_port_binding_by_name,
-            struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
-            struct ovsdb_idl_index *sbrec_igmp_groups,
-            struct ovsdb_idl_index *sbrec_ip_multicast_opts,
-            struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac,
             const struct sbrec_dns_table *dns_table,
             const struct sbrec_controller_event_table *ce_table,
             const struct sbrec_service_monitor_table *svc_mon_table,
@@ -3332,32 +3303,20 @@ pinctrl_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
 {
     ovs_mutex_lock(&pinctrl_mutex);
     pinctrl_set_br_int_name_(br_int->name);
-    run_put_mac_bindings(ovnsb_idl_txn, sbrec_datapath_binding_by_key,
-                         sbrec_port_binding_by_key,
-                         sbrec_mac_binding_by_lport_ip);
-    run_put_vport_bindings(ovnsb_idl_txn, sbrec_datapath_binding_by_key,
-                           sbrec_port_binding_by_key, chassis);
-    send_garp_rarp_prepare(ovnsb_idl_txn, sbrec_port_binding_by_datapath,
-                           sbrec_port_binding_by_name,
-                           sbrec_mac_binding_by_lport_ip, br_int, chassis,
+    run_put_mac_bindings(ovnsb_idl_txn);
+    run_put_vport_bindings(ovnsb_idl_txn, chassis);
+    send_garp_rarp_prepare(ovnsb_idl_txn, br_int, chassis,
                            local_datapaths, active_tunnels);
     prepare_ipv6_ras(local_datapaths);
-    prepare_ipv6_prefixd(ovnsb_idl_txn, sbrec_port_binding_by_name,
-                         local_datapaths, chassis, active_tunnels);
+    prepare_ipv6_prefixd(ovnsb_idl_txn, local_datapaths, chassis,
+                         active_tunnels);
     sync_dns_cache(dns_table);
     controller_event_run(ovnsb_idl_txn, ce_table, chassis);
-    ip_mcast_sync(ovnsb_idl_txn, chassis, local_datapaths,
-                  sbrec_datapath_binding_by_key,
-                  sbrec_port_binding_by_key,
-                  sbrec_igmp_groups,
-                  sbrec_ip_multicast_opts);
-    run_buffered_binding(sbrec_mac_binding_by_lport_ip,
-                         local_datapaths);
-    sync_svc_monitors(ovnsb_idl_txn, svc_mon_table, sbrec_port_binding_by_name,
-                      chassis);
-    bfd_monitor_run(ovnsb_idl_txn, bfd_table, sbrec_port_binding_by_name,
-                    chassis, active_tunnels);
-    run_put_fdbs(ovnsb_idl_txn, sbrec_fdb_by_dp_key_mac);
+    ip_mcast_sync(ovnsb_idl_txn, chassis, local_datapaths);
+    run_buffered_binding(local_datapaths);
+    sync_svc_monitors(ovnsb_idl_txn, svc_mon_table, chassis);
+    bfd_monitor_run(ovnsb_idl_txn, bfd_table, chassis, active_tunnels);
+    run_put_fdbs(ovnsb_idl_txn);
     ovs_mutex_unlock(&pinctrl_mutex);
 }
 
@@ -3982,12 +3941,10 @@ send_mac_binding_buffered_pkts(struct rconn *swconn)
 }
 
 static const struct sbrec_mac_binding *
-mac_binding_lookup(struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
-                   const char *logical_port,
-                   const char *ip)
+mac_binding_lookup(const char *logical_port, const char *ip)
 {
-    struct sbrec_mac_binding *mb = sbrec_mac_binding_index_init_row(
-        sbrec_mac_binding_by_lport_ip);
+    struct sbrec_mac_binding *mb =
+        sbrec_mac_binding_index_init_row(sbrec_mac_binding_by_lport_ip);
     sbrec_mac_binding_index_set_logical_port(mb, logical_port);
     sbrec_mac_binding_index_set_ip(mb, ip);
 
@@ -4004,7 +3961,6 @@ mac_binding_lookup(struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
  * Caller should make sure that 'ovnsb_idl_txn' is valid. */
 static void
 mac_binding_add_to_sb(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                      struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
                       const char *logical_port,
                       const struct sbrec_datapath_binding *dp,
                       struct eth_addr ea, const char *ip,
@@ -4014,8 +3970,7 @@ mac_binding_add_to_sb(struct ovsdb_idl_txn *ovnsb_idl_txn,
     char mac_string[ETH_ADDR_STRLEN + 1];
     snprintf(mac_string, sizeof mac_string, ETH_ADDR_FMT, ETH_ADDR_ARGS(ea));
 
-    const struct sbrec_mac_binding *b =
-        mac_binding_lookup(sbrec_mac_binding_by_lport_ip, logical_port, ip);
+    const struct sbrec_mac_binding *b = mac_binding_lookup(logical_port, ip);
     if (!b) {
         if (update_only) {
             return;
@@ -4035,7 +3990,6 @@ mac_binding_add_to_sb(struct ovsdb_idl_txn *ovnsb_idl_txn,
  */
 static void
 send_garp_locally(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                  struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
                   const struct hmap *local_datapaths,
                   const struct sbrec_port_binding *in_pb,
                   struct eth_addr ea, ovs_be32 ip)
@@ -4064,24 +4018,20 @@ send_garp_locally(struct ovsdb_idl_txn *ovnsb_idl_txn,
         struct ds ip_s = DS_EMPTY_INITIALIZER;
 
         ip_format_masked(ip, OVS_BE32_MAX, &ip_s);
-        mac_binding_add_to_sb(ovnsb_idl_txn, sbrec_mac_binding_by_lport_ip,
-                              remote->logical_port, remote->datapath,
-                              ea, ds_cstr(&ip_s), update_only);
+        mac_binding_add_to_sb(ovnsb_idl_txn, remote->logical_port,
+                              remote->datapath, ea, ds_cstr(&ip_s),
+                              update_only);
         ds_destroy(&ip_s);
     }
 }
 
 static void
 run_put_mac_binding(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                    struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-                    struct ovsdb_idl_index *sbrec_port_binding_by_key,
-                    struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
                     const struct mac_binding *mb)
 {
     /* Convert logical datapath and logical port key into lport. */
-    const struct sbrec_port_binding *pb = lport_lookup_by_key(
-        sbrec_datapath_binding_by_key, sbrec_port_binding_by_key,
-        mb->dp_key, mb->port_key);
+    const struct sbrec_port_binding *pb =
+        lport_lookup_by_key(mb->dp_key, mb->port_key);
     if (!pb) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
 
@@ -4097,19 +4047,15 @@ run_put_mac_binding(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
     struct ds ip_s = DS_EMPTY_INITIALIZER;
     ipv6_format_mapped(&mb->ip, &ip_s);
-    mac_binding_add_to_sb(ovnsb_idl_txn, sbrec_mac_binding_by_lport_ip,
-                          pb->logical_port, pb->datapath, mb->mac,
-                          ds_cstr(&ip_s), false);
+    mac_binding_add_to_sb(ovnsb_idl_txn, pb->logical_port, pb->datapath,
+                          mb->mac, ds_cstr(&ip_s), false);
     ds_destroy(&ip_s);
 }
 
 /* Called by pinctrl_run(). Runs with in the main ovn-controller
  * thread context. */
 static void
-run_put_mac_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                     struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-                     struct ovsdb_idl_index *sbrec_port_binding_by_key,
-                     struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip)
+run_put_mac_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn)
     OVS_REQUIRES(pinctrl_mutex)
 {
     if (!ovnsb_idl_txn) {
@@ -4118,17 +4064,13 @@ run_put_mac_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
     const struct mac_binding *mb;
     HMAP_FOR_EACH (mb, hmap_node, &put_mac_bindings) {
-        run_put_mac_binding(ovnsb_idl_txn, sbrec_datapath_binding_by_key,
-                            sbrec_port_binding_by_key,
-                            sbrec_mac_binding_by_lport_ip,
-                            mb);
+        run_put_mac_binding(ovnsb_idl_txn, mb);
     }
     ovn_mac_bindings_flush(&put_mac_bindings);
 }
 
 static void
-run_buffered_binding(struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
-                     const struct hmap *local_datapaths)
+run_buffered_binding(const struct hmap *local_datapaths)
     OVS_REQUIRES(pinctrl_mutex)
 {
     const struct local_datapath *ld;
@@ -4152,8 +4094,7 @@ run_buffered_binding(struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
                 struct ds ip_s = DS_EMPTY_INITIALIZER;
                 ipv6_format_mapped(&cur_qp->ip, &ip_s);
                 const struct sbrec_mac_binding *b = mac_binding_lookup(
-                        sbrec_mac_binding_by_lport_ip, pb->logical_port,
-                        ds_cstr(&ip_s));
+                        pb->logical_port, ds_cstr(&ip_s));
                 if (b && ovs_scan(b->mac, ETH_ADDR_SCAN_FMT,
                                   ETH_ADDR_SCAN_ARGS(cur_qp->ea))) {
                     hmap_remove(&buffered_packets_map, &cur_qp->hmap_node);
@@ -4234,7 +4175,6 @@ add_garp_rarp(const char *name, const struct eth_addr ea, ovs_be32 ip,
 /* Add or update a vif for which GARPs need to be announced. */
 static void
 send_garp_rarp_update(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                      struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
                       const struct hmap *local_datapaths,
                       const struct sbrec_port_binding *binding_rec,
                       struct shash *nat_addresses)
@@ -4262,11 +4202,9 @@ send_garp_rarp_update(struct ovsdb_idl_txn *ovnsb_idl_txn,
                                   laddrs->ipv4_addrs[i].addr,
                                   binding_rec->datapath->tunnel_key,
                                   binding_rec->tunnel_key);
-                    send_garp_locally(ovnsb_idl_txn,
-                                      sbrec_mac_binding_by_lport_ip,
-                                      local_datapaths, binding_rec, laddrs->ea,
+                    send_garp_locally(ovnsb_idl_txn, local_datapaths,
+                                      binding_rec, laddrs->ea,
                                       laddrs->ipv4_addrs[i].addr);
-
                 }
                 free(name);
             }
@@ -4303,8 +4241,8 @@ send_garp_rarp_update(struct ovsdb_idl_txn *ovnsb_idl_txn,
                       binding_rec->datapath->tunnel_key,
                       binding_rec->tunnel_key);
         if (ip) {
-            send_garp_locally(ovnsb_idl_txn, sbrec_mac_binding_by_lport_ip,
-                              local_datapaths, binding_rec, laddrs.ea, ip);
+            send_garp_locally(ovnsb_idl_txn, local_datapaths, binding_rec,
+                              laddrs.ea, ip);
         }
 
         destroy_lport_addresses(&laddrs);
@@ -4890,12 +4828,11 @@ ip_mcast_snoop_run(void)
  * datapath specified by 'dp_key'.
  */
 static void
-ip_mcast_flush_groups(int64_t dp_key, const struct sbrec_chassis *chassis,
-                      struct ovsdb_idl_index *sbrec_igmp_groups)
+ip_mcast_flush_groups(int64_t dp_key, const struct sbrec_chassis *chassis)
 {
     const struct sbrec_igmp_group *sbrec_igmp;
 
-    SBREC_IGMP_GROUP_FOR_EACH_BYINDEX (sbrec_igmp, sbrec_igmp_groups) {
+    SBREC_IGMP_GROUP_FOR_EACH_BYINDEX (sbrec_igmp, sbrec_igmp_group_by_addr) {
         if (!sbrec_igmp->datapath ||
                 sbrec_igmp->datapath->tunnel_key != dp_key ||
                 sbrec_igmp->chassis != chassis) {
@@ -4914,11 +4851,7 @@ ip_mcast_flush_groups(int64_t dp_key, const struct sbrec_chassis *chassis,
 static void
 ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
               const struct sbrec_chassis *chassis,
-              const struct hmap *local_datapaths,
-              struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-              struct ovsdb_idl_index *sbrec_port_binding_by_key,
-              struct ovsdb_idl_index *sbrec_igmp_groups,
-              struct ovsdb_idl_index *sbrec_ip_multicast)
+              const struct hmap *local_datapaths)
     OVS_REQUIRES(pinctrl_mutex)
 {
     bool notify = false;
@@ -4933,7 +4866,7 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
     /* First read and update our own local multicast configuration for the
      * local datapaths.
      */
-    SBREC_IP_MULTICAST_FOR_EACH_BYINDEX (ip_mcast, sbrec_ip_multicast) {
+    SBREC_IP_MULTICAST_FOR_EACH_BYINDEX (ip_mcast, sbrec_ip_multicast_by_dp) {
 
         int64_t dp_key = ip_mcast->datapath->tunnel_key;
         struct ip_mcast_snoop_cfg cfg;
@@ -4944,7 +4877,7 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
             notify = true;
         }
         if (flush_groups) {
-            ip_mcast_flush_groups(dp_key, chassis, sbrec_igmp_groups);
+            ip_mcast_flush_groups(dp_key, chassis);
         }
     }
 
@@ -4963,7 +4896,7 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
      * - either multicast snooping was disabled on the datapath
      * - or the group has expired.
      */
-    SBREC_IGMP_GROUP_FOR_EACH_BYINDEX (sbrec_igmp, sbrec_igmp_groups) {
+    SBREC_IGMP_GROUP_FOR_EACH_BYINDEX (sbrec_igmp, sbrec_igmp_group_by_addr) {
         ovs_be32 group_v4_addr;
         struct in6_addr group_addr;
 
@@ -5035,16 +4968,15 @@ ip_mcast_sync(struct ovsdb_idl_txn *ovnsb_idl_txn,
             if (ovs_list_is_empty(&mc_group->bundle_lru)) {
                 continue;
             }
-            sbrec_igmp = igmp_group_lookup(sbrec_igmp_groups, &mc_group->addr,
+            sbrec_igmp = igmp_group_lookup(sbrec_igmp_group_by_addr,
+                                           &mc_group->addr,
                                            local_dp->datapath, chassis);
             if (!sbrec_igmp) {
                 sbrec_igmp = igmp_group_create(ovnsb_idl_txn, &mc_group->addr,
                                                local_dp->datapath, chassis);
             }
 
-            igmp_group_update_ports(sbrec_igmp, sbrec_datapath_binding_by_key,
-                                    sbrec_port_binding_by_key, ip_ms->ms,
-                                    mc_group);
+            igmp_group_update_ports(sbrec_igmp, ip_ms->ms, mc_group);
         }
         ovs_rwlock_unlock(&ip_ms->ms->rwlock);
     }
@@ -5362,8 +5294,6 @@ ip_mcast_querier_wait(long long int query_time)
 /* Get localnet vifs, local l3gw ports and ofport for localnet patch ports. */
 static void
 get_localnet_vifs_l3gwports(
-    struct ovsdb_idl_index *sbrec_port_binding_by_datapath,
-    struct ovsdb_idl_index *sbrec_port_binding_by_name,
     const struct ovsrec_bridge *br_int,
     const struct sbrec_chassis *chassis,
     const struct hmap *local_datapaths,
@@ -5398,7 +5328,7 @@ get_localnet_vifs_l3gwports(
                 continue;
             }
             const struct sbrec_port_binding *pb
-                = lport_lookup_by_name(sbrec_port_binding_by_name, iface_id);
+                = lport_lookup_by_name(iface_id);
             if (!pb) {
                 continue;
             }
@@ -5411,8 +5341,8 @@ get_localnet_vifs_l3gwports(
         }
     }
 
-    struct sbrec_port_binding *target = sbrec_port_binding_index_init_row(
-        sbrec_port_binding_by_datapath);
+    struct sbrec_port_binding *target =
+        sbrec_port_binding_index_init_row(sbrec_port_binding_by_dp);
 
     const struct local_datapath *ld;
     HMAP_FOR_EACH (ld, hmap_node, local_datapaths) {
@@ -5429,7 +5359,7 @@ get_localnet_vifs_l3gwports(
 
         sbrec_port_binding_index_set_datapath(target, ld->datapath);
         SBREC_PORT_BINDING_FOR_EACH_EQUAL (pb, target,
-                                           sbrec_port_binding_by_datapath) {
+                                           sbrec_port_binding_by_dp) {
             if ((ld->has_local_l3gateway && !strcmp(pb->type, "l3gateway"))
                 || !strcmp(pb->type, "patch")) {
                 sset_add(local_l3gw_ports, pb->logical_port);
@@ -5507,8 +5437,7 @@ extract_addresses_with_port(const char *addresses,
 }
 
 static void
-consider_nat_address(struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                     const char *nat_address,
+consider_nat_address(const char *nat_address,
                      const struct sbrec_port_binding *pb,
                      struct sset *nat_address_keys,
                      const struct sbrec_chassis *chassis,
@@ -5519,9 +5448,8 @@ consider_nat_address(struct ovsdb_idl_index *sbrec_port_binding_by_name,
     char *lport = NULL;
     if (!extract_addresses_with_port(nat_address, laddrs, &lport)
         || (!lport && !strcmp(pb->type, "patch"))
-        || (lport && !lport_is_chassis_resident(
-                sbrec_port_binding_by_name, chassis,
-                active_tunnels, lport))) {
+        || (lport && !lport_is_chassis_resident(chassis, active_tunnels,
+                                                lport))) {
         destroy_lport_addresses(laddrs);
         free(laddrs);
         free(lport);
@@ -5540,8 +5468,7 @@ consider_nat_address(struct ovsdb_idl_index *sbrec_port_binding_by_name,
 }
 
 static void
-get_nat_addresses_and_keys(struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                           struct sset *nat_address_keys,
+get_nat_addresses_and_keys(struct sset *nat_address_keys,
                            struct sset *local_l3gw_ports,
                            const struct sbrec_chassis *chassis,
                            const struct sset *active_tunnels,
@@ -5551,15 +5478,14 @@ get_nat_addresses_and_keys(struct ovsdb_idl_index *sbrec_port_binding_by_name,
     SSET_FOR_EACH(gw_port, local_l3gw_ports) {
         const struct sbrec_port_binding *pb;
 
-        pb = lport_lookup_by_name(sbrec_port_binding_by_name, gw_port);
+        pb = lport_lookup_by_name(gw_port);
         if (!pb) {
             continue;
         }
 
         if (pb->n_nat_addresses) {
             for (int i = 0; i < pb->n_nat_addresses; i++) {
-                consider_nat_address(sbrec_port_binding_by_name,
-                                     pb->nat_addresses[i], pb,
+                consider_nat_address(pb->nat_addresses[i], pb,
                                      nat_address_keys, chassis,
                                      active_tunnels,
                                      nat_addresses);
@@ -5570,8 +5496,7 @@ get_nat_addresses_and_keys(struct ovsdb_idl_index *sbrec_port_binding_by_name,
             const char *nat_addresses_options = smap_get(&pb->options,
                                                          "nat-addresses");
             if (nat_addresses_options) {
-                consider_nat_address(sbrec_port_binding_by_name,
-                                     nat_addresses_options, pb,
+                consider_nat_address(nat_addresses_options, pb,
                                      nat_address_keys, chassis,
                                      active_tunnels,
                                      nat_addresses);
@@ -5616,9 +5541,6 @@ send_garp_rarp_run(struct rconn *swconn, long long int *send_garp_rarp_time)
  * thread context. */
 static void
 send_garp_rarp_prepare(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                       struct ovsdb_idl_index *sbrec_port_binding_by_datapath,
-                       struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                       struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip,
                        const struct ovsrec_bridge *br_int,
                        const struct sbrec_chassis *chassis,
                        const struct hmap *local_datapaths,
@@ -5632,13 +5554,10 @@ send_garp_rarp_prepare(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
     shash_init(&nat_addresses);
 
-    get_localnet_vifs_l3gwports(sbrec_port_binding_by_datapath,
-                                sbrec_port_binding_by_name,
-                                br_int, chassis, local_datapaths,
+    get_localnet_vifs_l3gwports(br_int, chassis, local_datapaths,
                                 &localnet_vifs, &local_l3gw_ports);
 
-    get_nat_addresses_and_keys(sbrec_port_binding_by_name,
-                               &nat_ip_keys, &local_l3gw_ports,
+    get_nat_addresses_and_keys(&nat_ip_keys, &local_l3gw_ports,
                                chassis, active_tunnels,
                                &nat_addresses);
     /* For deleted ports and deleted nat ips, remove from
@@ -5654,22 +5573,20 @@ send_garp_rarp_prepare(struct ovsdb_idl_txn *ovnsb_idl_txn,
     /* Update send_garp_rarp_data. */
     const char *iface_id;
     SSET_FOR_EACH (iface_id, &localnet_vifs) {
-        const struct sbrec_port_binding *pb = lport_lookup_by_name(
-            sbrec_port_binding_by_name, iface_id);
+        const struct sbrec_port_binding *pb = lport_lookup_by_name(iface_id);
         if (pb) {
-            send_garp_rarp_update(ovnsb_idl_txn, sbrec_mac_binding_by_lport_ip,
-                                  local_datapaths, pb, &nat_addresses);
+            send_garp_rarp_update(ovnsb_idl_txn, local_datapaths, pb,
+                                  &nat_addresses);
         }
     }
 
     /* Update send_garp_rarp_data for nat-addresses. */
     const char *gw_port;
     SSET_FOR_EACH (gw_port, &local_l3gw_ports) {
-        const struct sbrec_port_binding *pb
-            = lport_lookup_by_name(sbrec_port_binding_by_name, gw_port);
+        const struct sbrec_port_binding *pb = lport_lookup_by_name(gw_port);
         if (pb) {
-            send_garp_rarp_update(ovnsb_idl_txn, sbrec_mac_binding_by_lport_ip,
-                                  local_datapaths, pb, &nat_addresses);
+            send_garp_rarp_update(ovnsb_idl_txn, local_datapaths, pb,
+                                  &nat_addresses);
         }
     }
 
@@ -6120,15 +6037,12 @@ pinctrl_find_put_vport_binding(uint32_t dp_key, uint32_t vport_key,
 
 static void
 run_put_vport_binding(struct ovsdb_idl_txn *ovnsb_idl_txn OVS_UNUSED,
-                      struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-                      struct ovsdb_idl_index *sbrec_port_binding_by_key,
                       const struct sbrec_chassis *chassis,
                       const struct put_vport_binding *vpb)
 {
     /* Convert logical datapath and logical port key into lport. */
-    const struct sbrec_port_binding *pb = lport_lookup_by_key(
-        sbrec_datapath_binding_by_key, sbrec_port_binding_by_key,
-        vpb->dp_key, vpb->vport_key);
+    const struct sbrec_port_binding *pb =
+        lport_lookup_by_key(vpb->dp_key, vpb->vport_key);
     if (!pb) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
 
@@ -6139,9 +6053,8 @@ run_put_vport_binding(struct ovsdb_idl_txn *ovnsb_idl_txn OVS_UNUSED,
 
     /* pinctrl module updates the port binding only for type 'virtual'. */
     if (!strcmp(pb->type, "virtual")) {
-        const struct sbrec_port_binding *parent = lport_lookup_by_key(
-        sbrec_datapath_binding_by_key, sbrec_port_binding_by_key,
-        vpb->dp_key, vpb->vport_parent_key);
+        const struct sbrec_port_binding *parent =
+            lport_lookup_by_key(vpb->dp_key, vpb->vport_parent_key);
         if (parent) {
             VLOG_INFO("Claiming virtual lport %s for this chassis "
                        "with the virtual parent %s",
@@ -6156,8 +6069,6 @@ run_put_vport_binding(struct ovsdb_idl_txn *ovnsb_idl_txn OVS_UNUSED,
  * thread context. */
 static void
 run_put_vport_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn,
-                      struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-                      struct ovsdb_idl_index *sbrec_port_binding_by_key,
                       const struct sbrec_chassis *chassis)
     OVS_REQUIRES(pinctrl_mutex)
 {
@@ -6167,8 +6078,7 @@ run_put_vport_bindings(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
     const struct put_vport_binding *vpb;
     HMAP_FOR_EACH (vpb, hmap_node, &put_vport_bindings) {
-        run_put_vport_binding(ovnsb_idl_txn, sbrec_datapath_binding_by_key,
-                              sbrec_port_binding_by_key, chassis, vpb);
+        run_put_vport_binding(ovnsb_idl_txn, chassis, vpb);
     }
 
     flush_put_vport_bindings();
@@ -6331,7 +6241,6 @@ pinctrl_find_svc_monitor(uint32_t dp_key, uint32_t port_key,
 static void
 sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
                   const struct sbrec_service_monitor_table *svc_mon_table,
-                  struct ovsdb_idl_index *sbrec_port_binding_by_name,
                   const struct sbrec_chassis *our_chassis)
     OVS_REQUIRES(pinctrl_mutex)
 {
@@ -6345,8 +6254,7 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
     const struct sbrec_service_monitor *sb_svc_mon;
     SBREC_SERVICE_MONITOR_TABLE_FOR_EACH (sb_svc_mon, svc_mon_table) {
         const struct sbrec_port_binding *pb
-            = lport_lookup_by_name(sbrec_port_binding_by_name,
-                                   sb_svc_mon->logical_port);
+            = lport_lookup_by_name(sb_svc_mon->logical_port);
         if (!pb) {
             continue;
         }
@@ -7005,7 +6913,6 @@ bfd_monitor_check_sb_conf(const struct sbrec_bfd *sb_bt,
 static void
 bfd_monitor_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
                 const struct sbrec_bfd_table *bfd_table,
-                struct ovsdb_idl_index *sbrec_port_binding_by_name,
                 const struct sbrec_chassis *chassis,
                 const struct sset *active_tunnels)
     OVS_REQUIRES(pinctrl_mutex)
@@ -7021,8 +6928,7 @@ bfd_monitor_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
     const struct sbrec_bfd *bt;
     SBREC_BFD_TABLE_FOR_EACH (bt, bfd_table) {
         const struct sbrec_port_binding *pb
-            = lport_lookup_by_name(sbrec_port_binding_by_name,
-                                   bt->logical_port);
+            = lport_lookup_by_name(bt->logical_port);
         if (!pb) {
             continue;
         }
@@ -7032,16 +6938,14 @@ bfd_monitor_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
             continue;
         }
 
-        const struct sbrec_port_binding *peer
-            = lport_lookup_by_name(sbrec_port_binding_by_name, peer_s);
+        const struct sbrec_port_binding *peer = lport_lookup_by_name(peer_s);
         if (!peer) {
             continue;
         }
 
         char *redirect_name = xasprintf("cr-%s", pb->logical_port);
-        bool resident = lport_is_chassis_resident(
-                sbrec_port_binding_by_name, chassis, active_tunnels,
-                redirect_name);
+        bool resident = lport_is_chassis_resident(chassis, active_tunnels,
+                                                  redirect_name);
         free(redirect_name);
         if ((strcmp(pb->type, "l3gateway") || pb->chassis != chassis) &&
             !resident) {
@@ -7574,25 +7478,20 @@ destroy_fdb_entries(void)
 }
 
 static const struct sbrec_fdb *
-fdb_lookup(struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac, uint32_t dp_key,
-           const char *mac)
+fdb_lookup(uint32_t dp_key, const char *mac)
 {
-    struct sbrec_fdb *fdb = sbrec_fdb_index_init_row(sbrec_fdb_by_dp_key_mac);
+    struct sbrec_fdb *fdb = sbrec_fdb_index_init_row(sbrec_fdb_by_dp_mac);
     sbrec_fdb_index_set_dp_key(fdb, dp_key);
     sbrec_fdb_index_set_mac(fdb, mac);
 
-    const struct sbrec_fdb *retval
-        = sbrec_fdb_index_find(sbrec_fdb_by_dp_key_mac, fdb);
-
+    const struct sbrec_fdb *retval = sbrec_fdb_index_find(sbrec_fdb_by_dp_mac,
+                                                          fdb);
     sbrec_fdb_index_destroy_row(fdb);
-
     return retval;
 }
 
 static void
-run_put_fdb(struct ovsdb_idl_txn *ovnsb_idl_txn,
-            struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac,
-            const struct fdb_entry *fdb_e)
+run_put_fdb(struct ovsdb_idl_txn *ovnsb_idl_txn, const struct fdb_entry *fdb_e)
 {
     /* Convert ethernet argument to string form for database. */
     char mac_string[ETH_ADDR_STRLEN + 1];
@@ -7600,8 +7499,7 @@ run_put_fdb(struct ovsdb_idl_txn *ovnsb_idl_txn,
              ETH_ADDR_FMT, ETH_ADDR_ARGS(fdb_e->mac));
 
     /* Update or add an FDB entry. */
-    const struct sbrec_fdb *sb_fdb =
-        fdb_lookup(sbrec_fdb_by_dp_key_mac, fdb_e->dp_key, mac_string);
+    const struct sbrec_fdb *sb_fdb = fdb_lookup(fdb_e->dp_key, mac_string);
     if (!sb_fdb) {
         sb_fdb = sbrec_fdb_insert(ovnsb_idl_txn);
         sbrec_fdb_set_dp_key(sb_fdb, fdb_e->dp_key);
@@ -7611,9 +7509,8 @@ run_put_fdb(struct ovsdb_idl_txn *ovnsb_idl_txn,
 }
 
 static void
-run_put_fdbs(struct ovsdb_idl_txn *ovnsb_idl_txn,
-             struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac)
-             OVS_REQUIRES(pinctrl_mutex)
+run_put_fdbs(struct ovsdb_idl_txn *ovnsb_idl_txn)
+    OVS_REQUIRES(pinctrl_mutex)
 {
     if (!ovnsb_idl_txn) {
         return;
@@ -7621,7 +7518,7 @@ run_put_fdbs(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
     const struct fdb_entry *fdb_e;
     HMAP_FOR_EACH (fdb_e, hmap_node, &put_fdbs) {
-        run_put_fdb(ovnsb_idl_txn, sbrec_fdb_by_dp_key_mac, fdb_e);
+        run_put_fdb(ovnsb_idl_txn, fdb_e);
     }
     ovn_fdbs_flush(&put_fdbs);
 }

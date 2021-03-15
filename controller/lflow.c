@@ -17,6 +17,7 @@
 #include "lflow.h"
 #include "coverage.h"
 #include "ha-chassis.h"
+#include "indexing.h"
 #include "lflow-cache.h"
 #include "lport.h"
 #include "ofctrl.h"
@@ -52,13 +53,10 @@ lflow_init(void)
 }
 
 struct lookup_port_aux {
-    struct ovsdb_idl_index *sbrec_multicast_group_by_name_datapath;
-    struct ovsdb_idl_index *sbrec_port_binding_by_name;
     const struct sbrec_datapath_binding *dp;
 };
 
 struct condition_aux {
-    struct ovsdb_idl_index *sbrec_port_binding_by_name;
     const struct sbrec_chassis *chassis;
     const struct sset *active_tunnels;
     const struct sbrec_logical_flow *lflow;
@@ -96,15 +94,14 @@ lookup_port_cb(const void *aux_, const char *port_name, unsigned int *portp)
 
     const struct lookup_port_aux *aux = aux_;
 
-    const struct sbrec_port_binding *pb
-        = lport_lookup_by_name(aux->sbrec_port_binding_by_name, port_name);
+    const struct sbrec_port_binding *pb = lport_lookup_by_name(port_name);
     if (pb && pb->datapath == aux->dp) {
         *portp = pb->tunnel_key;
         return true;
     }
 
     const struct sbrec_multicast_group *mg = mcgroup_lookup_by_dp_name(
-        aux->sbrec_multicast_group_by_name_datapath, aux->dp, port_name);
+        aux->dp, port_name);
     if (mg) {
         *portp = mg->tunnel_key;
         return true;
@@ -120,7 +117,7 @@ tunnel_ofport_cb(const void *aux_, const char *port_name, ofp_port_t *ofport)
     const struct lookup_port_aux *aux = aux_;
 
     const struct sbrec_port_binding *pb
-        = lport_lookup_by_name(aux->sbrec_port_binding_by_name, port_name);
+        = lport_lookup_by_name(port_name);
     if (!pb || (pb->datapath != aux->dp) || !pb->chassis) {
         return false;
     }
@@ -138,7 +135,7 @@ is_chassis_resident_cb(const void *c_aux_, const char *port_name)
     const struct condition_aux *c_aux = c_aux_;
 
     const struct sbrec_port_binding *pb
-        = lport_lookup_by_name(c_aux->sbrec_port_binding_by_name, port_name);
+        = lport_lookup_by_name(port_name);
     if (!pb) {
         return false;
     }
@@ -566,9 +563,6 @@ add_matches_to_flow_table(const struct sbrec_logical_flow *lflow,
                           struct lflow_ctx_out *l_ctx_out)
 {
     struct lookup_port_aux aux = {
-        .sbrec_multicast_group_by_name_datapath
-            = l_ctx_in->sbrec_multicast_group_by_name_datapath,
-        .sbrec_port_binding_by_name = l_ctx_in->sbrec_port_binding_by_name,
         .dp = dp,
     };
 
@@ -765,13 +759,9 @@ consider_logical_flow__(const struct sbrec_logical_flow *lflow,
     }
 
     struct lookup_port_aux aux = {
-        .sbrec_multicast_group_by_name_datapath
-            = l_ctx_in->sbrec_multicast_group_by_name_datapath,
-        .sbrec_port_binding_by_name = l_ctx_in->sbrec_port_binding_by_name,
         .dp = dp,
     };
     struct condition_aux cond_aux = {
-        .sbrec_port_binding_by_name = l_ctx_in->sbrec_port_binding_by_name,
         .chassis = l_ctx_in->chassis,
         .active_tunnels = l_ctx_in->active_tunnels,
         .lflow = lflow,
@@ -964,13 +954,12 @@ put_load64(uint64_t value, enum mf_field_id dst, int ofs, int n_bits,
 }
 
 static void
-consider_neighbor_flow(struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                       const struct hmap *local_datapaths,
+consider_neighbor_flow(const struct hmap *local_datapaths,
                        const struct sbrec_mac_binding *b,
                        struct ovn_desired_flow_table *flow_table)
 {
     const struct sbrec_port_binding *pb
-        = lport_lookup_by_name(sbrec_port_binding_by_name, b->logical_port);
+        = lport_lookup_by_name(b->logical_port);
     if (!pb || !get_local_datapath(local_datapaths,
                                    pb->datapath->tunnel_key)) {
         return;
@@ -1044,15 +1033,13 @@ consider_neighbor_flow(struct ovsdb_idl_index *sbrec_port_binding_by_name,
 /* Adds an OpenFlow flow to flow tables for each MAC binding in the OVN
  * southbound database. */
 static void
-add_neighbor_flows(struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                   const struct sbrec_mac_binding_table *mac_binding_table,
+add_neighbor_flows(const struct sbrec_mac_binding_table *mac_binding_table,
                    const struct hmap *local_datapaths,
                    struct ovn_desired_flow_table *flow_table)
 {
     const struct sbrec_mac_binding *b;
     SBREC_MAC_BINDING_TABLE_FOR_EACH (b, mac_binding_table) {
-        consider_neighbor_flow(sbrec_port_binding_by_name, local_datapaths,
-                               b, flow_table);
+        consider_neighbor_flow(local_datapaths, b, flow_table);
     }
 }
 
@@ -1508,7 +1495,6 @@ add_lb_hairpin_flows(const struct sbrec_load_balancer_table *lb_table,
 /* Handles neighbor changes in mac_binding table. */
 void
 lflow_handle_changed_neighbors(
-    struct ovsdb_idl_index *sbrec_port_binding_by_name,
     const struct sbrec_mac_binding_table *mac_binding_table,
     const struct hmap *local_datapaths,
     struct ovn_desired_flow_table *flow_table)
@@ -1533,8 +1519,7 @@ lflow_handle_changed_neighbors(
             }
             VLOG_DBG("handle new mac_binding "UUID_FMT,
                      UUID_ARGS(&mb->header_.uuid));
-            consider_neighbor_flow(sbrec_port_binding_by_name, local_datapaths,
-                                   mb, flow_table);
+            consider_neighbor_flow(local_datapaths, mb, flow_table);
         }
     }
 }
@@ -1603,8 +1588,7 @@ lflow_run(struct lflow_ctx_in *l_ctx_in, struct lflow_ctx_out *l_ctx_out)
     COVERAGE_INC(lflow_run);
 
     add_logical_flows(l_ctx_in, l_ctx_out);
-    add_neighbor_flows(l_ctx_in->sbrec_port_binding_by_name,
-                       l_ctx_in->mac_binding_table, l_ctx_in->local_datapaths,
+    add_neighbor_flows(l_ctx_in->mac_binding_table, l_ctx_in->local_datapaths,
                        l_ctx_out->flow_table);
     add_lb_hairpin_flows(l_ctx_in->lb_table, l_ctx_in->local_datapaths,
                          l_ctx_out->flow_table);
@@ -1665,13 +1649,13 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
     struct controller_event_options controller_event_opts;
     controller_event_opts_init(&controller_event_opts);
 
-    struct sbrec_logical_flow *lf_row = sbrec_logical_flow_index_init_row(
-        l_ctx_in->sbrec_logical_flow_by_logical_datapath);
+    struct sbrec_logical_flow *lf_row =
+        sbrec_logical_flow_index_init_row(sbrec_logical_flow_by_dp);
     sbrec_logical_flow_index_set_logical_datapath(lf_row, dp);
 
     const struct sbrec_logical_flow *lflow;
-    SBREC_LOGICAL_FLOW_FOR_EACH_EQUAL (
-        lflow, lf_row, l_ctx_in->sbrec_logical_flow_by_logical_datapath) {
+    SBREC_LOGICAL_FLOW_FOR_EACH_EQUAL (lflow, lf_row,
+                                       sbrec_logical_flow_by_dp) {
         if (!consider_logical_flow__(lflow, dp, &dhcp_opts, &dhcpv6_opts,
                                      &nd_ra_opts, &controller_event_opts,
                                      l_ctx_in, l_ctx_out)) {
@@ -1682,8 +1666,7 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
     }
     sbrec_logical_flow_index_destroy_row(lf_row);
 
-    lf_row = sbrec_logical_flow_index_init_row(
-        l_ctx_in->sbrec_logical_flow_by_logical_dp_group);
+    lf_row = sbrec_logical_flow_index_init_row(sbrec_logical_flow_by_dp_group);
     /* There are far fewer datapath groups than logical flows. */
     const struct sbrec_logical_dp_group *ldpg;
     SBREC_LOGICAL_DP_GROUP_TABLE_FOR_EACH (ldpg,
@@ -1700,8 +1683,8 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
         }
 
         sbrec_logical_flow_index_set_logical_dp_group(lf_row, ldpg);
-        SBREC_LOGICAL_FLOW_FOR_EACH_EQUAL (
-            lflow, lf_row, l_ctx_in->sbrec_logical_flow_by_logical_dp_group) {
+        SBREC_LOGICAL_FLOW_FOR_EACH_EQUAL (lflow, lf_row,
+                                           sbrec_logical_flow_by_dp_group) {
             if (!consider_logical_flow__(lflow, dp, &dhcp_opts, &dhcpv6_opts,
                                          &nd_ra_opts, &controller_event_opts,
                                          l_ctx_in, l_ctx_out)) {

@@ -247,22 +247,12 @@ void *engine_get_internal_data(struct engine_node *node);
 #define engine_set_node_state(node, state) \
     engine_set_node_state_at(node, state, OVS_SOURCE_LOCATOR)
 
-struct ed_ovsdb_index {
-    const char *name;
-    struct ovsdb_idl_index *index;
-};
-
 struct ed_type_ovsdb_table {
     const void *table;
-    size_t n_indexes;
-    struct ed_ovsdb_index indexes[ENGINE_MAX_OVSDB_INDEX];
 };
 
 #define EN_OVSDB_GET(NODE) \
     (((struct ed_type_ovsdb_table *)(NODE)->data)->table)
-
-struct ovsdb_idl_index * engine_ovsdb_node_get_index(struct engine_node *,
-                                                     const char *name);
 
 /* Any engine node can use this function for no-op handlers. */
 static inline bool
@@ -270,12 +260,6 @@ engine_noop_handler(struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
 {
     return true;
 }
-
-/* Adds an OVSDB IDL index to the node. This should be called only after
- * engine_init() as the index is stored in the node data.
- */
-void engine_ovsdb_node_add_index(struct engine_node *, const char *name,
-                                 struct ovsdb_idl_index *);
 
 /* Macro to define an engine node. */
 #define ENGINE_NODE_DEF(NAME, NAME_STR) \

@@ -15,6 +15,7 @@
 
 #include <config.h>
 
+#include "indexing.h"
 #include "lib/sset.h"
 #include "lport.h"
 #include "ha-chassis.h"
@@ -24,11 +25,10 @@
 VLOG_DEFINE_THIS_MODULE(lport);
 
 const struct sbrec_port_binding *
-lport_lookup_by_name(struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                     const char *name)
+lport_lookup_by_name(const char *name)
 {
-    struct sbrec_port_binding *pb = sbrec_port_binding_index_init_row(
-        sbrec_port_binding_by_name);
+    struct sbrec_port_binding *pb =
+        sbrec_port_binding_index_init_row(sbrec_port_binding_by_name);
     sbrec_port_binding_index_set_logical_port(pb, name);
 
     const struct sbrec_port_binding *retval = sbrec_port_binding_index_find(
@@ -40,25 +40,22 @@ lport_lookup_by_name(struct ovsdb_idl_index *sbrec_port_binding_by_name,
 }
 
 const struct sbrec_port_binding *
-lport_lookup_by_key(struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-                    struct ovsdb_idl_index *sbrec_port_binding_by_key,
-                    uint64_t dp_key, uint64_t port_key)
+lport_lookup_by_key(uint64_t dp_key, uint64_t port_key)
 {
     /* Lookup datapath corresponding to dp_key. */
-    const struct sbrec_datapath_binding *db = datapath_lookup_by_key(
-        sbrec_datapath_binding_by_key, dp_key);
+    const struct sbrec_datapath_binding *db = datapath_lookup_by_key(dp_key);
     if (!db) {
         return NULL;
     }
 
     /* Build key for an indexed lookup. */
-    struct sbrec_port_binding *pb = sbrec_port_binding_index_init_row(
-        sbrec_port_binding_by_key);
+    struct sbrec_port_binding *pb =
+        sbrec_port_binding_index_init_row(sbrec_port_binding_by_key);
     sbrec_port_binding_index_set_datapath(pb, db);
     sbrec_port_binding_index_set_tunnel_key(pb, port_key);
 
-    const struct sbrec_port_binding *retval = sbrec_port_binding_index_find(
-        sbrec_port_binding_by_key, pb);
+    const struct sbrec_port_binding *retval =
+        sbrec_port_binding_index_find(sbrec_port_binding_by_key, pb);
 
     sbrec_port_binding_index_destroy_row(pb);
 
@@ -66,13 +63,11 @@ lport_lookup_by_key(struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
 }
 
 bool
-lport_is_chassis_resident(struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                          const struct sbrec_chassis *chassis,
+lport_is_chassis_resident(const struct sbrec_chassis *chassis,
                           const struct sset *active_tunnels,
                           const char *port_name)
 {
-    const struct sbrec_port_binding *pb
-        = lport_lookup_by_name(sbrec_port_binding_by_name, port_name);
+    const struct sbrec_port_binding *pb = lport_lookup_by_name(port_name);
     if (!pb || !pb->chassis) {
         return false;
     }
@@ -85,8 +80,7 @@ lport_is_chassis_resident(struct ovsdb_idl_index *sbrec_port_binding_by_name,
 }
 
 const struct sbrec_datapath_binding *
-datapath_lookup_by_key(struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
-                       uint64_t dp_key)
+datapath_lookup_by_key(uint64_t dp_key)
 {
     struct sbrec_datapath_binding *db = sbrec_datapath_binding_index_init_row(
         sbrec_datapath_binding_by_key);
@@ -102,20 +96,17 @@ datapath_lookup_by_key(struct ovsdb_idl_index *sbrec_datapath_binding_by_key,
 }
 
 const struct sbrec_multicast_group *
-mcgroup_lookup_by_dp_name(
-    struct ovsdb_idl_index *sbrec_multicast_group_by_name_datapath,
-    const struct sbrec_datapath_binding *db, const char *name)
+mcgroup_lookup_by_dp_name(const struct sbrec_datapath_binding *dp,
+                          const char *name)
 {
     /* Build key for an indexed lookup. */
-    struct sbrec_multicast_group *mc = sbrec_multicast_group_index_init_row(
-        sbrec_multicast_group_by_name_datapath);
+    struct sbrec_multicast_group *mc =
+        sbrec_multicast_group_index_init_row(sbrec_multicast_group_by_name_dp);
     sbrec_multicast_group_index_set_name(mc, name);
-    sbrec_multicast_group_index_set_datapath(mc, db);
+    sbrec_multicast_group_index_set_datapath(mc, dp);
 
-    const struct sbrec_multicast_group *retval
-        = sbrec_multicast_group_index_find(
-            sbrec_multicast_group_by_name_datapath, mc);
-
+    const struct sbrec_multicast_group *retval =
+        sbrec_multicast_group_index_find(sbrec_multicast_group_by_name_dp, mc);
     sbrec_multicast_group_index_destroy_row(mc);
 
     return retval;

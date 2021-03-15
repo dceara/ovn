@@ -33,6 +33,7 @@
 #include "openvswitch/dynamic-string.h"
 #include "encaps.h"
 #include "fatal-signal.h"
+#include "indexing.h"
 #include "ip-mcast.h"
 #include "openvswitch/hmap.h"
 #include "lflow.h"
@@ -47,8 +48,6 @@
 #include "ovn/actions.h"
 #include "lib/chassis-index.h"
 #include "lib/extend-table.h"
-#include "lib/ip-mcast-index.h"
-#include "lib/mcast-group-index.h"
 #include "lib/ovn-sb-idl.h"
 #include "lib/ovn-util.h"
 #include "patch.h"
@@ -1343,11 +1342,6 @@ init_binding_ctx(struct engine_node *node,
 
     ovs_assert(br_int && chassis_id);
 
-    struct ovsdb_idl_index *sbrec_chassis_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_chassis", node),
-                "name");
-
     const struct sbrec_chassis *chassis
         = chassis_lookup_by_name(sbrec_chassis_by_name, chassis_id);
     ovs_assert(chassis);
@@ -1368,26 +1362,8 @@ init_binding_ctx(struct engine_node *node,
         (struct sbrec_port_binding_table *)EN_OVSDB_GET(
             engine_get_input("SB_port_binding", node));
 
-    struct ovsdb_idl_index *sbrec_datapath_binding_by_key =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_datapath_binding", node),
-                "key");
-
-    struct ovsdb_idl_index *sbrec_port_binding_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_port_binding", node),
-                "name");
-
-    struct ovsdb_idl_index *sbrec_port_binding_by_datapath =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_port_binding", node),
-                "datapath");
-
     b_ctx_in->ovnsb_idl_txn = engine_get_context()->ovnsb_idl_txn;
     b_ctx_in->ovs_idl_txn = engine_get_context()->ovs_idl_txn;
-    b_ctx_in->sbrec_datapath_binding_by_key = sbrec_datapath_binding_by_key;
-    b_ctx_in->sbrec_port_binding_by_datapath = sbrec_port_binding_by_datapath;
-    b_ctx_in->sbrec_port_binding_by_name = sbrec_port_binding_by_name;
     b_ctx_in->port_table = port_table;
     b_ctx_in->iface_table = iface_table;
     b_ctx_in->qos_table = qos_table;
@@ -1763,11 +1739,6 @@ static void init_physical_ctx(struct engine_node *node,
                               struct ed_type_runtime_data *rt_data,
                               struct physical_ctx *p_ctx)
 {
-    struct ovsdb_idl_index *sbrec_port_binding_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_port_binding", node),
-                "name");
-
     struct sbrec_multicast_group_table *multicast_group_table =
         (struct sbrec_multicast_group_table *)EN_OVSDB_GET(
             engine_get_input("SB_multicast_group", node));
@@ -1792,10 +1763,6 @@ static void init_physical_ctx(struct engine_node *node,
     const struct ovsrec_bridge *br_int = get_br_int(bridge_table, ovs_table);
     const char *chassis_id = get_ovs_chassis_id(ovs_table);
     const struct sbrec_chassis *chassis = NULL;
-    struct ovsdb_idl_index *sbrec_chassis_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_chassis", node),
-                "name");
     if (chassis_id) {
         chassis = chassis_lookup_by_name(sbrec_chassis_by_name, chassis_id);
     }
@@ -1810,7 +1777,6 @@ static void init_physical_ctx(struct engine_node *node,
         engine_get_input_data("ct_zones", node);
     struct simap *ct_zones = &ct_zones_data->current;
 
-    p_ctx->sbrec_port_binding_by_name = sbrec_port_binding_by_name;
     p_ctx->port_binding_table = port_binding_table;
     p_ctx->mc_group_table = multicast_group_table;
     p_ctx->br_int = br_int;
@@ -1832,26 +1798,6 @@ static void init_lflow_ctx(struct engine_node *node,
                            struct lflow_ctx_in *l_ctx_in,
                            struct lflow_ctx_out *l_ctx_out)
 {
-    struct ovsdb_idl_index *sbrec_port_binding_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_port_binding", node),
-                "name");
-
-    struct ovsdb_idl_index *sbrec_logical_flow_by_dp =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_logical_flow", node),
-                "logical_datapath");
-
-    struct ovsdb_idl_index *sbrec_logical_flow_by_dp_group =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_logical_flow", node),
-                "logical_dp_group");
-
-    struct ovsdb_idl_index *sbrec_mc_group_by_name_dp =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_multicast_group", node),
-                "name_datapath");
-
     struct sbrec_dhcp_options_table *dhcp_table =
         (struct sbrec_dhcp_options_table *)EN_OVSDB_GET(
             engine_get_input("SB_dhcp_options", node));
@@ -1890,10 +1836,6 @@ static void init_lflow_ctx(struct engine_node *node,
 
     const char *chassis_id = get_ovs_chassis_id(ovs_table);
     const struct sbrec_chassis *chassis = NULL;
-    struct ovsdb_idl_index *sbrec_chassis_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_chassis", node),
-                "name");
     if (chassis_id) {
         chassis = chassis_lookup_by_name(sbrec_chassis_by_name, chassis_id);
     }
@@ -1908,13 +1850,6 @@ static void init_lflow_ctx(struct engine_node *node,
         engine_get_input_data("port_groups", node);
     struct shash *port_groups = &pg_data->port_groups;
 
-    l_ctx_in->sbrec_multicast_group_by_name_datapath =
-        sbrec_mc_group_by_name_dp;
-    l_ctx_in->sbrec_logical_flow_by_logical_datapath =
-        sbrec_logical_flow_by_dp;
-    l_ctx_in->sbrec_logical_flow_by_logical_dp_group =
-        sbrec_logical_flow_by_dp_group;
-    l_ctx_in->sbrec_port_binding_by_name = sbrec_port_binding_by_name;
     l_ctx_in->dhcp_options_table  = dhcp_table;
     l_ctx_in->dhcpv6_options_table = dhcpv6_table;
     l_ctx_in->mac_binding_table = mac_binding_table;
@@ -1978,11 +1913,6 @@ en_flow_output_run(struct engine_node *node, void *data)
             engine_get_input("OVS_bridge", node));
     const struct ovsrec_bridge *br_int = get_br_int(bridge_table, ovs_table);
     const char *chassis_id = get_ovs_chassis_id(ovs_table);
-
-    struct ovsdb_idl_index *sbrec_chassis_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_chassis", node),
-                "name");
 
     const struct sbrec_chassis *chassis = NULL;
     if (chassis_id) {
@@ -2072,11 +2002,6 @@ flow_output_sb_logical_flow_handler(struct engine_node *node, void *data)
 static bool
 flow_output_sb_mac_binding_handler(struct engine_node *node, void *data)
 {
-    struct ovsdb_idl_index *sbrec_port_binding_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_port_binding", node),
-                "name");
-
     struct sbrec_mac_binding_table *mac_binding_table =
         (struct sbrec_mac_binding_table *)EN_OVSDB_GET(
             engine_get_input("SB_mac_binding", node));
@@ -2088,8 +2013,8 @@ flow_output_sb_mac_binding_handler(struct engine_node *node, void *data)
     struct ed_type_flow_output *fo = data;
     struct ovn_desired_flow_table *flow_table = &fo->flow_table;
 
-    lflow_handle_changed_neighbors(sbrec_port_binding_by_name,
-            mac_binding_table, local_datapaths, flow_table);
+    lflow_handle_changed_neighbors(mac_binding_table, local_datapaths,
+                                   flow_table);
 
     engine_set_node_state(node, EN_UPDATED);
     return true;
@@ -2159,10 +2084,6 @@ _flow_output_resource_ref_handler(struct engine_node *node, void *data,
     const struct ovsrec_bridge *br_int = get_br_int(bridge_table, ovs_table);
     const char *chassis_id = get_ovs_chassis_id(ovs_table);
 
-    struct ovsdb_idl_index *sbrec_chassis_by_name =
-        engine_ovsdb_node_get_index(
-                engine_get_input("SB_chassis", node),
-                "name");
     const struct sbrec_chassis *chassis = NULL;
     if (chassis_id) {
         chassis = chassis_lookup_by_name(sbrec_chassis_by_name, chassis_id);
@@ -2467,44 +2388,7 @@ main(int argc, char *argv[])
     unixctl_command_register("connection-status", "", 0, 0,
                              ovn_conn_show, ovnsb_idl_loop.idl);
 
-    struct ovsdb_idl_index *sbrec_chassis_by_name
-        = chassis_index_create(ovnsb_idl_loop.idl);
-    struct ovsdb_idl_index *sbrec_chassis_private_by_name
-        = chassis_private_index_create(ovnsb_idl_loop.idl);
-    struct ovsdb_idl_index *sbrec_multicast_group_by_name_datapath
-        = mcast_group_index_create(ovnsb_idl_loop.idl);
-    struct ovsdb_idl_index *sbrec_logical_flow_by_logical_datapath
-        = ovsdb_idl_index_create1(ovnsb_idl_loop.idl,
-                                  &sbrec_logical_flow_col_logical_datapath);
-    struct ovsdb_idl_index *sbrec_logical_flow_by_logical_dp_group
-        = ovsdb_idl_index_create1(ovnsb_idl_loop.idl,
-                                  &sbrec_logical_flow_col_logical_dp_group);
-    struct ovsdb_idl_index *sbrec_port_binding_by_name
-        = ovsdb_idl_index_create1(ovnsb_idl_loop.idl,
-                                  &sbrec_port_binding_col_logical_port);
-    struct ovsdb_idl_index *sbrec_port_binding_by_key
-        = ovsdb_idl_index_create2(ovnsb_idl_loop.idl,
-                                  &sbrec_port_binding_col_tunnel_key,
-                                  &sbrec_port_binding_col_datapath);
-    struct ovsdb_idl_index *sbrec_port_binding_by_datapath
-        = ovsdb_idl_index_create1(ovnsb_idl_loop.idl,
-                                  &sbrec_port_binding_col_datapath);
-    struct ovsdb_idl_index *sbrec_datapath_binding_by_key
-        = ovsdb_idl_index_create1(ovnsb_idl_loop.idl,
-                                  &sbrec_datapath_binding_col_tunnel_key);
-    struct ovsdb_idl_index *sbrec_mac_binding_by_lport_ip
-        = ovsdb_idl_index_create2(ovnsb_idl_loop.idl,
-                                  &sbrec_mac_binding_col_logical_port,
-                                  &sbrec_mac_binding_col_ip);
-    struct ovsdb_idl_index *sbrec_ip_multicast
-        = ip_mcast_index_create(ovnsb_idl_loop.idl);
-    struct ovsdb_idl_index *sbrec_igmp_group
-        = igmp_group_index_create(ovnsb_idl_loop.idl);
-    struct ovsdb_idl_index *sbrec_fdb_by_dp_key_mac
-        = ovsdb_idl_index_create2(ovnsb_idl_loop.idl,
-                                  &sbrec_fdb_col_mac,
-                                  &sbrec_fdb_col_dp_key);
-
+    indexing_init(ovnsb_idl_loop.idl);
     ovsdb_idl_track_add_all(ovnsb_idl_loop.idl);
     ovsdb_idl_omit_alert(ovnsb_idl_loop.idl,
                          &sbrec_chassis_private_col_nb_cfg);
@@ -2664,22 +2548,6 @@ main(int argc, char *argv[])
         .ovs_idl = ovs_idl_loop.idl,
     };
     engine_init(&en_flow_output, &engine_arg);
-
-    engine_ovsdb_node_add_index(&en_sb_chassis, "name", sbrec_chassis_by_name);
-    engine_ovsdb_node_add_index(&en_sb_multicast_group, "name_datapath",
-                                sbrec_multicast_group_by_name_datapath);
-    engine_ovsdb_node_add_index(&en_sb_logical_flow, "logical_datapath",
-                                sbrec_logical_flow_by_logical_datapath);
-    engine_ovsdb_node_add_index(&en_sb_logical_flow, "logical_dp_group",
-                                sbrec_logical_flow_by_logical_dp_group);
-    engine_ovsdb_node_add_index(&en_sb_port_binding, "name",
-                                sbrec_port_binding_by_name);
-    engine_ovsdb_node_add_index(&en_sb_port_binding, "key",
-                                sbrec_port_binding_by_key);
-    engine_ovsdb_node_add_index(&en_sb_port_binding, "datapath",
-                                sbrec_port_binding_by_datapath);
-    engine_ovsdb_node_add_index(&en_sb_datapath_binding, "key",
-                                sbrec_datapath_binding_by_key);
 
     struct ed_type_flow_output *flow_output_data =
         engine_get_internal_data(&en_flow_output);
@@ -2844,9 +2712,7 @@ main(int argc, char *argv[])
             const struct sbrec_chassis *chassis = NULL;
             const struct sbrec_chassis_private *chassis_private = NULL;
             if (chassis_id) {
-                chassis = chassis_run(ovnsb_idl_txn, sbrec_chassis_by_name,
-                                      sbrec_chassis_private_by_name,
-                                      ovs_table, chassis_id,
+                chassis = chassis_run(ovnsb_idl_txn, ovs_table, chassis_id,
                                       br_int, &transport_zones,
                                       &chassis_private);
             }
@@ -2918,14 +2784,6 @@ main(int argc, char *argv[])
                             sbrec_port_binding_table_get(ovnsb_idl_loop.idl),
                             br_int, chassis, &runtime_data->local_datapaths);
                         pinctrl_run(ovnsb_idl_txn,
-                                    sbrec_datapath_binding_by_key,
-                                    sbrec_port_binding_by_datapath,
-                                    sbrec_port_binding_by_key,
-                                    sbrec_port_binding_by_name,
-                                    sbrec_mac_binding_by_lport_ip,
-                                    sbrec_igmp_group,
-                                    sbrec_ip_multicast,
-                                    sbrec_fdb_by_dp_key_mac,
                                     sbrec_dns_table_get(ovnsb_idl_loop.idl),
                                     sbrec_controller_event_table_get(
                                         ovnsb_idl_loop.idl),
@@ -3118,7 +2976,8 @@ loop_done:
             done = chassis_cleanup(ovnsb_idl_txn,
                                    chassis, chassis_private) && done;
             done = encaps_cleanup(ovs_idl_txn, br_int) && done;
-            done = igmp_group_cleanup(ovnsb_idl_txn, sbrec_igmp_group) && done;
+            done = igmp_group_cleanup(ovnsb_idl_txn,
+                                      sbrec_igmp_group_by_addr) && done;
             if (done) {
                 poll_immediate_wake();
             }
