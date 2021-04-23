@@ -2760,6 +2760,11 @@ main(int argc, char *argv[])
     exiting = false;
     restart = false;
     bool sb_monitor_all = false;
+
+    long long last_ovs_txn_time = 0;
+    long long last_sb_txn_time = 0;
+    long long run_time = 0;
+
     while (!exiting) {
         memory_run();
         if (memory_should_report()) {
@@ -2778,6 +2783,8 @@ main(int argc, char *argv[])
             unixctl_server_wait(unixctl);
             goto loop_done;
         }
+
+        long long run_start_time = time_wall_msec();
 
         engine_init_run();
 
@@ -2809,6 +2816,27 @@ main(int argc, char *argv[])
             }
             ovnsb_cond_seqno = new_ovnsb_cond_seqno;
         }
+
+        long long now = time_wall_msec();
+
+        if (!ovs_idl_loop.committing_txn) {
+            if (last_ovs_txn_time) {
+                if (now - last_ovs_txn_time > 1000) {
+                    VLOG_INFO("DEBUG DEBUG OVS TXN in progress for %lld ms", now - last_ovs_txn_time);
+                }
+            }
+            last_ovs_txn_time = 0;
+        }
+
+        if (!ovnsb_idl_loop.committing_txn) {
+            if (last_sb_txn_time) {
+                if (now - last_sb_txn_time - run_time > 1000) {
+                    VLOG_INFO("DEBUG DEBUG SB TXN in progress for %lld ms", now - last_sb_txn_time - run_time);
+                }
+            }
+            last_sb_txn_time = 0;
+        }
+
 
         struct engine_context eng_ctx = {
             .ovs_idl_txn = ovs_idl_txn,
@@ -3050,6 +3078,8 @@ main(int argc, char *argv[])
             poll_immediate_wake();
         }
 
+        run_time += time_wall_msec() - run_start_time;
+
         if (!ovsdb_idl_loop_commit_and_wait(&ovnsb_idl_loop)) {
             VLOG_INFO("OVNSB commit failed, force recompute next time.");
             engine_set_force_recompute(true);
@@ -3068,6 +3098,15 @@ main(int argc, char *argv[])
                     }
                 }
             }
+        }
+
+        if (!last_ovs_txn_time && ovs_idl_loop.committing_txn) {
+            last_ovs_txn_time = time_wall_msec();
+        }
+
+        if (!last_sb_txn_time && ovnsb_idl_loop.committing_txn) {
+            last_sb_txn_time = time_wall_msec();
+            run_time = 0;
         }
 
         ovsdb_idl_track_clear(ovnsb_idl_loop.idl);
