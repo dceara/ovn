@@ -3002,6 +3002,11 @@ main(int argc, char *argv[])
                                    ofctrl_seqno_get_req_cfg(),
                                    engine_node_changed(&en_flow_output));
                     }
+
+                    if (ct_zones_data) {
+                        ofctrl_run(br_int, &ct_zones_data->pending);
+                    }
+
                     ofctrl_seqno_run(ofctrl_get_cur_cfg());
                     if_status_mgr_run(if_mgr, binding_data, !ovnsb_idl_txn,
                                       !ovs_idl_txn);
