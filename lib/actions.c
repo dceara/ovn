@@ -780,7 +780,7 @@ format_CT_COMMIT_V2(const struct ovnact_nest *on, struct ds *s)
 
 static void
 encode_CT_COMMIT_V2(const struct ovnact_nest *on,
-                    const struct ovnact_encode_params *ep OVS_UNUSED,
+                    const struct ovnact_encode_params *ep,
                     struct ofpbuf *ofpacts)
 {
     struct ofpact_conntrack *ct = ofpact_put_CT(ofpacts);
@@ -791,6 +791,22 @@ encode_CT_COMMIT_V2(const struct ovnact_nest *on,
         : mf_from_id(MFF_LOG_DNAT_ZONE);
     ct->zone_src.ofs = 0;
     ct->zone_src.n_bits = 16;
+    ct->alg = 0;
+
+    /* If the datapath supports all-zero NAT then use it to avoid typle
+     * collisions at commit time between NATed and firewalled-only sessions.
+     */
+    if (ep->dp_features && ep->dp_features->ct_all_zero_nat) {
+        size_t nat_offset = ofpacts->size;
+        ofpbuf_pull(ofpacts, nat_offset);
+
+        struct ofpact_nat *nat = ofpact_put_NAT(ofpacts);
+        nat->flags = 0;
+        nat->range_af = AF_UNSPEC;
+        nat->flags |= NX_NAT_F_SRC;
+        ofpacts->header = ofpbuf_push_uninit(ofpacts, nat_offset);
+        ct = ofpacts->header;
+    }
 
     size_t set_field_offset = ofpacts->size;
     ofpbuf_pull(ofpacts, set_field_offset);
