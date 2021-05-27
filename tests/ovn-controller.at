@@ -152,8 +152,7 @@ check_datapath_type () {
     datapath_type=$1
     chassis_datapath_type=$(ovn-sbctl get Chassis ${sysid} other_config:datapath-type | sed -e 's/"//g') #"
     ovs_datapath_type=$(ovs-vsctl get Bridge br-int datapath-type)
-    test "${datapath_type}" = "${chassis_datapath_type}"
-    test "${datapath_type}" = "${ovs_datapath_type}"
+    test "${datapath_type}" = "${chassis_datapath_type}" && test "${datapath_type}" = "${ovs_datapath_type}"
 }
 
 OVS_WAIT_UNTIL([check_datapath_type system])
@@ -163,7 +162,7 @@ OVS_WAIT_UNTIL([check_datapath_type foo])
 
 # Change "ovn-bridge-mappings" value. It should not change the "datapath-type".
 ovs-vsctl set Open_vSwitch . external_ids:ovn-bridge-mappings=foo-mapping
-check_datapath_type system
+AT_CHECK([check_datapath_type foo])
 
 ovs-vsctl set Bridge br-int datapath-type=bar
 OVS_WAIT_UNTIL([check_datapath_type bar])
