@@ -40,6 +40,7 @@ COVERAGE_DEFINE(lflow_cache_delete);
 COVERAGE_DEFINE(lflow_cache_full);
 COVERAGE_DEFINE(lflow_cache_mem_full);
 COVERAGE_DEFINE(lflow_cache_made_room);
+COVERAGE_DEFINE(lflow_cache_trim);
 
 static const char *lflow_cache_type_names[LCACHE_T_MAX] = {
     [LCACHE_T_CONJ_ID] = "cache-conj-id",
@@ -49,6 +50,8 @@ static const char *lflow_cache_type_names[LCACHE_T_MAX] = {
 
 struct lflow_cache {
     struct hmap entries[LCACHE_T_MAX];
+    uint32_t n_entries;
+    uint32_t high_watermark;
     uint32_t capacity;
     uint64_t mem_usage;
     uint64_t max_mem_usage;
@@ -63,7 +66,8 @@ struct lflow_cache_entry {
     struct lflow_cache_value value;
 };
 
-static size_t lflow_cache_n_entries__(const struct lflow_cache *lc);
+#define LFLOW_CACHE_TRIM_LIMIT 1000
+
 static bool lflow_cache_make_room__(struct lflow_cache *lc,
                                     enum lflow_cache_type type);
 static struct lflow_cache_value *lflow_cache_add__(
@@ -71,18 +75,18 @@ static struct lflow_cache_value *lflow_cache_add__(
     enum lflow_cache_type type, uint64_t value_size);
 static void lflow_cache_delete__(struct lflow_cache *lc,
                                  struct lflow_cache_entry *lce);
+static void lflow_cache_trim__(struct lflow_cache *lc, bool force);
 
 struct lflow_cache *
 lflow_cache_create(void)
 {
-    struct lflow_cache *lc = xmalloc(sizeof *lc);
+    struct lflow_cache *lc = xzalloc(sizeof *lc);
 
     for (size_t i = 0; i < LCACHE_T_MAX; i++) {
         hmap_init(&lc->entries[i]);
     }
 
     lc->enabled = true;
-    lc->mem_usage = 0;
     return lc;
 }
 
@@ -101,12 +105,8 @@ lflow_cache_flush(struct lflow_cache *lc)
         HMAP_FOR_EACH_SAFE (lce, lce_next, node, &lc->entries[i]) {
             lflow_cache_delete__(lc, lce);
         }
-        hmap_shrink(&lc->entries[i]);
     }
-
-#if HAVE_DECL_MALLOC_TRIM
-    malloc_trim(0);
-#endif
+    lflow_cache_trim__(lc, true);
 }
 
 void
@@ -134,7 +134,7 @@ lflow_cache_enable(struct lflow_cache *lc, bool enabled, uint32_t capacity,
     uint64_t max_mem_usage = max_mem_usage_kb * 1024;
 
     if ((lc->enabled && !enabled)
-            || capacity < lflow_cache_n_entries__(lc)
+            || capacity < lc->n_entries
             || max_mem_usage < lc->mem_usage) {
         lflow_cache_flush(lc);
     }
@@ -164,6 +164,9 @@ lflow_cache_get_stats(const struct lflow_cache *lc, struct ds *output)
 
     ds_put_format(output, "Enabled: %s\n",
                   lflow_cache_is_enabled(lc) ? "true" : "false");
+    ds_put_format(output, "%-16s: %"PRIu32"\n", "high-watermark",
+                  lc->high_watermark);
+    ds_put_format(output, "%-16s: %"PRIu32"\n", "total", lc->n_entries);
     for (size_t i = 0; i < LCACHE_T_MAX; i++) {
         ds_put_format(output, "%-16s: %"PRIuSIZE"\n",
                       lflow_cache_type_names[i],
@@ -254,18 +257,8 @@ lflow_cache_delete(struct lflow_cache *lc, const struct uuid *lflow_uuid)
         COVERAGE_INC(lflow_cache_delete);
         lflow_cache_delete__(lc, CONTAINER_OF(lcv, struct lflow_cache_entry,
                                               value));
+        lflow_cache_trim__(lc, false);
     }
-}
-
-static size_t
-lflow_cache_n_entries__(const struct lflow_cache *lc)
-{
-    size_t n_entries = 0;
-
-    for (size_t i = 0; i < LCACHE_T_MAX; i++) {
-        n_entries += hmap_count(&lc->entries[i]);
-    }
-    return n_entries;
 }
 
 static bool
@@ -319,7 +312,7 @@ lflow_cache_add__(struct lflow_cache *lc, const struct uuid *lflow_uuid,
         return NULL;
     }
 
-    if (lflow_cache_n_entries__(lc) == lc->capacity) {
+    if (lc->n_entries == lc->capacity) {
         if (!lflow_cache_make_room__(lc, type)) {
             COVERAGE_INC(lflow_cache_full);
             return NULL;
@@ -336,17 +329,17 @@ lflow_cache_add__(struct lflow_cache *lc, const struct uuid *lflow_uuid,
     lce->size = size;
     lce->value.type = type;
     hmap_insert(&lc->entries[type], &lce->node, uuid_hash(lflow_uuid));
+    lc->n_entries++;
+    lc->high_watermark = MAX(lc->high_watermark, lc->n_entries);
     return &lce->value;
 }
 
 static void
 lflow_cache_delete__(struct lflow_cache *lc, struct lflow_cache_entry *lce)
 {
-    if (!lce) {
-        return;
-    }
-
+    ovs_assert(lc->n_entries > 0);
     hmap_remove(&lc->entries[lce->value.type], &lce->node);
+    lc->n_entries--;
     switch (lce->value.type) {
     case LCACHE_T_NONE:
         OVS_NOT_REACHED();
@@ -368,4 +361,29 @@ lflow_cache_delete__(struct lflow_cache *lc, struct lflow_cache_entry *lce)
     ovs_assert(lc->mem_usage >= lce->size);
     lc->mem_usage -= lce->size;
     free(lce);
+}
+
+static void
+lflow_cache_trim__(struct lflow_cache *lc, bool force)
+{
+    /* Trim if we had at least 'TRIM_LIMIT' elements at some point and if the
+     * current usage is less than half of 'high_watermark'.
+     */
+    ovs_assert(lc->high_watermark >= lc->n_entries);
+    if (!force
+            && (lc->high_watermark <= LFLOW_CACHE_TRIM_LIMIT
+                || lc->n_entries > lc->high_watermark / 2)) {
+        return;
+    }
+
+    COVERAGE_INC(lflow_cache_trim);
+    for (size_t i = 0; i < LCACHE_T_MAX; i++) {
+        hmap_shrink(&lc->entries[i]);
+    }
+
+#if HAVE_DECL_MALLOC_TRIM
+    malloc_trim(0);
+#endif
+
+    lc->high_watermark = lc->n_entries;
 }
