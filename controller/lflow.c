@@ -406,8 +406,11 @@ lflow_handle_changed_flows(struct lflow_ctx_in *l_ctx_in,
      * this function. */
     struct hmap flood_remove_nodes = HMAP_INITIALIZER(&flood_remove_nodes);
     struct ofctrl_flood_remove_node *ofrn, *next;
+    int changed_lflows = 0;
+    long long int now = time_msec();
     SBREC_LOGICAL_FLOW_TABLE_FOR_EACH_TRACKED (lflow,
                                                l_ctx_in->logical_flow_table) {
+        changed_lflows++;
         VLOG_DBG("delete lflow "UUID_FMT, UUID_ARGS(&lflow->header_.uuid));
         ofrn = xmalloc(sizeof *ofrn);
         ofrn->sb_uuid = lflow->header_.uuid;
@@ -420,6 +423,10 @@ lflow_handle_changed_flows(struct lflow_ctx_in *l_ctx_in,
             }
         }
     }
+    VLOG_INFO("DEBUG DEBUG changed lflows %d", changed_lflows);
+    VLOG_INFO("DEBUG DEBUG TIME1 %lld ms", time_msec() - now);
+    now = time_msec();
+
     ofctrl_flood_remove_flows(l_ctx_out->flow_table, &flood_remove_nodes);
     HMAP_FOR_EACH (ofrn, hmap_node, &flood_remove_nodes) {
         /* Delete entries from lflow resource reference. */
@@ -438,11 +445,16 @@ lflow_handle_changed_flows(struct lflow_ctx_in *l_ctx_in,
             }
         }
     }
+    VLOG_INFO("DEBUG DEBUG TIME2 %lld ms", time_msec() - now);
+    now = time_msec();
     HMAP_FOR_EACH_SAFE (ofrn, next, hmap_node, &flood_remove_nodes) {
         hmap_remove(&flood_remove_nodes, &ofrn->hmap_node);
         free(ofrn);
     }
     hmap_destroy(&flood_remove_nodes);
+
+    VLOG_INFO("DEBUG DEBUG TIME3 %lld ms", time_msec() - now);
+    now = time_msec();
 
     dhcp_opts_destroy(&dhcp_opts);
     dhcp_opts_destroy(&dhcpv6_opts);
@@ -1735,13 +1747,26 @@ lflow_processing_end:
     nd_ra_opts_destroy(&nd_ra_opts);
     controller_event_opts_destroy(&controller_event_opts);
 
-    /* Add load balancer hairpin flows if the datapath has any load balancers
-     * associated. */
-    for (size_t i = 0; i < dp->n_load_balancers; i++) {
-        consider_lb_hairpin_flows(dp->load_balancers[i],
+    //TODO
+    const struct sbrec_load_balancer *lb;
+    SBREC_LOAD_BALANCER_TABLE_FOR_EACH (lb, l_ctx_in->lb_table) {
+        for (size_t i = 0; i < lb->n_datapaths; i++) {
+            if (lb->datapaths[i] == dp) {
+                consider_lb_hairpin_flows(lb,
                                   l_ctx_in->local_datapaths,
                                   l_ctx_out->flow_table);
+                break;
+            }
+        }
     }
+
+    /* Add load balancer hairpin flows if the datapath has any load balancers
+     * associated. */
+    // for (size_t i = 0; i < dp->n_load_balancers; i++) {
+    //     consider_lb_hairpin_flows(dp->load_balancers[i],
+    //                               l_ctx_in->local_datapaths,
+    //                               l_ctx_out->flow_table);
+    // }
 
     return handled;
 }

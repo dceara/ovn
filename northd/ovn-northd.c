@@ -3499,19 +3499,19 @@ build_ovn_lbs(struct northd_context *ctx, struct hmap *datapaths,
             continue;
         }
 
-        const struct sbrec_load_balancer **sbrec_lbs =
-            xmalloc(od->nbs->n_load_balancer * sizeof *sbrec_lbs);
-        for (size_t i = 0; i < od->nbs->n_load_balancer; i++) {
-            const struct uuid *lb_uuid =
-                &od->nbs->load_balancer[i]->header_.uuid;
-            lb = ovn_northd_lb_find(lbs, lb_uuid);
-            sbrec_lbs[i] = lb->slb;
-        }
+        // const struct sbrec_load_balancer **sbrec_lbs =
+        //     xmalloc(od->nbs->n_load_balancer * sizeof *sbrec_lbs);
+        // for (size_t i = 0; i < od->nbs->n_load_balancer; i++) {
+        //     const struct uuid *lb_uuid =
+        //         &od->nbs->load_balancer[i]->header_.uuid;
+        //     lb = ovn_northd_lb_find(lbs, lb_uuid);
+        //     sbrec_lbs[i] = lb->slb;
+        // }
 
-        sbrec_datapath_binding_set_load_balancers(
-            od->sb, (struct sbrec_load_balancer **)sbrec_lbs,
-            od->nbs->n_load_balancer);
-        free(sbrec_lbs);
+        // sbrec_datapath_binding_set_load_balancers(
+        //     od->sb, (struct sbrec_load_balancer **)sbrec_lbs,
+        //     od->nbs->n_load_balancer);
+        // free(sbrec_lbs);
     }
 }
 
@@ -9042,9 +9042,39 @@ build_lrouter_flows_for_lb(struct ovn_northd_lb *lb, struct hmap *lflows,
 }
 
 static void
+build_lrouter_arp_flow(struct ovn_datapath *od, struct ovn_port *op,
+                       const char *ip_address, const char *eth_addr,
+                       struct ds *extra_match, bool drop, uint16_t priority,
+                       const struct ovsdb_idl_row *hint,
+                       struct hmap *lflows);
+
+static void
 build_lrouter_lb_flows(struct hmap *lflows, struct ovn_datapath *od,
                        struct hmap *lbs, struct ds *match)
 {
+    //TODO: move to separate function?
+    const char *ip_address;
+    SSET_FOR_EACH (ip_address, &od->lb_ips_v4) {
+        build_lrouter_arp_flow(od, NULL, ip_address,
+                               REG_INPORT_ETH_ADDR, NULL,
+                               false, 90, NULL, lflows);
+    }
+    // if (sset_count(&od->lb_ips_v4) && !od->l3dgw_port) {
+    //     ds_clear(match);
+    //     struct ds load_balancer_ips_v4 = DS_EMPTY_INITIALIZER;
+
+    //     /* For IPv4 we can just create one rule with all required IPs. */
+    //     ds_put_cstr(&load_balancer_ips_v4, "{ ");
+    //     ds_put_and_free_cstr(&load_balancer_ips_v4,
+    //                             sset_join(&od->lb_ips_v4, ", ", " }"));
+
+    //     build_lrouter_arp_flow(od, NULL, ds_cstr(&load_balancer_ips_v4),
+    //                             REG_INPORT_ETH_ADDR, NULL,
+    //                             false, 90, NULL, lflows);
+    //     ds_destroy(&load_balancer_ips_v4);
+    // }
+
+
     /* A set to hold all ips that need defragmentation and tracking. */
     struct sset all_ips = SSET_INITIALIZER(&all_ips);
 
@@ -11245,24 +11275,25 @@ build_lrouter_ipv4_ip_input(struct ovn_port *op,
         const char *ip_address;
         if (sset_count(&op->od->lb_ips_v4)) {
             ds_clear(match);
+            //TODO: hack
             if (op == op->od->l3dgw_port) {
                 ds_put_format(match, "is_chassis_resident(%s)",
                               op->od->l3redirect_port->json_key);
+                struct ds load_balancer_ips_v4 = DS_EMPTY_INITIALIZER;
+
+                /* For IPv4 we can just create one rule with all required IPs. */
+                ds_put_cstr(&load_balancer_ips_v4, "{ ");
+                ds_put_and_free_cstr(&load_balancer_ips_v4,
+                                    sset_join(&op->od->lb_ips_v4, ", ", " }"));
+
+                build_lrouter_arp_flow(op->od, op, ds_cstr(&load_balancer_ips_v4),
+                                    REG_INPORT_ETH_ADDR,
+                                    match, false, 90, NULL, lflows);
+                ds_destroy(&load_balancer_ips_v4);
             }
-
-            struct ds load_balancer_ips_v4 = DS_EMPTY_INITIALIZER;
-
-            /* For IPv4 we can just create one rule with all required IPs. */
-            ds_put_cstr(&load_balancer_ips_v4, "{ ");
-            ds_put_and_free_cstr(&load_balancer_ips_v4,
-                                 sset_join(&op->od->lb_ips_v4, ", ", " }"));
-
-            build_lrouter_arp_flow(op->od, op, ds_cstr(&load_balancer_ips_v4),
-                                   REG_INPORT_ETH_ADDR,
-                                   match, false, 90, NULL, lflows);
-            ds_destroy(&load_balancer_ips_v4);
         }
 
+        //TODO: deal with IPv6
         SSET_FOR_EACH (ip_address, &op->od->lb_ips_v6) {
             ds_clear(match);
             if (op == op->od->l3dgw_port) {
