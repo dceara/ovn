@@ -1764,17 +1764,12 @@ lflow_processing_end:
 
     /* Add load balancer hairpin flows if the datapath has any load balancers
      * associated. */
-    /* XXX: Optimize this lookup with a per datapath hashmap of load
-     * balancers. */
-    const struct sbrec_load_balancer *lb;
-    SBREC_LOAD_BALANCER_TABLE_FOR_EACH (lb, l_ctx_in->lb_table) {
-        for (size_t i = 0; i < lb->n_datapaths; i++) {
-            if (lb->datapaths[i] == dp) {
-                consider_lb_hairpin_flows(lb, l_ctx_in->local_datapaths,
-                                          l_ctx_out->flow_table);
-                break;
-            }
-        }
+    struct local_datapath *ldp = get_local_datapath(l_ctx_in->local_datapaths,
+                                                    dp->tunnel_key);
+    for (size_t i = 0; i < ldp->n_load_balancers; i++) {
+        consider_lb_hairpin_flows(ldp->load_balancers[i],
+                                  l_ctx_in->local_datapaths,
+                                  l_ctx_out->flow_table);
     }
 
     return handled;

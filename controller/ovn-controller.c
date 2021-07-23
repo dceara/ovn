@@ -1176,6 +1176,7 @@ en_runtime_data_cleanup(void *data)
                         &rt_data->local_datapaths) {
         free(cur_node->peer_ports);
         shash_destroy(&cur_node->external_ports);
+        free(cur_node->load_balancers);
         hmap_remove(&rt_data->local_datapaths, &cur_node->hmap_node);
         free(cur_node);
     }
@@ -1295,6 +1296,7 @@ en_runtime_data_run(struct engine_node *node, void *data)
         HMAP_FOR_EACH_SAFE (cur_node, next_node, hmap_node, local_datapaths) {
             free(cur_node->peer_ports);
             shash_destroy(&cur_node->external_ports);
+            free(cur_node->load_balancers);
             hmap_remove(local_datapaths, &cur_node->hmap_node);
             free(cur_node);
         }
@@ -2429,6 +2431,26 @@ lflow_output_runtime_data_handler(struct engine_node *node,
     struct lflow_ctx_out l_ctx_out;
     struct ed_type_lflow_output *fo = data;
     init_lflow_ctx(node, rt_data, fo, &l_ctx_in, &l_ctx_out);
+
+    /* XXX: move to a function. */
+    const struct sbrec_load_balancer *lb;
+    SBREC_LOAD_BALANCER_TABLE_FOR_EACH (lb, l_ctx_in.lb_table) {
+        for (size_t i = 0; i < lb->n_datapaths; i++) {
+            struct local_datapath *ldp =
+                get_local_datapath(l_ctx_in.local_datapaths,
+                                   lb->datapaths[i]->tunnel_key);
+            if (!ldp) {
+                continue;
+            }
+            if (ldp->n_load_balancers == ldp->n_allocated_load_balancers) {
+                ldp->load_balancers =
+                    x2nrealloc(ldp->load_balancers,
+                               &ldp->n_allocated_load_balancers,
+                               sizeof *ldp->load_balancers);
+            }
+            ldp->load_balancers[ldp->n_load_balancers++] = lb;
+        }
+    }
 
     struct tracked_binding_datapath *tdp;
     HMAP_FOR_EACH (tdp, node, tracked_dp_bindings) {
