@@ -849,6 +849,22 @@ destroy_lb_ips(struct ovn_datapath *od)
     sset_destroy(&od->lb_ips_v6_routable);
 }
 
+//TODO
+static bool
+nbr_has_load_balancer(const struct nbrec_logical_router *nbr)
+{
+    if (nbr->n_load_balancer) {
+        return true;
+    }
+
+    for (size_t i = 0; i < nbr->n_load_balancer_group; i++) {
+        if (nbr->load_balancer_group[i]->n_lbs) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* A group of logical router datapaths which are connected - either
  * directly or indirectly.
  * Each logical router can belong to only one group. */
@@ -2577,7 +2593,7 @@ get_nat_addresses(const struct ovn_port *op, size_t *n, bool routable_only)
     size_t n_nats = 0;
     struct eth_addr mac;
     if (!op || !op->nbrp || !op->od || !op->od->nbr
-        || (!op->od->nbr->n_nat && !op->od->nbr->n_load_balancer)
+        || (!op->od->nbr->n_nat && !nbr_has_load_balancer(op->od->nbr))
         || !eth_addr_from_string(op->nbrp->mac, &mac)
         || op->od->n_l3dgw_ports > 1) {
         *n = n_nats;
@@ -3547,7 +3563,7 @@ build_ovn_lr_lbs(struct hmap *datapaths, struct hmap *lbs)
         }
         if (!smap_get(&od->nbr->options, "chassis")
             && od->n_l3dgw_ports != 1) {
-            if (od->n_l3dgw_ports > 1 && od->nbr->n_load_balancer) {
+            if (od->n_l3dgw_ports > 1 && nbr_has_load_balancer(od->nbr)) {
                 static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
                 VLOG_WARN_RL(&rl, "Load-balancers are configured on logical "
                              "router %s, which has %"PRIuSIZE" distributed "
@@ -3564,6 +3580,16 @@ build_ovn_lr_lbs(struct hmap *datapaths, struct hmap *lbs)
                 &od->nbr->load_balancer[i]->header_.uuid;
             lb = ovn_northd_lb_find(lbs, lb_uuid);
             ovn_northd_lb_add_lr(lb, od);
+        }
+
+        //TODO: duplicated
+        for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
+            const struct nbrec_load_balancer_group *lbg = od->nbr->load_balancer_group[i];
+            for (size_t j = 0; j < lbg->n_lbs; j++) {
+                const struct uuid *lb_uuid = &lbg->lbs[j]->header_.uuid;
+                lb = ovn_northd_lb_find(lbs, lb_uuid);
+                ovn_northd_lb_add_lr(lb, od);
+            }
         }
     }
 }
@@ -3594,6 +3620,15 @@ build_ovn_lbs(struct northd_context *ctx, struct hmap *datapaths,
                 &od->nbs->load_balancer[i]->header_.uuid;
             lb = ovn_northd_lb_find(lbs, lb_uuid);
             ovn_northd_lb_add_ls(lb, od);
+        }
+        //TODO: duplicated
+        for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
+            const struct nbrec_load_balancer_group *lbg = od->nbs->load_balancer_group[i];
+            for (size_t j = 0; j < lbg->n_lbs; j++) {
+                const struct uuid *lb_uuid = &lbg->lbs[j]->header_.uuid;
+                lb = ovn_northd_lb_find(lbs, lb_uuid);
+                ovn_northd_lb_add_ls(lb, od);
+            }
         }
     }
 
@@ -3730,6 +3765,30 @@ build_lrouter_lbs(struct hmap *datapaths, struct hmap *lbs)
                 sset_add(&od->lb_ips_v6, ip_address);
                 if (is_routable) {
                     sset_add(&od->lb_ips_v6_routable, ip_address);
+                }
+            }
+        }
+
+        //TODO: duplicated:
+        for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
+            const struct nbrec_load_balancer_group *lbg = od->nbr->load_balancer_group[i];
+            for (size_t j = 0; j < lbg->n_lbs; j++) {
+                struct ovn_northd_lb *lb =
+                    ovn_northd_lb_find(lbs, &lbg->lbs[j]->header_.uuid);
+                const char *ip_address;
+                bool is_routable = smap_get_bool(&lb->nlb->options, "add_route",
+                                                 false);
+                SSET_FOR_EACH (ip_address, &lb->ips_v4) {
+                    sset_add(&od->lb_ips_v4, ip_address);
+                    if (is_routable) {
+                        sset_add(&od->lb_ips_v4_routable, ip_address);
+                    }
+                }
+                SSET_FOR_EACH (ip_address, &lb->ips_v6) {
+                    sset_add(&od->lb_ips_v6, ip_address);
+                    if (is_routable) {
+                        sset_add(&od->lb_ips_v6_routable, ip_address);
+                    }
                 }
             }
         }
@@ -5528,10 +5587,21 @@ build_empty_lb_event_flow(struct ovn_lb_vip *lb_vip,
 static bool
 ls_has_lb_vip(struct ovn_datapath *od)
 {
-    for (int i = 0; i < od->nbs->n_load_balancer; i++) {
+    for (size_t i = 0; i < od->nbs->n_load_balancer; i++) {
         struct nbrec_load_balancer *nb_lb = od->nbs->load_balancer[i];
         if (!smap_is_empty(&nb_lb->vips)) {
             return true;
+        }
+    }
+
+    //TODO: duplicated
+    for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
+        const struct nbrec_load_balancer_group *lbg = od->nbs->load_balancer_group[i];
+        for (size_t j = 0; j < lbg->n_lbs; j++) {
+            struct nbrec_load_balancer *nb_lb = lbg->lbs[j];
+            if (!smap_is_empty(&nb_lb->vips)) {
+                return true;
+            }
         }
     }
 
@@ -5617,6 +5687,26 @@ build_pre_lb(struct ovn_datapath *od, struct hmap *lflows,
             ovn_lflow_add(lflows, od, S_SWITCH_OUT_PRE_LB,
                           100, "ip", REGBIT_CONNTRACK_NAT" = 1; next;");
             break;
+        }
+    }
+
+    //TODO: duplicated
+    for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
+        const struct nbrec_load_balancer_group *lbg = od->nbs->load_balancer_group[i];
+        for (size_t j = 0; j < lbg->n_lbs; j++) {
+
+            struct nbrec_load_balancer *nb_lb = lbg->lbs[j];
+            struct ovn_northd_lb *lb =
+                ovn_northd_lb_find(lbs, &nb_lb->header_.uuid);
+            ovs_assert(lb);
+
+            if (lb->n_vips) {
+                ovn_lflow_add(lflows, od, S_SWITCH_IN_PRE_LB,
+                              100, "ip", REGBIT_CONNTRACK_NAT" = 1; next;");
+                ovn_lflow_add(lflows, od, S_SWITCH_OUT_PRE_LB,
+                              100, "ip", REGBIT_CONNTRACK_NAT" = 1; next;");
+                break;
+            }
         }
     }
 }
@@ -12564,7 +12654,7 @@ build_lrouter_nat_defrag_and_lb(struct ovn_datapath *od, struct hmap *lflows,
      * flag set. Some NICs are unable to offload these flows.
      */
     if ((od->is_gw_router || od->n_l3dgw_ports) &&
-        (od->nbr->n_nat || od->nbr->n_load_balancer)) {
+        (od->nbr->n_nat || nbr_has_load_balancer(od->nbr))) {
         ovn_lflow_add(lflows, od, S_ROUTER_OUT_UNDNAT, 50,
                       "ip", "flags.loopback = 1; ct_dnat;");
         ovn_lflow_add(lflows, od, S_ROUTER_OUT_POST_UNDNAT, 50,
