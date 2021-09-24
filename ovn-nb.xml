@@ -454,6 +454,10 @@
       ip addresses.
     </column>
 
+    <column name="load_balancer_group">
+      TODO
+    </column>
+
     <column name="acls">
       Access control rules that apply to packets within the logical switch.
     </column>
@@ -1812,6 +1816,39 @@
     </group>
   </table>
 
+  <table name="Load_Balancer_Group" title="load balancer group">
+    <column name="name">
+      TODO
+    </column>
+    <column name="lbs">
+      TODO
+    </column>
+  </table>
+
+  <table name="Logical_Switch_Group" title="logical switch group">
+    <column name="name">
+      TODO
+    </column>
+    <column name="ls">
+      TODO
+    </column>
+    <column name="lbs">
+      TODO
+    </column>
+  </table>
+
+  <table name="Logical_Router_Group" title="logical router group">
+    <column name="name">
+      TODO
+    </column>
+    <column name="lr">
+      TODO
+    </column>
+    <column name="lbs">
+      TODO
+    </column>
+  </table>
+
   <table name="Load_Balancer_Health_Check" title="load balancer">
     <p>
       Each row represents one load balancer health check. Health checks
@@ -2060,6 +2097,10 @@
       Load balance a virtual ip address to a set of logical port ip
       addresses.  Load balancer rules only work on the Gateway routers or
       routers with one and only one distributed gateway port.
+    </column>
+
+    <column name="load_balancer_group">
+      TODO
     </column>
 
     <group title="Naming">
