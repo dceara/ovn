@@ -1,7 +1,7 @@
 {
     "name": "OVN_Northbound",
     "version": "5.32.1",
-    "cksum": "3450417086 31840",
+    "cksum": "4126530275 30744",
     "tables": {
         "NB_Global": {
             "columns": {
@@ -62,7 +62,7 @@
                                            "min": 0,
                                            "max": "unlimited"}},
                 "load_balancer_group": {"type": {"key": {"type": "uuid",
-                                                 "refTable": "Load_Balancer_Group"},
+                                                         "refTable": "Load_Balancer_Group"},
                                                  "min": 0,
                                                  "max": "unlimited"}},
                 "dns_records": {"type": {"key": {"type": "uuid",
@@ -84,18 +84,6 @@
                                      "refTable": "Forwarding_Group",
                                      "refType": "strong"},
                                      "min": 0, "max": "unlimited"}}},
-            "isRoot": true},
-        "Logical_Switch_Group": {
-            "columns": {
-                "name": {"type": "string"},
-                "ls":  {"type": {"key": {"type": "uuid",
-                                         "refTable": "Logical_Switch"},
-                                 "min": 0,
-                                 "max": "unlimited"}},
-                "lbs": {"type": {"key": {"type": "uuid",
-                                         "refTable": "Load_Balancer"},
-                                 "min": 0,
-                                 "max": "unlimited"}}},
             "isRoot": true},
         "Logical_Switch_Port": {
             "columns": {
@@ -228,7 +216,8 @@
             "columns": {
                 "name": {"type": "string"},
                 "lbs": {"type": {"key": {"type": "uuid",
-                                         "refTable": "Load_Balancer"},
+                                         "refTable": "Load_Balancer",
+                                         "refType": "weak"},
                                  "min": 0,
                                  "max": "unlimited"}}},
             "isRoot": true},
@@ -361,7 +350,7 @@
                                            "min": 0,
                                            "max": "unlimited"}},
                 "load_balancer_group": {"type": {"key": {"type": "uuid",
-                                                 "refTable": "Load_Balancer_Group"},
+                                                         "refTable": "Load_Balancer_Group"},
                                                  "min": 0,
                                                  "max": "unlimited"}},
                 "copp": {"type": {"key": {"type": "uuid", "refTable": "Copp",
@@ -375,18 +364,6 @@
                 "external_ids": {
                     "type": {"key": "string", "value": "string",
                              "min": 0, "max": "unlimited"}}},
-            "isRoot": true},
-        "Logical_Router_Group": {
-            "columns": {
-                "name": {"type": "string"},
-                "lr":  {"type": {"key": {"type": "uuid",
-                                         "refTable": "Logical_Router"},
-                                 "min": 0,
-                                 "max": "unlimited"}},
-                "lbs": {"type": {"key": {"type": "uuid",
-                                         "refTable": "Load_Balancer"},
-                                 "min": 0,
-                                 "max": "unlimited"}}},
             "isRoot": true},
         "Logical_Router_Port": {
             "columns": {
