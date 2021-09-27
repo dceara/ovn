@@ -858,7 +858,7 @@ nbr_has_load_balancer(const struct nbrec_logical_router *nbr)
     }
 
     for (size_t i = 0; i < nbr->n_load_balancer_group; i++) {
-        if (nbr->load_balancer_group[i]->n_lbs) {
+        if (nbr->load_balancer_group[i]->n_load_balancer) {
             return true;
         }
     }
@@ -3585,8 +3585,8 @@ build_ovn_lr_lbs(struct hmap *datapaths, struct hmap *lbs)
         //TODO: duplicated
         for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
             const struct nbrec_load_balancer_group *lbg = od->nbr->load_balancer_group[i];
-            for (size_t j = 0; j < lbg->n_lbs; j++) {
-                const struct uuid *lb_uuid = &lbg->lbs[j]->header_.uuid;
+            for (size_t j = 0; j < lbg->n_load_balancer; j++) {
+                const struct uuid *lb_uuid = &lbg->load_balancer[j]->header_.uuid;
                 lb = ovn_northd_lb_find(lbs, lb_uuid);
                 ovn_northd_lb_add_lr(lb, od);
             }
@@ -3624,8 +3624,8 @@ build_ovn_lbs(struct northd_context *ctx, struct hmap *datapaths,
         //TODO: duplicated
         for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
             const struct nbrec_load_balancer_group *lbg = od->nbs->load_balancer_group[i];
-            for (size_t j = 0; j < lbg->n_lbs; j++) {
-                const struct uuid *lb_uuid = &lbg->lbs[j]->header_.uuid;
+            for (size_t j = 0; j < lbg->n_load_balancer; j++) {
+                const struct uuid *lb_uuid = &lbg->load_balancer[j]->header_.uuid;
                 lb = ovn_northd_lb_find(lbs, lb_uuid);
                 ovn_northd_lb_add_ls(lb, od);
             }
@@ -3772,9 +3772,9 @@ build_lrouter_lbs(struct hmap *datapaths, struct hmap *lbs)
         //TODO: duplicated:
         for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
             const struct nbrec_load_balancer_group *lbg = od->nbr->load_balancer_group[i];
-            for (size_t j = 0; j < lbg->n_lbs; j++) {
+            for (size_t j = 0; j < lbg->n_load_balancer; j++) {
                 struct ovn_northd_lb *lb =
-                    ovn_northd_lb_find(lbs, &lbg->lbs[j]->header_.uuid);
+                    ovn_northd_lb_find(lbs, &lbg->load_balancer[j]->header_.uuid);
                 const char *ip_address;
                 bool is_routable = smap_get_bool(&lb->nlb->options, "add_route",
                                                  false);
@@ -5597,8 +5597,8 @@ ls_has_lb_vip(struct ovn_datapath *od)
     //TODO: duplicated
     for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
         const struct nbrec_load_balancer_group *lbg = od->nbs->load_balancer_group[i];
-        for (size_t j = 0; j < lbg->n_lbs; j++) {
-            struct nbrec_load_balancer *nb_lb = lbg->lbs[j];
+        for (size_t j = 0; j < lbg->n_load_balancer; j++) {
+            struct nbrec_load_balancer *nb_lb = lbg->load_balancer[j];
             if (!smap_is_empty(&nb_lb->vips)) {
                 return true;
             }
@@ -5693,9 +5693,9 @@ build_pre_lb(struct ovn_datapath *od, struct hmap *lflows,
     //TODO: duplicated
     for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
         const struct nbrec_load_balancer_group *lbg = od->nbs->load_balancer_group[i];
-        for (size_t j = 0; j < lbg->n_lbs; j++) {
+        for (size_t j = 0; j < lbg->n_load_balancer; j++) {
 
-            struct nbrec_load_balancer *nb_lb = lbg->lbs[j];
+            struct nbrec_load_balancer *nb_lb = lbg->load_balancer[j];
             struct ovn_northd_lb *lb =
                 ovn_northd_lb_find(lbs, &nb_lb->header_.uuid);
             ovs_assert(lb);

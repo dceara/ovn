@@ -18,7 +18,7 @@ echo "Adding load balancers.."
 for ((j = 0; j < $nlb; j++)); do
     echo "Adding LB $j.."
     ovn-nbctl --id=@id create load_balancer name=lb$j protocol=tcp vips:'"42.42.42.1:8080"'='"42.42.42.2:8081"' \
-              -- add load_balancer_group ${lb_group_uuid} lbs @id
+              -- add load_balancer_group ${lb_group_uuid} load_balancer @id
 done
 
 echo "CPU Time NB:"

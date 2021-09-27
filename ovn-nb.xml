@@ -1820,7 +1820,7 @@
     <column name="name">
       TODO
     </column>
-    <column name="lbs">
+    <column name="load_balancer">
       TODO
     </column>
   </table>
