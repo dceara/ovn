@@ -44,7 +44,8 @@ jobs:
     name: e2e
     if: github.event_name != 'schedule'
     runs-on: ubuntu-20.04
-    timeout-minutes: 120
+    # 30 mins for kind, 150 mins for control-plane tests, 10 minutes for all other steps
+    timeout-minutes: 190
     strategy:
       fail-fast: false
       matrix:
@@ -124,12 +125,16 @@ jobs:
         docker load --input image.tar
 
     - name: kind setup
+      timeout-minutes: 30
       run: |
         export OVN_IMAGE="ovn-daemonset-f:dev"
         make -C test install-kind
       working-directory: src/github.com/ovn-org/ovn-kubernetes
 
     - name: Run Tests
+      # e2e tests take less than 30 minutes normally, 60 should be more than enough
+      # set 2 1/2 hours for control-plane tests as these might take a while
+      timeout-minutes: ${{ matrix.target.shard == 'control-plane' && 150 || 60 }}
       run: |
         make -C test ${{ matrix.target.shard }}
       working-directory: src/github.com/ovn-org/ovn-kubernetes
