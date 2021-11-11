@@ -3674,8 +3674,99 @@ build_lb_vip_actions(struct ovn_lb_vip *lb_vip,
     return reject;
 }
 
+//TODO: move
+struct ovn_lbg {
+    const struct nbrec_load_balancer_group *nb;
+
+    size_t n_nb_ls;
+    size_t n_allocated_nb_ls;
+    struct ovn_datapath **nb_ls;
+
+    size_t n_nb_lr;
+    size_t n_allocated_nb_lr;
+    struct ovn_datapath **nb_lr;
+};
+
+static struct ovn_lbg *
+ovn_lbg_find_or_insert(struct shash *lbgs,
+                       const struct nbrec_load_balancer_group *nb_lbg)
+{
+    struct ovn_lbg *lbg = shash_find_data(lbgs, nb_lbg->name);
+
+    if (!lbg) {
+        lbg = xzalloc(sizeof *lbg);
+        shash_add(lbgs, nb_lbg->name, lbg);
+        lbg->nb = nb_lbg;
+    }
+    return lbg;
+}
+
 static void
-build_ovn_lr_lbs(struct hmap *datapaths, struct hmap *lbs)
+ovn_lbg_add_router(struct ovn_lbg *lbg, struct ovn_datapath *od)
+{
+    if (lbg->n_allocated_nb_lr == lbg->n_nb_lr) {
+        lbg->nb_lr = x2nrealloc(lbg->nb_lr, &lbg->n_allocated_nb_lr, sizeof *lbg->nb_lr);
+    }
+    lbg->nb_lr[lbg->n_nb_lr++] = od;
+}
+
+static void
+ovn_lbg_add_switch(struct ovn_lbg *lbg, struct ovn_datapath *od)
+{
+    if (lbg->n_allocated_nb_ls == lbg->n_nb_ls) {
+        lbg->nb_ls = x2nrealloc(lbg->nb_ls, &lbg->n_allocated_nb_ls, sizeof *lbg->nb_ls);
+    }
+    lbg->nb_ls[lbg->n_nb_ls++] = od;
+}
+
+static void
+ovn_lbg_destroy(struct ovn_lbg *lbg)
+{
+    if (!lbg) {
+        return;
+    }
+
+    free(lbg->nb_lr);
+    free(lbg->nb_ls);
+    free(lbg);
+}
+
+//TODO: shash_destroy_free_data(lbgs)
+
+//TODO: move
+static void
+build_ovn_lbgs(struct hmap *datapaths, struct shash *lbgs)
+{
+    struct ovn_datapath *od;
+
+    HMAP_FOR_EACH (od, key_node, datapaths) {
+        if (od->nbr) {
+            for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
+                const struct nbrec_load_balancer_group *nb_lbg =
+                    od->nbr->load_balancer_group[i];
+                
+                struct ovn_lbg *lbg = ovn_lbg_find_or_insert(lbgs, nb_lbg);
+                ovn_lbg_add_router(lbg, od);
+                //find_or_insert ovn_lbg
+                //add od to ovn_lbg->routers
+            }
+        } else if (od->nbs) {
+            for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
+                const struct nbrec_load_balancer_group *nb_lbg =
+                    od->nbs->load_balancer_group[i];
+                
+                struct ovn_lbg *lbg = ovn_lbg_find_or_insert(lbgs, nb_lbg);
+                ovn_lbg_add_switch(lbg, od);
+                //find_or_insert ovn_lbg
+                //add od to ovn_lbg->switches
+            }
+        }
+    }
+}
+
+
+static void
+build_ovn_lr_lbs(struct hmap *datapaths, struct shash *lbgs, struct hmap *lbs)
 {
     struct ovn_northd_lb *lb;
     struct ovn_datapath *od;
@@ -3705,14 +3796,26 @@ build_ovn_lr_lbs(struct hmap *datapaths, struct hmap *lbs)
             ovn_northd_lb_add_lr(lb, od);
         }
 
-        for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
-            const struct nbrec_load_balancer_group *lbg =
-                od->nbr->load_balancer_group[i];
-            for (size_t j = 0; j < lbg->n_load_balancer; j++) {
-                const struct uuid *lb_uuid =
-                    &lbg->load_balancer[j]->header_.uuid;
-                lb = ovn_northd_lb_find(lbs, lb_uuid);
-                ovn_northd_lb_add_lr(lb, od);
+    }
+
+    //For each lbg in ovn_lbgs:
+    //   For each lb in lbg->nb
+    //       For each od in lbg->routers:
+    //            ovn_northd_lb_add_lr(lb, od)
+    struct shash_node *node;
+    SHASH_FOR_EACH (node, lbgs) {
+        struct ovn_lbg *lbg = node->data;
+
+        for (size_t i = 0; i < lbg->nb->n_load_balancer; i++) {
+            const struct uuid *lb_uuid = &lbg->nb->load_balancer[i]->header_.uuid;
+
+            if (!lbg->n_nb_lr) {
+                continue;
+            }
+
+            lb = ovn_northd_lb_find(lbs, lb_uuid);
+            for (size_t j = 0; j < lbg->n_nb_lr; j++) {
+                ovn_northd_lb_add_lr(lb, lbg->nb_lr[j]);
             }
         }
     }
@@ -3720,7 +3823,7 @@ build_ovn_lr_lbs(struct hmap *datapaths, struct hmap *lbs)
 
 static void
 build_ovn_lbs(struct northd_context *ctx, struct hmap *datapaths,
-              struct hmap *lbs)
+              struct shash *lbgs, struct hmap *lbs)
 {
     struct ovn_northd_lb *lb;
 
@@ -3746,14 +3849,26 @@ build_ovn_lbs(struct northd_context *ctx, struct hmap *datapaths,
             ovn_northd_lb_add_ls(lb, od);
         }
 
-        for (size_t i = 0; i < od->nbs->n_load_balancer_group; i++) {
-            const struct nbrec_load_balancer_group *lbg =
-                od->nbs->load_balancer_group[i];
-            for (size_t j = 0; j < lbg->n_load_balancer; j++) {
-                const struct uuid *lb_uuid =
-                    &lbg->load_balancer[j]->header_.uuid;
-                lb = ovn_northd_lb_find(lbs, lb_uuid);
-                ovn_northd_lb_add_ls(lb, od);
+    }
+
+    //For each lbg in ovn_lbgs:
+    //   For each lb in lbg->nb
+    //       For each od in lbg->switches:
+    //            ovn_northd_lb_add_ls(lb, od)
+    struct shash_node *node;
+    SHASH_FOR_EACH (node, lbgs) {
+        struct ovn_lbg *lbg = node->data;
+
+        for (size_t i = 0; i < lbg->nb->n_load_balancer; i++) {
+            const struct uuid *lb_uuid = &lbg->nb->load_balancer[i]->header_.uuid;
+
+            if (!lbg->n_nb_ls) {
+                continue;
+            }
+
+            lb = ovn_northd_lb_find(lbs, lb_uuid);
+            for (size_t j = 0; j < lbg->n_nb_ls; j++) {
+                ovn_northd_lb_add_ls(lb, lbg->nb_ls[j]);
             }
         }
     }
@@ -14458,6 +14573,7 @@ ovnnb_db_run(struct northd_context *ctx,
     struct hmap mcast_groups;
     struct hmap igmp_groups;
     struct shash meter_groups = SHASH_INITIALIZER(&meter_groups);
+    struct shash lbgs = SHASH_INITIALIZER(&lbgs);
     struct hmap lbs;
     struct hmap bfd_connections = HMAP_INITIALIZER(&bfd_connections);
     bool ovn_internal_version_changed = true;
@@ -14543,8 +14659,9 @@ ovnnb_db_run(struct northd_context *ctx,
                                      "ignore_lsp_down", true);
 
     build_datapaths(ctx, datapaths, lr_list);
-    build_ovn_lbs(ctx, datapaths, &lbs);
-    build_ovn_lr_lbs(datapaths, &lbs);
+    build_ovn_lbgs(datapaths, &lbgs);
+    build_ovn_lbs(ctx, datapaths, &lbgs, &lbs);
+    build_ovn_lr_lbs(datapaths, &lbgs, &lbs);
     build_lrouter_lbs(&lbs);
     build_ports(ctx, sbrec_chassis_by_name, sbrec_chassis_by_hostname,
                 datapaths, ports);
@@ -14601,6 +14718,13 @@ ovnnb_db_run(struct northd_context *ctx,
         shash_delete(&meter_groups, node);
     }
     shash_destroy(&meter_groups);
+
+    //TODO
+    SHASH_FOR_EACH_SAFE (node, next, &lbgs) {
+        ovn_lbg_destroy(node->data);
+        shash_delete(&lbgs, node);
+    }
+    shash_destroy(&lbgs);
 
     /* XXX Having to explicitly clean up macam here
      * is a bit strange. We don't explicitly initialize
