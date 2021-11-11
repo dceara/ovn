@@ -3684,19 +3684,19 @@ build_ovn_lr_lbs(struct hmap *datapaths, struct hmap *lbs)
         if (!od->nbr) {
             continue;
         }
-        if (!smap_get(&od->nbr->options, "chassis")
-            && od->n_l3dgw_ports != 1) {
-            if (od->n_l3dgw_ports > 1 && od->has_lb_vip) {
-                static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
-                VLOG_WARN_RL(&rl, "Load-balancers are configured on logical "
-                             "router %s, which has %"PRIuSIZE" distributed "
-                             "gateway ports. Load-balancer is not supported "
-                             "yet when there is more than one distributed "
-                             "gateway port on the router.",
-                             od->nbr->name, od->n_l3dgw_ports);
-            }
-            continue;
-        }
+        // if (!smap_get(&od->nbr->options, "chassis")
+        //     && od->n_l3dgw_ports != 1) {
+        //     if (od->n_l3dgw_ports > 1 && od->has_lb_vip) {
+        //         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+        //         VLOG_WARN_RL(&rl, "Load-balancers are configured on logical "
+        //                      "router %s, which has %"PRIuSIZE" distributed "
+        //                      "gateway ports. Load-balancer is not supported "
+        //                      "yet when there is more than one distributed "
+        //                      "gateway port on the router.",
+        //                      od->nbr->name, od->n_l3dgw_ports);
+        //     }
+        //     continue;
+        // }
 
         for (size_t i = 0; i < od->nbr->n_load_balancer; i++) {
             const struct uuid *lb_uuid =
@@ -3919,61 +3919,23 @@ build_lrouter_lb_reachable_ips(struct ovn_datapath *od,
 }
 
 static void
-build_lrouter_lbs(struct hmap *datapaths, struct hmap *lbs)
+build_lrouter_lbs(struct hmap *lbs)
 {
-    struct ovn_datapath *od;
-
-    HMAP_FOR_EACH (od, key_node, datapaths) {
-        if (!od->nbr) {
-            continue;
-        }
-
-        for (size_t i = 0; i < od->nbr->n_load_balancer; i++) {
-            struct ovn_northd_lb *lb =
-                ovn_northd_lb_find(lbs,
-                                   &od->nbr->load_balancer[i]->header_.uuid);
-            build_lrouter_lb_ips(od, lb);
-        }
-
-        for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
-            const struct nbrec_load_balancer_group *lbg =
-                od->nbr->load_balancer_group[i];
-            for (size_t j = 0; j < lbg->n_load_balancer; j++) {
-                struct ovn_northd_lb *lb =
-                    ovn_northd_lb_find(lbs,
-                                       &lbg->load_balancer[j]->header_.uuid);
-                build_lrouter_lb_ips(od, lb);
-            }
+    struct ovn_northd_lb *lb;
+    HMAP_FOR_EACH (lb, hmap_node, lbs) {
+        for (size_t i = 0; i < lb->n_nb_lr; i++) {
+            build_lrouter_lb_ips(lb->nb_lr[i], lb);
         }
     }
 }
 
 static void
-build_lrouter_lbs_reachable_ips(struct hmap *datapaths, struct hmap *lbs)
+build_lrouter_lbs_reachable_ips(struct hmap *lbs)
 {
-    struct ovn_datapath *od;
-
-    HMAP_FOR_EACH (od, key_node, datapaths) {
-        if (!od->nbr) {
-            continue;
-        }
-
-        for (size_t i = 0; i < od->nbr->n_load_balancer; i++) {
-            struct ovn_northd_lb *lb =
-                ovn_northd_lb_find(lbs,
-                                   &od->nbr->load_balancer[i]->header_.uuid);
-            build_lrouter_lb_reachable_ips(od, lb);
-        }
-
-        for (size_t i = 0; i < od->nbr->n_load_balancer_group; i++) {
-            const struct nbrec_load_balancer_group *lbg =
-                od->nbr->load_balancer_group[i];
-            for (size_t j = 0; j < lbg->n_load_balancer; j++) {
-                struct ovn_northd_lb *lb =
-                    ovn_northd_lb_find(lbs,
-                                       &lbg->load_balancer[j]->header_.uuid);
-                build_lrouter_lb_reachable_ips(od, lb);
-            }
+    struct ovn_northd_lb *lb;
+    HMAP_FOR_EACH (lb, hmap_node, lbs) {
+        for (size_t i = 0; i < lb->n_nb_lr; i++) {
+            build_lrouter_lb_reachable_ips(lb->nb_lr[i], lb);
         }
     }
 }
@@ -14582,11 +14544,11 @@ ovnnb_db_run(struct northd_context *ctx,
 
     build_datapaths(ctx, datapaths, lr_list);
     build_ovn_lbs(ctx, datapaths, &lbs);
-    build_lrouter_lbs(datapaths, &lbs);
+    build_ovn_lr_lbs(datapaths, &lbs);
+    build_lrouter_lbs(&lbs);
     build_ports(ctx, sbrec_chassis_by_name, sbrec_chassis_by_hostname,
                 datapaths, ports);
-    build_lrouter_lbs_reachable_ips(datapaths, &lbs);
-    build_ovn_lr_lbs(datapaths, &lbs);
+    build_lrouter_lbs_reachable_ips(&lbs);
     build_ovn_lb_svcs(ctx, ports, &lbs);
     build_ipam(datapaths, ports);
     build_port_group_lswitches(ctx, &port_groups, ports);
