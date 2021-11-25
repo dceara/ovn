@@ -5815,6 +5815,8 @@ LogicalRouterNdFlow(.lr = r,
         false -> None
     }.
 
+//FIXME: this should generate unique address set compatible names instead, e.g.:
+// _rtr_lb_${router_sb_tunnel_key}_ip4
 for (&RouterPort(.lrp = lrp,
                  .router = router@&Router{._uuid = lr_uuid},
                  .json_name = json_name,
@@ -5825,26 +5827,38 @@ for (&RouterPort(.lrp = lrp,
             true -> Some{i"is_chassis_resident(${json_escape(chassis_redirect_name(lrp.name))})"},
             false -> None
         } in {
-            var all_ipv4s = union(lbips.lb_ipv4s_routable, lbips.lb_ipv4s_unroutable) in
-            not all_ipv4s.is_empty() in
             LogicalRouterArpFlow(.lr = router,
                                  .lrp = Some{lrp},
-                                 .ip = i"{ ${all_ipv4s.to_vec().join(\", \")} }",
+                                 .ip = i"_rtr_lb_${router.name}_ip4",
                                  .mac = rEG_INPORT_ETH_ADDR(),
                                  .extra_match = residence_check,
                                  .drop = false,
                                  .priority = 90,
                                  .stage_hint = 0);
 
-            var all_ipv6s = union(lbips.lb_ipv6s_routable, lbips.lb_ipv6s_unroutable) in
-            not all_ipv6s.is_empty() in
             LogicalRouterNdFlowLB(.lr = router,
                                   .lrp = Some{lrp},
-                                  .ip = ("{ " ++ all_ipv6s.to_vec().join(", ") ++ " }").intern(),
+                                  .ip = i"_rtr_lb_${router.name}_ip6",
                                   .mac = rEG_INPORT_ETH_ADDR(),
                                   .extra_match = residence_check,
                                   .stage_hint = 0)
         }
+    }
+}
+
+for (&Router(._uuid = lr_uuid, .name = rtr_name)) {
+    for (lbips in &LogicalRouterLBIPs(.lr = lr_uuid)) {
+        var as_name = i"_rtr_lb_${rtr_name}_ip4" in
+        var all_ipv4s = union(lbips.lb_ipv4s_routable, lbips.lb_ipv4s_unroutable) in
+        sb::Out_Address_Set(hash128(as_name), as_name, all_ipv4s)
+    }
+}
+
+for (&Router(._uuid = lr_uuid, .name = rtr_name)) {
+    for (lbips in &LogicalRouterLBIPs(.lr = lr_uuid)) {
+        var as_name = i"_rtr_lb_${rtr_name}_ip6" in
+        var all_ipv6s = union(lbips.lb_ipv6s_routable, lbips.lb_ipv6s_unroutable) in
+        sb::Out_Address_Set(hash128(as_name), as_name, all_ipv6s)
     }
 }
 
