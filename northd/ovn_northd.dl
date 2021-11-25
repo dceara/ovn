@@ -8875,21 +8875,17 @@ relation PortExists(name: istring)
 PortExists(name) :- &nb::Logical_Switch_Port(.name = name).
 PortExists(name) :- &nb::Logical_Router_Port(.name = name).
 
-sb::Out_Load_Balancer(._uuid = lb._uuid,
-                      .name = lb.name,
-                      .vips = lb.vips,
-                      .protocol = lb.protocol,
-                      .datapaths = datapaths,
-                      .external_ids = [i"lb_id" -> uuid2str(lb_uuid).intern()],
-                      .options = options) :-
+relation Pre_Out_Load_Balancer(lb_uuid: uuid, dp_uuid: uuid)
+
+Pre_Out_Load_Balancer(lb_uuid, ls_uuid) :-
     nb in &nb::Logical_Switch(._uuid = ls_uuid, .load_balancer = lb_uuids),
-    var lb_uuid = FlatMap(lb_uuids),
-    var datapaths = ls_uuid.group_by(lb_uuid).to_set(),
-    lb in &nb::Load_Balancer(._uuid = lb_uuid),
-    /* Store the fact that northd provides the original (destination IP +
-     * transport port) tuple.
-     */
-    var options = lb.options.insert_imm(i"hairpin_orig_tuple", i"true").
+    var lb_uuid = FlatMap(lb_uuids).
+
+Pre_Out_Load_Balancer(lb_uuid, ls_uuid) :-
+    nb in &nb::Logical_Switch(._uuid = ls_uuid, .load_balancer_group = lbg_uuids),
+    var lbg_uuid = FlatMap(lbg_uuids),
+    lbg in &nb::Load_Balancer_Group(._uuid = lbg_uuid, .load_balancer = lb_uuids),
+    var lb_uuid = FlatMap(lb_uuids).
 
 sb::Out_Load_Balancer(._uuid = lb._uuid,
                       .name = lb.name,
@@ -8898,10 +8894,7 @@ sb::Out_Load_Balancer(._uuid = lb._uuid,
                       .datapaths = datapaths,
                       .external_ids = [i"lb_id" -> uuid2str(lb_uuid).intern()],
                       .options = options) :-
-    nb in &nb::Logical_Switch(._uuid = ls_uuid, .load_balancer_group = lbg_uuids),
-    var lbg_uuid = FlatMap(lbg_uuids),
-    lbg in &nb::Load_Balancer_Group(._uuid = lbg_uuid, .load_balancer = lb_uuids),
-    var lb_uuid = FlatMap(lb_uuids),
+    Pre_Out_Load_Balancer(lb_uuid, ls_uuid),
     var datapaths = ls_uuid.group_by(lb_uuid).to_set(),
     lb in &nb::Load_Balancer(._uuid = lb_uuid),
     /* Store the fact that northd provides the original (destination IP +
