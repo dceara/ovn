@@ -322,6 +322,12 @@ LogicalSwitchLB(sw_uuid, lb) :-
     var lb_id = FlatMap(lb_ids),
     lb in &nb::Load_Balancer(._uuid = lb_id).
 
+LogicalSwitchLB(sw_uuid, lb) :-
+    &nb::Logical_Switch(._uuid = sw_uuid, .load_balancer_group = lbg_ids),
+    var lbg_id = FlatMap(lbg_ids),
+    lbg in &nb::Load_Balancer_Group(._uuid = lbg_id, .load_balancer = lb_ids),
+    var lb_id = FlatMap(lb_ids),
+    lb in &nb::Load_Balancer(._uuid = lb_id).
 
 relation SwitchLB(sw: Intern<Switch>, lb_uuid: uuid)
 

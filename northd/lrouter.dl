@@ -410,6 +410,13 @@ LogicalRouterLB(lr, lb) :-
     var lb_uuid = FlatMap(lbs),
     lb in &LoadBalancer(.lb = &nb::Load_Balancer{._uuid = lb_uuid}).
 
+LogicalRouterLB(lr, lb) :-
+    nb::Logical_Router(._uuid = lr, .load_balancer_group = lbg_ids),
+    var lbg_id = FlatMap(lbg_ids),
+    lbg in &nb::Load_Balancer_Group(._uuid = lbg_id, .load_balancer = lb_ids),
+    var lb_id = FlatMap(lb_ids),
+    lb in &LoadBalancer(.lb = &nb::Load_Balancer{._uuid = lb_uuid}).
+
 relation LogicalRouterLBs(lr: uuid, lb: Vec<Intern<LoadBalancer>>)
 
 LogicalRouterLBs(lr, lbs) :-
