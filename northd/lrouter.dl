@@ -541,33 +541,33 @@ typedef LogicalRouterLBIPs = LogicalRouterLBIPs {
 
 relation LogicalRouterLBIPs[Intern<LogicalRouterLBIPs>]
 
-LogicalRouterLBIPs[LogicalRouterLBIPs{
-        .lr = lr_uuid,
-        .lb_ipv4s_routable = lb_ipv4s_routable,
-        .lb_ipv4s_unroutable = lb_ipv4s_unroutable,
-        .lb_ipv6s_routable = lb_ipv6s_routable,
-        .lb_ipv6s_unroutable = lb_ipv6s_unroutable
-    }.intern()
-] :-
-    LogicalRouterLBs(lr_uuid, lbs),
-    (var lb_ipv4s_routable, var lb_ipv4s_unroutable,
-     var lb_ipv6s_routable, var lb_ipv6s_unroutable) = {
-        var lb_ipv4s_routable = set_empty();
-        var lb_ipv4s_unroutable = set_empty();
-        var lb_ipv6s_routable = set_empty();
-        var lb_ipv6s_unroutable = set_empty();
-        for (lb in lbs) {
-            if (lb.routable) {
-                lb_ipv4s_routable = lb_ipv4s_routable.union(lb.ipv4s);
-                lb_ipv6s_routable = lb_ipv6s_routable.union(lb.ipv6s);
-            } else {
-                lb_ipv4s_unroutable = lb_ipv4s_unroutable.union(lb.ipv4s);
-                lb_ipv6s_unroutable = lb_ipv6s_unroutable.union(lb.ipv6s);
-            }
-        };
-        (lb_ipv4s_routable, lb_ipv4s_unroutable,
-         lb_ipv6s_routable, lb_ipv6s_unroutable)
-    }.
+//LogicalRouterLBIPs[LogicalRouterLBIPs{
+//        .lr = lr_uuid,
+//        .lb_ipv4s_routable = lb_ipv4s_routable,
+//        .lb_ipv4s_unroutable = lb_ipv4s_unroutable,
+//        .lb_ipv6s_routable = lb_ipv6s_routable,
+//        .lb_ipv6s_unroutable = lb_ipv6s_unroutable
+//    }.intern()
+//] :-
+//    LogicalRouterLBs(lr_uuid, lbs),
+//    (var lb_ipv4s_routable, var lb_ipv4s_unroutable,
+//     var lb_ipv6s_routable, var lb_ipv6s_unroutable) = {
+//        var lb_ipv4s_routable = set_empty();
+//        var lb_ipv4s_unroutable = set_empty();
+//        var lb_ipv6s_routable = set_empty();
+//        var lb_ipv6s_unroutable = set_empty();
+//        for (lb in lbs) {
+//            if (lb.routable) {
+//                lb_ipv4s_routable = lb_ipv4s_routable.union(lb.ipv4s);
+//                lb_ipv6s_routable = lb_ipv6s_routable.union(lb.ipv6s);
+//            } else {
+//                lb_ipv4s_unroutable = lb_ipv4s_unroutable.union(lb.ipv4s);
+//                lb_ipv6s_unroutable = lb_ipv6s_unroutable.union(lb.ipv6s);
+//            }
+//        };
+//        (lb_ipv4s_routable, lb_ipv4s_unroutable,
+//         lb_ipv6s_routable, lb_ipv6s_unroutable)
+//    }.
 
 /* Router - to - LB-uuid */
 relation RouterLB(router: Intern<Router>, lb_uuid: uuid)

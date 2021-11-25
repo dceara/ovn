@@ -1006,17 +1006,20 @@ relation OutProxy_Multicast_Group (
     ports: Set<uuid>
 )
 
+// FIXME: When commenting out LogicalRouterLBIPs() relations, ovn-northd
+// started continuously trying to write empty updates to mC_FLOOD() in
+// the southbound.
 /* Only create flood group if the switch has enabled ports */
-sb::Out_Multicast_Group (._uuid      = hash128((datapath,name)),
-                        .datapath   = datapath,
-                        .name       = name,
-                        .tunnel_key = tunnel_key,
-                        .ports      = port_ids) :-
-    &SwitchPort(.lsp = lsp, .sw = sw),
-    lsp.is_enabled(),
-    var datapath = sw._uuid,
-    var port_ids = lsp._uuid.group_by((datapath)).to_set(),
-    (var name, var tunnel_key) = mC_FLOOD().
+// sb::Out_Multicast_Group (._uuid      = hash128((datapath,name)),
+//                         .datapath   = datapath,
+//                         .name       = name,
+//                         .tunnel_key = tunnel_key,
+//                         .ports      = port_ids) :-
+//     &SwitchPort(.lsp = lsp, .sw = sw),
+//     lsp.is_enabled(),
+//     var datapath = sw._uuid,
+//     var port_ids = lsp._uuid.group_by((datapath)).to_set(),
+//     (var name, var tunnel_key) = mC_FLOOD().
 
 /* Create a multicast group to flood to all switch ports except router ports.
  */
