@@ -5846,20 +5846,30 @@ for (&RouterPort(.lrp = lrp,
     }
 }
 
+// FIXME: This should actually be changed to build the set of LB IPs that
+// are reachable via at least one router port.  For testing and benchmarking
+// purposes we care more of the scenario in which no ARP responder flows will
+// be installed for LB IPs (that is, endpoints reach load balancer VIPs via a
+// non-directly conneted route).
 for (&Router(._uuid = lr_uuid, .name = rtr_name)) {
-    for (lbips in &LogicalRouterLBIPs(.lr = lr_uuid)) {
-        var as_name = i"_rtr_lb_${rtr_name}_ip4" in
-        var all_ipv4s = union(lbips.lb_ipv4s_routable, lbips.lb_ipv4s_unroutable) in
-        sb::Out_Address_Set(hash128(as_name), as_name, all_ipv4s)
-    }
+    var as_name = i"_rtr_lb_${rtr_name}_ip4" in
+    sb::Out_Address_Set(hash128(as_name), as_name, set_empty())
+    // for (lbips in &LogicalRouterLBIPs(.lr = lr_uuid)) {
+    //     var as_name = i"_rtr_lb_${rtr_name}_ip4" in
+    //     var all_ipv4s = union(lbips.lb_ipv4s_routable, lbips.lb_ipv4s_unroutable) in
+    //     sb::Out_Address_Set(hash128(as_name), as_name, all_ipv4s)
+    // }
 }
 
+// FIXME: Same as above.
 for (&Router(._uuid = lr_uuid, .name = rtr_name)) {
-    for (lbips in &LogicalRouterLBIPs(.lr = lr_uuid)) {
-        var as_name = i"_rtr_lb_${rtr_name}_ip6" in
-        var all_ipv6s = union(lbips.lb_ipv6s_routable, lbips.lb_ipv6s_unroutable) in
-        sb::Out_Address_Set(hash128(as_name), as_name, all_ipv6s)
-    }
+    var as_name = i"_rtr_lb_${rtr_name}_ip6" in
+    sb::Out_Address_Set(hash128(as_name), as_name, set_empty())
+    // for (lbips in &LogicalRouterLBIPs(.lr = lr_uuid)) {
+    //     var as_name = i"_rtr_lb_${rtr_name}_ip6" in
+    //     var all_ipv6s = union(lbips.lb_ipv6s_routable, lbips.lb_ipv6s_unroutable) in
+    //     sb::Out_Address_Set(hash128(as_name), as_name, all_ipv6s)
+    // }
 }
 
 /* Drop IP traffic destined to router owned IPs except if the IP is
