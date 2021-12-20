@@ -635,7 +635,7 @@ alloc_id_to_ct_zone(const char *zone_name, struct simap *ct_zones,
 }
 
 static void
-update_ct_zones(const struct shash *binding_lports,
+update_ct_zones(const struct shash *binding_lports OVS_UNUSED,
                 const struct hmap *local_datapaths,
                 struct simap *ct_zones, unsigned long *ct_zone_bitmap,
                 struct shash *pending_ct_zones)
@@ -647,19 +647,16 @@ update_ct_zones(const struct shash *binding_lports,
     struct simap req_snat_zones = SIMAP_INITIALIZER(&req_snat_zones);
     unsigned long unreq_snat_zones[BITMAP_N_LONGS(MAX_CT_ZONES)];
 
-    struct shash_node *shash_node;
-    SHASH_FOR_EACH (shash_node, binding_lports) {
-        sset_add(&all_users, shash_node->name);
-    }
-
     /* Local patched datapath (gateway routers) need zones assigned. */
     struct shash all_lds = SHASH_INITIALIZER(&all_lds);
     const struct local_datapath *ld;
     HMAP_FOR_EACH (ld, hmap_node, local_datapaths) {
         /* XXX Add method to limit zone assignment to logical router
          * datapaths with NAT */
+        char *ct = alloc_nat_zone_key(&ld->datapath->header_.uuid, "ct");
         char *dnat = alloc_nat_zone_key(&ld->datapath->header_.uuid, "dnat");
         char *snat = alloc_nat_zone_key(&ld->datapath->header_.uuid, "snat");
+        sset_add(&all_users, ct);
         sset_add(&all_users, dnat);
         sset_add(&all_users, snat);
         shash_add(&all_lds, dnat, ld);
@@ -669,6 +666,7 @@ update_ct_zones(const struct shash *binding_lports,
         if (req_snat_zone >= 0) {
             simap_put(&req_snat_zones, snat, req_snat_zone);
         }
+        free(ct);
         free(dnat);
         free(snat);
     }
@@ -731,11 +729,9 @@ update_ct_zones(const struct shash *binding_lports,
         simap_put(ct_zones, snat_req_node->name, snat_req_node->data);
     }
 
-    /* xxx This is wasteful to assign a zone to each port--even if no
-     * xxx security policy is applied. */
-
-    /* Assign a unique zone id for each logical port and two zones
-     * to a gateway router. */
+    /* Assign a unique zone id for conntrack/snat/dnat for each logical
+     * datapath.
+     */
     SSET_FOR_EACH(user, &all_users) {
         if (simap_contains(ct_zones, user)) {
             continue;
@@ -1879,7 +1875,7 @@ ct_zones_datapath_binding_handler(struct engine_node *node, void *data)
 }
 
 static bool
-ct_zones_runtime_data_handler(struct engine_node *node, void *data)
+ct_zones_runtime_data_handler(struct engine_node *node, void *data OVS_UNUSED)
 {
     struct ed_type_runtime_data *rt_data =
         engine_get_input_data("runtime_data", node);
@@ -1889,54 +1885,14 @@ ct_zones_runtime_data_handler(struct engine_node *node, void *data)
         return false;
     }
 
-    struct ed_type_ct_zones *ct_zones_data = data;
-
     struct hmap *tracked_dp_bindings = &rt_data->tracked_dp_bindings;
     struct tracked_datapath *tdp;
-    int scan_start = 0;
-
     bool updated = false;
 
     HMAP_FOR_EACH (tdp, node, tracked_dp_bindings) {
         if (tdp->tracked_type == TRACKED_RESOURCE_NEW) {
             /* A new datapath has been added. Fall back to full recompute. */
             return false;
-        }
-
-        struct shash_node *shash_node;
-        SHASH_FOR_EACH (shash_node, &tdp->lports) {
-            struct tracked_lport *t_lport = shash_node->data;
-            if (strcmp(t_lport->pb->type, "")
-                && strcmp(t_lport->pb->type, "localport")) {
-                /* We allocate zone-id's only to VIF and localport lports. */
-                continue;
-            }
-
-            if (t_lport->tracked_type == TRACKED_RESOURCE_NEW) {
-                if (!simap_contains(&ct_zones_data->current,
-                                    t_lport->pb->logical_port)) {
-                    alloc_id_to_ct_zone(t_lport->pb->logical_port,
-                                        &ct_zones_data->current,
-                                        ct_zones_data->bitmap, &scan_start,
-                                        &ct_zones_data->pending);
-                    updated = true;
-                }
-            } else if (t_lport->tracked_type == TRACKED_RESOURCE_REMOVED) {
-                struct simap_node *ct_zone =
-                    simap_find(&ct_zones_data->current,
-                               t_lport->pb->logical_port);
-                if (ct_zone) {
-                    add_pending_ct_zone_entry(
-                        &ct_zones_data->pending, CT_ZONE_DB_QUEUED,
-                        ct_zone->data, false, ct_zone->name);
-
-                    bitmap_set0(ct_zones_data->bitmap, ct_zone->data);
-                    simap_delete(&ct_zones_data->current, ct_zone);
-                    updated = true;
-                }
-            } else {
-                OVS_NOT_REACHED();
-            }
         }
     }
 

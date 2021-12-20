@@ -194,10 +194,11 @@ get_zone_ids(const struct sbrec_port_binding *binding,
              const struct simap *ct_zones)
 {
     struct zone_ids zone_ids;
-
-    zone_ids.ct = simap_get(ct_zones, binding->logical_port);
-
     const struct uuid *key = &binding->datapath->header_.uuid;
+
+    char *ct = alloc_nat_zone_key(key, "ct");
+    zone_ids.ct = simap_get(ct_zones, ct);
+    free(ct);
 
     char *dnat = alloc_nat_zone_key(key, "dnat");
     zone_ids.dnat = simap_get(ct_zones, dnat);
