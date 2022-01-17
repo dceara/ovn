@@ -11078,6 +11078,20 @@ build_mcast_lookup_flows_for_lrouter(
          * ports. Otherwise drop any multicast traffic.
          */
         if (od->mcast_info.rtr.flood_static) {
+            //TODO: add flows to drop IGMP or MLD packets originated with
+            //the router's mac address
+            ovn_lflow_add(lflows, od, S_ROUTER_IN_IP_ROUTING, 10460,
+                          "ip4 && ip.proto == 2",
+                          "clone { "
+                                "outport = \""MC_STATIC"\"; "
+                                "next; "
+                          "};");
+            ovn_lflow_add(lflows, od, S_ROUTER_IN_IP_ROUTING, 10460,
+                          "mldv1 || mldv2",
+                          "clone { "
+                                "outport = \""MC_STATIC"\"; "
+                                "next; "
+                          "};");
             ovn_lflow_add(lflows, od, S_ROUTER_IN_IP_ROUTING, 10450,
                           "ip4.mcast || ip6.mcast",
                           "clone { "
@@ -11850,6 +11864,14 @@ build_misc_local_traffic_drop_flows_for_lrouter(
         struct ovn_datapath *od, struct hmap *lflows)
 {
     if (od->nbr) {
+        //TODO: comment
+        if (od->mcast_info.rtr.flood_static) {
+            ovn_lflow_add(lflows, od, S_ROUTER_IN_IP_INPUT, 120,
+                          "ip4 && ip.proto == 2", "next;");
+            ovn_lflow_add(lflows, od, S_ROUTER_IN_IP_INPUT, 120,
+                          "mldv1 || mldv2", "next;");
+        }
+
         /* L3 admission control: drop multicast and broadcast source, localhost
          * source or destination, and zero network source or destination
          * (priority 100). */
