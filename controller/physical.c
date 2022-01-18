@@ -1433,6 +1433,8 @@ consider_mc_group(struct ovsdb_idl_index *sbrec_port_binding_by_name,
     match_set_metadata(&match, htonll(dp_key));
     match_set_reg(&match, MFF_LOG_OUTPORT - MFF_REG0, mc->tunnel_key);
 
+    bool dp_is_transit_switch = smap_get(&mc->datapath->external_ids, "interconn-ts") != NULL;
+
     /* Go through all of the ports in the multicast group:
      *
      *    - For remote ports, add the chassis to 'remote_chassis' or
@@ -1473,13 +1475,20 @@ consider_mc_group(struct ovsdb_idl_index *sbrec_port_binding_by_name,
         const char *lport_name = (port->parent_port && *port->parent_port) ?
                                   port->parent_port : port->logical_port;
 
-        if (!strcmp(port->type, "patch") || !strcmp(port->type, "localport")) {
+        if (!strcmp(port->type, "patch")) {
+            //TODO: comment
+            if (dp_is_transit_switch) {
+                put_load(port->tunnel_key, MFF_LOG_OUTPORT, 0, 32, &ofpacts);
+                put_resubmit(OFTABLE_CHECK_LOOPBACK, &ofpacts);
+            } else {
+                put_load(port->tunnel_key, MFF_LOG_OUTPORT, 0, 32,
+                         &remote_ofpacts);
+                put_resubmit(OFTABLE_CHECK_LOOPBACK, &remote_ofpacts);
+            }
+        } else if (!strcmp(port->type, "localport")) {
             put_load(port->tunnel_key, MFF_LOG_OUTPORT, 0, 32,
                      &remote_ofpacts);
             put_resubmit(OFTABLE_CHECK_LOOPBACK, &remote_ofpacts);
-        } else if (!strcmp(port->type, "remote")) {
-            put_load(port->tunnel_key, MFF_LOG_OUTPORT, 0, 32, &ofpacts);
-            put_resubmit(OFTABLE_CHECK_LOOPBACK, &ofpacts);
         } else if (port->chassis == chassis
                    && (local_binding_get_primary_pb(local_bindings, lport_name)
                        || !strcmp(port->type, "l3gateway"))) {
