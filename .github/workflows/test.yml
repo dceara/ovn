@@ -54,26 +54,18 @@ jobs:
             opts:         --disable-ssl
 
     steps:
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v2
-      with:
-        submodules: recursive
-
     # For weekly runs, don't update submodules
     - name: checkout without submodule
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v2
 
     # Weekly runs test using OVS master instead of the
     # submodule.
     - name: checkout OVS master
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v2
       with:
-        repository: 'openvswitch/ovs'
+        repository: 'dceara/ovs'
         path: 'ovs'
-        ref: 'master'
+        ref: 'fix-idl-try-commit'
 
     - name: update APT cache
       run:  sudo apt update
