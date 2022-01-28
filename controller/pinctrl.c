@@ -1666,6 +1666,7 @@ pinctrl_handle_icmp(struct rconn *swconn, const struct flow *ip_flow,
         }
 
         struct icmp_header *ih = dp_packet_l4(&packet);
+        ih->icmp_csum = 0;
         packet_set_icmp(&packet, ICMP4_DST_UNREACH, icmp_code);
 
         /* Include original IP + data. */
