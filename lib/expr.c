@@ -260,9 +260,9 @@ expr_not(struct expr *expr)
 static struct expr *
 expr_fix_andor(struct expr *expr, bool short_circuit)
 {
-    struct expr *sub, *next;
+    struct expr *sub;
 
-    LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+    LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
         if (sub->type == EXPR_T_BOOLEAN) {
             if (sub->boolean == short_circuit) {
                 expr_destroy(expr);
@@ -1147,9 +1147,9 @@ expr_const_sets_remove(struct shash *const_sets, const char *name)
 void
 expr_const_sets_destroy(struct shash *const_sets)
 {
-    struct shash_node *node, *next;
+    struct shash_node *node;
 
-    SHASH_FOR_EACH_SAFE (node, next, const_sets) {
+    SHASH_FOR_EACH_SAFE (node, const_sets) {
         struct expr_constant_set *cs = node->data;
 
         shash_delete(const_sets, node);
@@ -1691,9 +1691,9 @@ expr_symtab_add_ovn_field(struct shash *symtab, const char *name,
 void
 expr_symtab_destroy(struct shash *symtab)
 {
-    struct shash_node *node, *next;
+    struct shash_node *node;
 
-    SHASH_FOR_EACH_SAFE (node, next, symtab) {
+    SHASH_FOR_EACH_SAFE (node, symtab) {
         struct expr_symbol *symbol = node->data;
 
         shash_delete(symtab, node);
@@ -1767,7 +1767,7 @@ expr_destroy(struct expr *expr)
         return;
     }
 
-    struct expr *sub, *next;
+    struct expr *sub;
 
     switch (expr->type) {
     case EXPR_T_CMP:
@@ -1778,7 +1778,7 @@ expr_destroy(struct expr *expr)
 
     case EXPR_T_AND:
     case EXPR_T_OR:
-        LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+        LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
             ovs_list_remove(&sub->node);
             expr_destroy(sub);
         }
@@ -1928,7 +1928,7 @@ expr_annotate__(struct expr *expr, const struct shash *symtab,
 
     case EXPR_T_AND:
     case EXPR_T_OR: {
-        struct expr *sub, *next;
+        struct expr *sub;
 
         /* Detect whether every term in 'expr' mentions the same symbol.  If
          * so, then suppress prerequisites for that symbol for those terms and
@@ -1947,7 +1947,9 @@ expr_annotate__(struct expr *expr, const struct shash *symtab,
             }
         }
 
-        LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+        LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
+            struct expr *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                             struct expr, node);
             ovs_list_remove(&sub->node);
             struct expr *new_sub = expr_annotate__(sub, symtab, append_prereqs,
                                                    nesting, errorp);
@@ -2145,12 +2147,14 @@ expr_evaluate_condition(struct expr *expr,
                                                     const char *port_name),
                         const void *c_aux)
 {
-    struct expr *sub, *next;
+    struct expr *sub;
 
     switch (expr->type) {
     case EXPR_T_AND:
     case EXPR_T_OR:
-         LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+         LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
+            struct expr *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                             struct expr, node);
             ovs_list_remove(&sub->node);
             struct expr *e = expr_evaluate_condition(sub, is_chassis_resident,
                                                      c_aux);
@@ -2175,7 +2179,7 @@ expr_evaluate_condition(struct expr *expr,
 struct expr *
 expr_simplify(struct expr *expr)
 {
-    struct expr *sub, *next;
+    struct expr *sub;
 
     switch (expr->type) {
     case EXPR_T_CMP:
@@ -2186,7 +2190,9 @@ expr_simplify(struct expr *expr)
 
     case EXPR_T_AND:
     case EXPR_T_OR:
-        LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+        LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
+            struct expr *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                             struct expr, node);
             ovs_list_remove(&sub->node);
             expr_insert_andor(expr, next, expr_simplify(sub));
         }
@@ -2296,8 +2302,10 @@ crush_and_string(struct expr *expr, const struct expr_symbol *symbol)
 
     /* First crush each subexpression into either a single EXPR_T_CMP or an
      * EXPR_T_OR with EXPR_T_CMP subexpressions. */
-    struct expr *sub, *next = NULL;
-    LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+    struct expr *sub;
+    LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
+        struct expr *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                         struct expr, node);
         ovs_list_remove(&sub->node);
         struct expr *new = crush_cmps(sub, symbol);
         switch (new->type) {
@@ -2348,7 +2356,7 @@ crush_and_string(struct expr *expr, const struct expr_symbol *symbol)
 
     /* Otherwise the result is the intersection of all of the ORs. */
     struct sset result = SSET_INITIALIZER(&result);
-    LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+    LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
         struct sset strings = SSET_INITIALIZER(&strings);
         const struct expr *s;
         LIST_FOR_EACH (s, node, &sub->andor) {
@@ -2395,8 +2403,10 @@ crush_and_numeric(struct expr *expr, const struct expr_symbol *symbol)
     memset(&value, 0, sizeof value);
     memset(&mask, 0, sizeof mask);
 
-    struct expr *sub, *next = NULL;
-    LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+    struct expr *sub;
+    LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
+        struct expr *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                         struct expr, node);
         ovs_list_remove(&sub->node);
         struct expr *new = crush_cmps(sub, symbol);
         switch (new->type) {
@@ -2452,7 +2462,7 @@ crush_and_numeric(struct expr *expr, const struct expr_symbol *symbol)
         ovs_list_init(&or->andor);
 
         ovs_assert(disjuncts->type == EXPR_T_OR);
-        LIST_FOR_EACH_SAFE (sub, next, node, &disjuncts->andor) {
+        LIST_FOR_EACH_SAFE (sub, node, &disjuncts->andor) {
             ovs_assert(sub->type == EXPR_T_CMP);
             ovs_list_remove(&sub->node);
             if (mf_subvalue_intersect(&value, &mask,
@@ -2572,12 +2582,14 @@ compare_cmps_cb(const void *a_, const void *b_)
 static struct expr *
 crush_or(struct expr *expr, const struct expr_symbol *symbol)
 {
-    struct expr *sub, *next = NULL;
+    struct expr *sub;
 
     /* First, crush all the subexpressions.  That might eliminate the
      * OR-expression entirely; if so, return the result.  Otherwise, 'expr'
      * is now a disjunction of cmps over the same symbol. */
-    LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+    LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
+        struct expr *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                         struct expr, node);
         ovs_list_remove(&sub->node);
         expr_insert_andor(expr, next, crush_cmps(sub, symbol));
     }
@@ -2735,8 +2747,11 @@ expr_normalize_and(struct expr *expr)
         return expr;
     }
 
-    struct expr *a, *b;
-    LIST_FOR_EACH_SAFE (a, b, node, &expr->andor) {
+    struct expr *a;
+    LIST_FOR_EACH_SAFE (a, node, &expr->andor) {
+        struct expr *b = CONTAINER_OF(ovs_list_front(&a->node),
+                                      struct expr, node);
+
         if (&b->node == &expr->andor
             || a->type != EXPR_T_CMP || b->type != EXPR_T_CMP
             || a->cmp.symbol != b->cmp.symbol) {
@@ -2801,9 +2816,11 @@ expr_normalize_and(struct expr *expr)
 static struct expr *
 expr_normalize_or(struct expr *expr)
 {
-    struct expr *sub, *next;
+    struct expr *sub;
 
-    LIST_FOR_EACH_SAFE (sub, next, node, &expr->andor) {
+    LIST_FOR_EACH_SAFE (sub, node, &expr->andor) {
+        struct expr *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                         struct expr, node);
         if (sub->type == EXPR_T_AND) {
             ovs_list_remove(&sub->node);
 

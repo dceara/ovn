@@ -104,8 +104,8 @@ uint32_t ovn_extend_table_assign_id(struct ovn_extend_table *,
 /* Iterates 'EXISTING' through all of the 'ovn_extend_table_info's in
  * 'TABLE'->existing that are not in 'TABLE'->desired.  (The loop body
  * presumably removes them.) */
-#define EXTEND_TABLE_FOR_EACH_INSTALLED(EXISTING, NEXT, TABLE)         \
-    HMAP_FOR_EACH_SAFE (EXISTING, NEXT, hmap_node, &(TABLE)->existing) \
+#define EXTEND_TABLE_FOR_EACH_INSTALLED(EXISTING, TABLE)         \
+    HMAP_FOR_EACH_SAFE (EXISTING, hmap_node, &(TABLE)->existing) \
         if (!ovn_extend_table_lookup(&(TABLE)->desired, EXISTING))
 
 #endif /* lib/extend-table.h */

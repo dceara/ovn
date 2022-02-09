@@ -1329,9 +1329,9 @@ static void
 ovntrace_node_list_destroy(struct ovs_list *list)
 {
     if (list) {
-        struct ovntrace_node *node, *next;
+        struct ovntrace_node *node;
 
-        LIST_FOR_EACH_SAFE (node, next, node, list) {
+        LIST_FOR_EACH_SAFE (node, node, list) {
             ovs_list_remove(&node->node);
             ovntrace_node_destroy(node);
         }
@@ -1381,8 +1381,11 @@ ovntrace_node_print_details(struct ds *output,
 static void
 ovntrace_node_prune_summary(struct ovs_list *nodes)
 {
-    struct ovntrace_node *sub, *next;
-    LIST_FOR_EACH_SAFE (sub, next, node, nodes) {
+    struct ovntrace_node *sub;
+    LIST_FOR_EACH_SAFE (sub, node, nodes) {
+        struct ovntrace_node *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                                  struct ovntrace_node, node);
+
         ovntrace_node_prune_summary(&sub->subs);
         if (sub->type == OVNTRACE_NODE_MODIFY ||
             sub->type == OVNTRACE_NODE_TABLE) {
@@ -1423,8 +1426,10 @@ ovntrace_node_print_summary(struct ds *output, const struct ovs_list *nodes,
 static void
 ovntrace_node_prune_hard(struct ovs_list *nodes)
 {
-    struct ovntrace_node *sub, *next;
-    LIST_FOR_EACH_SAFE (sub, next, node, nodes) {
+    struct ovntrace_node *sub;
+    LIST_FOR_EACH_SAFE (sub, node, nodes) {
+        struct ovntrace_node *next = CONTAINER_OF(ovs_list_front(&sub->node),
+                                                  struct ovntrace_node, node);
         ovntrace_node_prune_hard(&sub->subs);
         if (sub->type == OVNTRACE_NODE_ACTION ||
             sub->type == OVNTRACE_NODE_PIPELINE ||

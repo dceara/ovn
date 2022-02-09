@@ -1476,7 +1476,7 @@ build_datapaths(struct northd_input *input_data,
 
     /* Assign explicitly requested tunnel ids first. */
     struct hmap dp_tnlids = HMAP_INITIALIZER(&dp_tnlids);
-    struct ovn_datapath *od, *next;
+    struct ovn_datapath *od;
     LIST_FOR_EACH (od, list, &both) {
         ovn_datapath_assign_requested_tnl_id(input_data, &dp_tnlids, od);
     }
@@ -1493,11 +1493,11 @@ build_datapaths(struct northd_input *input_data,
 
     /* Assign new tunnel ids where needed. */
     uint32_t hint = 0;
-    LIST_FOR_EACH_SAFE (od, next, list, &both) {
+    LIST_FOR_EACH_SAFE (od, list, &both) {
         ovn_datapath_allocate_key(input_data,
                                   datapaths, &dp_tnlids, od, &hint);
     }
-    LIST_FOR_EACH_SAFE (od, next, list, &nb_only) {
+    LIST_FOR_EACH_SAFE (od, list, &nb_only) {
         ovn_datapath_allocate_key(input_data,
                                   datapaths, &dp_tnlids, od, &hint);
     }
@@ -1517,7 +1517,7 @@ build_datapaths(struct northd_input *input_data,
     ovn_destroy_tnlids(&dp_tnlids);
 
     /* Delete southbound records without northbound matches. */
-    LIST_FOR_EACH_SAFE (od, next, list, &sb_only) {
+    LIST_FOR_EACH_SAFE (od, list, &sb_only) {
         ovs_list_remove(&od->list);
         sbrec_datapath_binding_delete(od->sb);
         ovn_datapath_destroy(datapaths, od);
@@ -2977,8 +2977,8 @@ chassis_group_list_changed(
         }
     }
 
-    struct shash_node *node, *next;
-    SHASH_FOR_EACH_SAFE (node, next, &nb_ha_chassis_list) {
+    struct shash_node *node;
+    SHASH_FOR_EACH_SAFE (node, &nb_ha_chassis_list) {
         shash_delete(&nb_ha_chassis_list, node);
         changed = true;
     }
@@ -4122,7 +4122,7 @@ build_ports(struct northd_input *input_data,
     bool remove_mac_bindings = !ovs_list_is_empty(&sb_only);
 
     /* Assign explicitly requested tunnel ids first. */
-    struct ovn_port *op, *next;
+    struct ovn_port *op;
     LIST_FOR_EACH (op, list, &both) {
         ovn_port_assign_requested_tnl_id(input_data, op);
     }
@@ -4138,10 +4138,10 @@ build_ports(struct northd_input *input_data,
     }
 
     /* Assign new tunnel ids where needed. */
-    LIST_FOR_EACH_SAFE (op, next, list, &both) {
+    LIST_FOR_EACH_SAFE (op, list, &both) {
         ovn_port_allocate_key(input_data, ports, op);
     }
-    LIST_FOR_EACH_SAFE (op, next, list, &nb_only) {
+    LIST_FOR_EACH_SAFE (op, list, &nb_only) {
         ovn_port_allocate_key(input_data, ports, op);
     }
 
@@ -4149,7 +4149,7 @@ build_ports(struct northd_input *input_data,
      * record based on northbound data.
      * For logical ports that are in NB database, do any tag allocation
      * needed. */
-    LIST_FOR_EACH_SAFE (op, next, list, &both) {
+    LIST_FOR_EACH_SAFE (op, list, &both) {
         /* When reusing stale Port_Bindings, make sure that stale
          * Mac_Bindings are purged.
          */
@@ -4167,7 +4167,7 @@ build_ports(struct northd_input *input_data,
     }
 
     /* Add southbound record for each unmatched northbound record. */
-    LIST_FOR_EACH_SAFE (op, next, list, &nb_only) {
+    LIST_FOR_EACH_SAFE (op, list, &nb_only) {
         op->sb = sbrec_port_binding_insert(ovnsb_txn);
         ovn_port_update_sbrec(input_data,
                               ovnsb_txn, sbrec_chassis_by_name,
@@ -4179,7 +4179,7 @@ build_ports(struct northd_input *input_data,
 
     /* Delete southbound records without northbound matches. */
     if (!ovs_list_is_empty(&sb_only)) {
-        LIST_FOR_EACH_SAFE (op, next, list, &sb_only) {
+        LIST_FOR_EACH_SAFE (op, list, &sb_only) {
             ovs_list_remove(&op->list);
             sbrec_port_binding_delete(op->sb);
             ovn_port_destroy(ports, op);
@@ -8973,8 +8973,8 @@ parsed_routes_add(struct ovn_datapath *od, const struct hmap *ports,
 static void
 parsed_routes_destroy(struct ovs_list *routes)
 {
-    struct parsed_route *pr, *next;
-    LIST_FOR_EACH_SAFE (pr, next, list_node, routes) {
+    struct parsed_route *pr;
+    LIST_FOR_EACH_SAFE (pr, list_node, routes) {
         ovs_list_remove(&pr->list_node);
         free(pr);
     }
@@ -9057,10 +9057,10 @@ ecmp_groups_find(struct hmap *ecmp_groups, struct parsed_route *route)
 static void
 ecmp_groups_destroy(struct hmap *ecmp_groups)
 {
-    struct ecmp_groups_node *eg, *next;
-    HMAP_FOR_EACH_SAFE (eg, next, hmap_node, ecmp_groups) {
-        struct ecmp_route_list_node *er, *er_next;
-        LIST_FOR_EACH_SAFE (er, er_next, list_node, &eg->route_list) {
+    struct ecmp_groups_node *eg;
+    HMAP_FOR_EACH_SAFE (eg, hmap_node, ecmp_groups) {
+        struct ecmp_route_list_node *er;
+        LIST_FOR_EACH_SAFE (er, list_node, &eg->route_list) {
             ovs_list_remove(&er->list_node);
             free(er);
         }
@@ -9108,8 +9108,8 @@ unique_routes_remove(struct hmap *unique_routes,
 static void
 unique_routes_destroy(struct hmap *unique_routes)
 {
-    struct unique_routes_node *ur, *next;
-    HMAP_FOR_EACH_SAFE (ur, next, hmap_node, unique_routes) {
+    struct unique_routes_node *ur;
+    HMAP_FOR_EACH_SAFE (ur, hmap_node, unique_routes) {
         hmap_remove(unique_routes, &ur->hmap_node);
         free(ur);
     }
@@ -13785,9 +13785,9 @@ void build_lflows(struct lflow_input *input_data,
      */
     fast_hmap_size_for(&single_dp_lflows, max_seen_lflow_size);
 
-    struct ovn_lflow *lflow, *next_lflow;
+    struct ovn_lflow *lflow;
     struct hmapx_node *node;
-    HMAP_FOR_EACH_SAFE (lflow, next_lflow, hmap_node, &lflows) {
+    HMAP_FOR_EACH_SAFE (lflow, hmap_node, &lflows) {
         uint32_t hash;
         struct ovn_dp_group *dpg;
 
@@ -13962,7 +13962,7 @@ void build_lflows(struct lflow_input *input_data,
     }
 
     stopwatch_stop(LFLOWS_DP_GROUPS_STOPWATCH_NAME, time_msec());
-    HMAP_FOR_EACH_SAFE (lflow, next_lflow, hmap_node, &lflows) {
+    HMAP_FOR_EACH_SAFE (lflow, hmap_node, &lflows) {
         const char *pipeline = ovn_stage_get_pipeline_name(lflow->stage);
         uint8_t table = ovn_stage_get_table(lflow->stage);
 
@@ -14040,8 +14040,8 @@ void build_lflows(struct lflow_input *input_data,
             sbrec_multicast_group_delete(sbmc);
         }
     }
-    struct ovn_multicast *mc, *next_mc;
-    HMAP_FOR_EACH_SAFE (mc, next_mc, hmap_node, &mcast_groups) {
+    struct ovn_multicast *mc;
+    HMAP_FOR_EACH_SAFE (mc, hmap_node, &mcast_groups) {
         if (!mc->datapath) {
             ovn_multicast_destroy(&mcast_groups, mc);
             continue;
@@ -14054,10 +14054,9 @@ void build_lflows(struct lflow_input *input_data,
         ovn_multicast_destroy(&mcast_groups, mc);
     }
 
-    struct ovn_igmp_group *igmp_group, *next_igmp_group;
+    struct ovn_igmp_group *igmp_group;
 
-    HMAP_FOR_EACH_SAFE (igmp_group, next_igmp_group, hmap_node,
-                    &igmp_groups) {
+    HMAP_FOR_EACH_SAFE (igmp_group, hmap_node, &igmp_groups) {
         ovn_igmp_group_destroy(&igmp_groups, igmp_group);
     }
 
@@ -14185,8 +14184,8 @@ sync_address_sets(struct northd_input *input_data,
             nb_address_set->n_addresses, &sb_address_sets);
     }
 
-    struct shash_node *node, *next;
-    SHASH_FOR_EACH_SAFE (node, next, &sb_address_sets) {
+    struct shash_node *node;
+    SHASH_FOR_EACH_SAFE (node, &sb_address_sets) {
         sbrec_address_set_delete(node->data);
         shash_delete(&sb_address_sets, node);
     }
@@ -14239,8 +14238,8 @@ sync_port_groups(struct northd_input *input_data,
     }
     ds_destroy(&sb_name);
 
-    struct shash_node *node, *next;
-    SHASH_FOR_EACH_SAFE (node, next, &sb_port_groups) {
+    struct shash_node *node;
+    SHASH_FOR_EACH_SAFE (node, &sb_port_groups) {
         sbrec_port_group_delete(node->data);
         shash_delete(&sb_port_groups, node);
     }
@@ -14429,8 +14428,8 @@ sync_meters(struct northd_input *input_data,
     }
     sset_destroy(&used_sb_meters);
 
-    struct shash_node *node, *next;
-    SHASH_FOR_EACH_SAFE (node, next, &sb_meters) {
+    struct shash_node *node;
+    SHASH_FOR_EACH_SAFE (node, &sb_meters) {
         sbrec_meter_delete(node->data);
         shash_delete(&sb_meters, node);
     }
@@ -14573,14 +14572,14 @@ destroy_datapaths_and_ports(struct hmap *datapaths, struct hmap *ports,
         }
     }
 
-    struct ovn_datapath *dp, *next_dp;
-    HMAP_FOR_EACH_SAFE (dp, next_dp, key_node, datapaths) {
+    struct ovn_datapath *dp;
+    HMAP_FOR_EACH_SAFE (dp, key_node, datapaths) {
         ovn_datapath_destroy(datapaths, dp);
     }
     hmap_destroy(datapaths);
 
-    struct ovn_port *port, *next_port;
-    HMAP_FOR_EACH_SAFE (port, next_port, key_node, ports) {
+    struct ovn_port *port;
+    HMAP_FOR_EACH_SAFE (port, key_node, ports) {
         ovn_port_destroy(ports, port);
     }
     hmap_destroy(ports);
@@ -14781,8 +14780,8 @@ build_mcast_groups(struct lflow_input *input_data,
     /* Walk the aggregated IGMP groups and allocate IDs for new entries.
      * Then store the ports in the associated multicast group.
      */
-    struct ovn_igmp_group *igmp_group, *igmp_group_next;
-    HMAP_FOR_EACH_SAFE (igmp_group, igmp_group_next, hmap_node, igmp_groups) {
+    struct ovn_igmp_group *igmp_group;
+    HMAP_FOR_EACH_SAFE (igmp_group, hmap_node, igmp_groups) {
 
         if (!ovn_igmp_group_allocate_id(igmp_group)) {
             /* If we ran out of keys just destroy the entry. */
@@ -14829,16 +14828,16 @@ northd_destroy(struct northd_data *data)
     }
     hmap_destroy(&data->lbs);
 
-    struct ovn_port_group *pg, *next_pg;
-    HMAP_FOR_EACH_SAFE (pg, next_pg, key_node, &data->port_groups) {
+    struct ovn_port_group *pg;
+    HMAP_FOR_EACH_SAFE (pg, key_node, &data->port_groups) {
         ovn_port_group_destroy(&data->port_groups, pg);
     }
 
     hmap_destroy(&data->port_groups);
     hmap_destroy(&data->bfd_connections);
 
-    struct shash_node *node, *next;
-    SHASH_FOR_EACH_SAFE (node, next, &data->meter_groups) {
+    struct shash_node *node;
+    SHASH_FOR_EACH_SAFE (node, &data->meter_groups) {
         shash_delete(&data->meter_groups, node);
     }
     shash_destroy(&data->meter_groups);
@@ -15031,8 +15030,8 @@ update_sb_ha_group_ref_chassis(struct northd_input *input_data,
     }
 
     /* Update each group and remove it from the set. */
-    struct shash_node *node, *next;
-    SHASH_FOR_EACH_SAFE (node, next, ha_ref_chassis_map) {
+    struct shash_node *node;
+    SHASH_FOR_EACH_SAFE (node, ha_ref_chassis_map) {
         struct ha_ref_chassis_info *ha_ref_info = node->data;
         sbrec_ha_chassis_group_set_ref_chassis(ha_ref_info->ha_chassis_group,
                                                ha_ref_info->ref_chassis,
@@ -15055,9 +15054,7 @@ update_sb_ha_group_ref_chassis(struct northd_input *input_data,
 
     /* Now the rest of the groups don't have any ref-chassis, so clear the SB
      * field for those records. */
-    struct ha_chassis_group_node *ha_ch_grp_next;
-    HMAP_FOR_EACH_SAFE (ha_ch_grp_node, ha_ch_grp_next, hmap_node,
-                        &ha_ch_grps) {
+    HMAP_FOR_EACH_SAFE (ha_ch_grp_node, hmap_node, &ha_ch_grps) {
         sbrec_ha_chassis_group_set_ref_chassis(ha_ch_grp_node->ha_ch_grp,
                                                NULL, 0);
         hmap_remove(&ha_ch_grps, &ha_ch_grp_node->hmap_node);
