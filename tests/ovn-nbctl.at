@@ -904,6 +904,10 @@ UUID                                    LB                  PROTO      VIP      
 
 dnl Add load balancer to logical switch.
 AT_CHECK([ovn-nbctl ls-add ls0])
+AT_CHECK([ovn-nbctl ls-add ls1])
+AT_CHECK([ovn-nbctl create load_balancer_group name="lbg"], [0], [ignore])
+lbg=$(fetch_column nb:load_balancer_group _uuid name="lbg")
+AT_CHECK([ovn-nbctl set logical_switch ls1 load_balancer_group=$lbg])
 AT_CHECK([ovn-nbctl lb-add lb0 30.0.0.10:80 192.168.10.10:80,192.168.10.20:80])
 AT_CHECK([ovn-nbctl lb-add lb1 30.0.0.10:80 192.168.10.10:80,192.168.10.20:80 udp])
 AT_CHECK([ovn-nbctl lb-add lb3 30.0.0.10 192.168.10.10,192.168.10.20])
@@ -914,6 +918,12 @@ AT_CHECK([ovn-nbctl ls-lb-add ls0 lb2], [1], [],
 [ovn-nbctl: Multiple load balancers named 'lb2'.  Use a UUID.
 ])
 AT_CHECK([ovn-nbctl ls-lb-add ls0 lb3])
+lb0=$(fetch_column nb:load_balancer _uuid name="lb0")
+lb1=$(fetch_column nb:load_balancer _uuid name="lb1")
+lb2=$(fetch_column nb:load_balancer _uuid name="lb2")
+AT_CHECK([ovn-nbctl add load_balancer_group $lbg load_balancer $lb0])
+AT_CHECK([ovn-nbctl add load_balancer_group $lbg load_balancer $lb1])
+AT_CHECK([ovn-nbctl add load_balancer_group $lbg load_balancer $lb2])
 
 AT_CHECK([ovn-nbctl ls-lb-list ls0 | uuidfilt], [0], [dnl
 UUID                                    LB                  PROTO      VIP             IPs

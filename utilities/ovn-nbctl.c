@@ -3216,10 +3216,14 @@ nbctl_pre_lr_lb_list(struct ctl_context *ctx)
 {
     ovsdb_idl_add_column(ctx->idl, &nbrec_logical_router_col_name);
     ovsdb_idl_add_column(ctx->idl, &nbrec_logical_router_col_load_balancer);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_logical_router_col_load_balancer_group);
 
     ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_col_name);
     ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_col_protocol);
     ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_col_vips);
+
+    ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_group_col_name);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_group_col_load_balancer);
 }
 
 static void
@@ -3235,15 +3239,36 @@ nbctl_lr_lb_list(struct ctl_context *ctx)
         ctx->error = error;
         return;
     }
-    for (int i = 0; i < lr->n_load_balancer; i++) {
+    for (size_t i = 0; i < lr->n_load_balancer; i++) {
         const struct nbrec_load_balancer *lb
             = lr->load_balancer[i];
         vip_width = lb_get_max_vip_length(lb, vip_width);
     }
-    for (int i = 0; i < lr->n_load_balancer; i++) {
+    for (size_t i = 0; i < lr->n_load_balancer_group; i++) {
+        const struct nbrec_load_balancer_group *lbg
+            = lr->load_balancer_group[i];
+
+        for (size_t j = 0; j < lbg->n_load_balancer; j++) {
+            const struct nbrec_load_balancer *lb
+                = lbg->load_balancer[j];
+            vip_width = lb_get_max_vip_length(lb, vip_width);
+        }
+    }
+
+    for (size_t i = 0; i < lr->n_load_balancer; i++) {
         const struct nbrec_load_balancer *lb
             = lr->load_balancer[i];
         lb_info_add_smap(lb, &lbs, vip_width);
+    }
+    for (size_t i = 0; i < lr->n_load_balancer_group; i++) {
+        const struct nbrec_load_balancer_group *lbg
+            = lr->load_balancer_group[i];
+
+        for (size_t j = 0; j < lbg->n_load_balancer; j++) {
+            const struct nbrec_load_balancer *lb
+                = lbg->load_balancer[j];
+            lb_info_add_smap(lb, &lbs, vip_width);
+        }
     }
 
     lb_info_print(ctx, &lbs, vip_width);
@@ -3352,10 +3377,14 @@ nbctl_pre_ls_lb_list(struct ctl_context *ctx)
 {
     ovsdb_idl_add_column(ctx->idl, &nbrec_logical_switch_col_name);
     ovsdb_idl_add_column(ctx->idl, &nbrec_logical_switch_col_load_balancer);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_logical_switch_col_load_balancer_group);
 
     ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_col_name);
     ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_col_protocol);
     ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_col_vips);
+
+    ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_group_col_name);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_load_balancer_group_col_load_balancer);
 }
 
 static void
@@ -3371,15 +3400,36 @@ nbctl_ls_lb_list(struct ctl_context *ctx)
         ctx->error = error;
         return;
     }
-    for (int i = 0; i < ls->n_load_balancer; i++) {
+    for (size_t i = 0; i < ls->n_load_balancer; i++) {
         const struct nbrec_load_balancer *lb
             = ls->load_balancer[i];
         vip_width = lb_get_max_vip_length(lb, vip_width);
     }
-    for (int i = 0; i < ls->n_load_balancer; i++) {
+    for (size_t i = 0; i < ls->n_load_balancer_group; i++) {
+        const struct nbrec_load_balancer_group *lbg
+            = ls->load_balancer_group[i];
+
+        for (size_t j = 0; j < lbg->n_load_balancer; j++) {
+            const struct nbrec_load_balancer *lb
+                = lbg->load_balancer[j];
+            vip_width = lb_get_max_vip_length(lb, vip_width);
+        }
+    }
+
+    for (size_t i = 0; i < ls->n_load_balancer; i++) {
         const struct nbrec_load_balancer *lb
             = ls->load_balancer[i];
         lb_info_add_smap(lb, &lbs, vip_width);
+    }
+    for (size_t i = 0; i < ls->n_load_balancer_group; i++) {
+        const struct nbrec_load_balancer_group *lbg
+            = ls->load_balancer_group[i];
+
+        for (size_t j = 0; j < lbg->n_load_balancer; j++) {
+            const struct nbrec_load_balancer *lb
+                = lbg->load_balancer[j];
+            lb_info_add_smap(lb, &lbs, vip_width);
+        }
     }
 
     lb_info_print(ctx, &lbs, vip_width);
