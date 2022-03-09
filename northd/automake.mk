@@ -12,6 +12,10 @@ northd_ovn_northd_SOURCES = \
 	northd/inc-proc-northd.h \
 	northd/ipam.c \
 	northd/ipam.h \
+	northd/lswitch.h \
+	northd/lswitch.c \
+	northd/lrouter.h \
+	northd/lrouter.c \
 	northd/mcast.h \
 	northd/mcast.c
 northd_ovn_northd_LDADD = \
