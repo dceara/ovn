@@ -27,6 +27,7 @@
 static void
 test_ipam_get_unused_ip(struct ovs_cmdl_context *ctx)
 {
+    struct ipam_config ipam_config;
     struct ipam_info info;
 
     struct smap config = SMAP_INITIALIZER(&config);
@@ -36,7 +37,8 @@ test_ipam_get_unused_ip(struct ovs_cmdl_context *ctx)
     if (ctx->argc > 3) {
         smap_add(&config, "exclude_ips", ctx->argv[3]);
     }
-    init_ipam_info(&info, &config, "Unused IP test");
+    init_ipam_config(&ipam_config, &config, "Unused IP test");
+    init_ipam_info(&info, &ipam_config);
 
     bool fail = false;
     struct ds output = DS_EMPTY_INITIALIZER;
@@ -56,6 +58,7 @@ test_ipam_get_unused_ip(struct ovs_cmdl_context *ctx)
 
     smap_destroy(&config);
     destroy_ipam_info(&info);
+    destroy_ipam_config(&ipam_config);
     ds_destroy(&output);
     ds_destroy(&err);
 }
@@ -70,23 +73,26 @@ test_ipam_init_ipv4(struct ovs_cmdl_context *ctx)
     if (exclude_ips) {
         smap_add(&config, "exclude_ips", exclude_ips);
     }
+    struct ipam_config ipam_config;
     struct ipam_info ipam;
-    init_ipam_info(&ipam, &config, "IPv4 test");
+    init_ipam_config(&ipam_config, &config, "IPv4 test");
+    init_ipam_info(&ipam, &ipam_config);
 
     struct ds output = DS_EMPTY_INITIALIZER;
     ds_put_format(&output, "start_ipv4: " IP_FMT "\n",
-                  IP_ARGS(htonl(ipam.start_ipv4)));
-    ds_put_format(&output, "total_ipv4s: %" PRIuSIZE "\n", ipam.total_ipv4s);
+                  IP_ARGS(htonl(ipam.cfg->start_ipv4)));
+    ds_put_format(&output, "total_ipv4s: %" PRIuSIZE "\n",
+                  ipam.cfg->total_ipv4s);
 
     ds_put_cstr(&output, "allocated_ipv4s: ");
     if (ipam.allocated_ipv4s) {
         int start = 0;
-        int end = ipam.total_ipv4s;
+        int end = ipam.cfg->total_ipv4s;
         for (size_t bit = bitmap_scan(ipam.allocated_ipv4s, true, start, end);
              bit != end;
              bit = bitmap_scan(ipam.allocated_ipv4s, true, bit + 1, end)) {
             ds_put_format(&output, IP_FMT " ",
-                          IP_ARGS((htonl(ipam.start_ipv4 + bit))));
+                          IP_ARGS((htonl(ipam.cfg->start_ipv4 + bit))));
         }
     }
     ds_chomp(&output, ' ');
@@ -95,6 +101,7 @@ test_ipam_init_ipv4(struct ovs_cmdl_context *ctx)
     printf("%s", ds_cstr(&output));
 
     destroy_ipam_info(&ipam);
+    destroy_ipam_config(&ipam_config);
     ds_destroy(&output);
     smap_destroy(&config);
 }
@@ -107,15 +114,18 @@ test_ipam_init_ipv6_prefix(struct ovs_cmdl_context *ctx)
     if (prefix) {
         smap_add(&config, "ipv6_prefix", prefix);
     };
+    struct ipam_config ipam_config;
     struct ipam_info ipam;
-    init_ipam_info(&ipam, &config, "IPv6 test");
+
+    init_ipam_config(&ipam_config, &config, "IPv6 test");
+    init_ipam_info(&ipam, &ipam_config);
 
     struct ds output = DS_EMPTY_INITIALIZER;
     ds_put_format(&output, "ipv6_prefix_set: %s\n",
-                  ipam.ipv6_prefix_set ? "true" : "false");
-    if (ipam.ipv6_prefix_set) {
+                  ipam.cfg->ipv6_prefix_set ? "true" : "false");
+    if (ipam.cfg->ipv6_prefix_set) {
         char ipv6[INET6_ADDRSTRLEN];
-        inet_ntop(AF_INET6, &ipam.ipv6_prefix,
+        inet_ntop(AF_INET6, &ipam.cfg->ipv6_prefix,
                   ipv6, sizeof ipv6);
         ds_put_format(&output, "ipv6_prefix: %s\n", ipv6);
     }
@@ -123,6 +133,7 @@ test_ipam_init_ipv6_prefix(struct ovs_cmdl_context *ctx)
     printf("%s", ds_cstr(&output));
 
     destroy_ipam_info(&ipam);
+    destroy_ipam_config(&ipam_config);
     ds_destroy(&output);
     smap_destroy(&config);
 }

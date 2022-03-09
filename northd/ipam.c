@@ -15,36 +15,51 @@
 
 VLOG_DEFINE_THIS_MODULE(ipam)
 
-static void init_ipam_ipv6_prefix(const char *ipv6_prefix,
-                                  struct ipam_info *info);
-static void init_ipam_ipv4(const char *subnet_str,
-                           const char *exclude_ip_list,
-                           struct ipam_info *info);
+static void init_ipam_config_ipv6(const char *ipv6_prefix,
+                                  struct ipam_config *ipam_config);
+static void init_ipam_config_ipv4(const char *subnet_str,
+                                  struct ipam_config *ipam_config);
+static void init_ipam_ipv4(struct ipam_info *info);
 static bool ipam_is_duplicate_mac(struct eth_addr *ea, uint64_t mac64,
                                   bool warn);
 
-void
-init_ipam_info(struct ipam_info *info, const struct smap *config, const char *id)
+void init_ipam_config(struct ipam_config *ipam_config,
+                      const struct smap *config,
+                      const char *id)
 {
     const char *subnet_str = smap_get(config, "subnet");
     const char *ipv6_prefix = smap_get(config, "ipv6_prefix");
     const char *exclude_ips = smap_get(config, "exclude_ips");
 
-    info->id = xstrdup(id ? id : "<unknown>");
+    ipam_config->id = xstrdup(id ? id : "<unknown>");
+    ipam_config->exclude_ip_list = nullable_xstrdup(exclude_ips);
 
-    init_ipam_ipv4(subnet_str, exclude_ips, info);
-    init_ipam_ipv6_prefix(ipv6_prefix, info);
+    init_ipam_config_ipv4(subnet_str, ipam_config);
+    init_ipam_config_ipv6(ipv6_prefix, ipam_config);
 
     if (!subnet_str && !ipv6_prefix) {
-        info->mac_only = smap_get_bool(config, "mac_only", false);
+        ipam_config->mac_only = smap_get_bool(config, "mac_only", false);
     }
+}
+
+void
+destroy_ipam_config(struct ipam_config *ipam_config)
+{
+    free(ipam_config->id);
+    free(ipam_config->exclude_ip_list);
+}
+
+void
+init_ipam_info(struct ipam_info *info, const struct ipam_config *ipam_config)
+{
+    info->cfg = ipam_config;
+    init_ipam_ipv4(info);
 }
 
 void
 destroy_ipam_info(struct ipam_info *info)
 {
     bitmap_free(info->allocated_ipv4s);
-    free((char *) info->id);
 }
 
 bool
@@ -54,17 +69,15 @@ ipam_insert_ip(struct ipam_info *info, uint32_t ip)
         return true;
     }
 
-    if (ip >= info->start_ipv4 &&
-        ip < (info->start_ipv4 + info->total_ipv4s)) {
-        if (bitmap_is_set(info->allocated_ipv4s,
-                          ip - info->start_ipv4)) {
+    if (ip >= info->cfg->start_ipv4 &&
+        ip < (info->cfg->start_ipv4 + info->cfg->total_ipv4s)) {
+        if (bitmap_is_set(info->allocated_ipv4s, ip - info->cfg->start_ipv4)) {
             static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
             VLOG_WARN_RL(&rl, "%s: Duplicate IP set: " IP_FMT,
-                         info->id, IP_ARGS(htonl(ip)));
+                         info->cfg->id, IP_ARGS(htonl(ip)));
             return false;
         }
-        bitmap_set1(info->allocated_ipv4s,
-                    ip - info->start_ipv4);
+        bitmap_set1(info->allocated_ipv4s, ip - info->cfg->start_ipv4);
     }
     return true;
 }
@@ -77,15 +90,15 @@ ipam_get_unused_ip(struct ipam_info *info)
     }
 
     size_t new_ip_index = bitmap_scan(info->allocated_ipv4s, 0, 0,
-                                      info->total_ipv4s - 1);
-    if (new_ip_index == info->total_ipv4s - 1) {
+                                      info->cfg->total_ipv4s - 1);
+    if (new_ip_index == info->cfg->total_ipv4s - 1) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
         VLOG_WARN_RL(&rl, "%s: Subnet address space has been exhausted.",
-                     info->id);
+                     info->cfg->id);
         return 0;
     }
 
-    return info->start_ipv4 + new_ip_index;
+    return info->cfg->start_ipv4 + new_ip_index;
 }
 
 /* MAC address management (macam) table of "struct eth_addr"s, that holds the
@@ -192,10 +205,10 @@ set_mac_prefix(const char *prefix)
 }
 
 static void
-init_ipam_ipv6_prefix(const char *ipv6_prefix, struct ipam_info *info)
+init_ipam_config_ipv6(const char *ipv6_prefix, struct ipam_config *ipam_config)
 {
-    info->ipv6_prefix_set = false;
-    info->ipv6_prefix = in6addr_any;
+    ipam_config->ipv6_prefix_set = false;
+    ipam_config->ipv6_prefix = in6addr_any;
 
     if (!ipv6_prefix) {
         return;
@@ -208,49 +221,47 @@ init_ipam_ipv6_prefix(const char *ipv6_prefix, struct ipam_info *info)
         /* If a prefix length was specified, it must be 64. */
         struct in6_addr mask;
         char *error
-            = ipv6_parse_masked(ipv6_prefix,
-                                &info->ipv6_prefix, &mask);
+            = ipv6_parse_masked(ipv6_prefix, &ipam_config->ipv6_prefix, &mask);
         if (error) {
             static struct vlog_rate_limit rl
                 = VLOG_RATE_LIMIT_INIT(5, 1);
             VLOG_WARN_RL(&rl, "%s: bad 'ipv6_prefix' %s: %s",
-                         info->id, ipv6_prefix, error);
+                         ipam_config->id, ipv6_prefix, error);
             free(error);
         } else {
             if (ipv6_count_cidr_bits(&mask) == 64) {
-                info->ipv6_prefix_set = true;
+                ipam_config->ipv6_prefix_set = true;
             } else {
                 static struct vlog_rate_limit rl
                     = VLOG_RATE_LIMIT_INIT(5, 1);
                 VLOG_WARN_RL(&rl, "%s: bad 'ipv6_prefix' %s: must be /64",
-                             info->id, ipv6_prefix);
+                             ipam_config->id, ipv6_prefix);
             }
         }
     } else {
-        info->ipv6_prefix_set = ipv6_parse(
-            ipv6_prefix, &info->ipv6_prefix);
-        if (!info->ipv6_prefix_set) {
+        ipam_config->ipv6_prefix_set = ipv6_parse(
+            ipv6_prefix, &ipam_config->ipv6_prefix);
+        if (!ipam_config->ipv6_prefix_set) {
             static struct vlog_rate_limit rl
                 = VLOG_RATE_LIMIT_INIT(5, 1);
-            VLOG_WARN_RL(&rl, "%s: bad 'ipv6_prefix' %s", info->id,
+            VLOG_WARN_RL(&rl, "%s: bad 'ipv6_prefix' %s", ipam_config->id,
                          ipv6_prefix);
         }
     }
 
-    if (info->ipv6_prefix_set) {
+    if (ipam_config->ipv6_prefix_set) {
         /* Make sure nothing past first 64 bits are set */
         struct in6_addr mask = ipv6_create_mask(64);
-        info->ipv6_prefix = ipv6_addr_bitand(&info->ipv6_prefix, &mask);
+        ipam_config->ipv6_prefix = ipv6_addr_bitand(&ipam_config->ipv6_prefix,
+                                                    &mask);
     }
 }
 
 static void
-init_ipam_ipv4(const char *subnet_str, const char *exclude_ip_list,
-               struct ipam_info *info)
+init_ipam_config_ipv4(const char *subnet_str, struct ipam_config *ipam_config)
 {
-    info->start_ipv4 = 0;
-    info->total_ipv4s = 0;
-    info->allocated_ipv4s = NULL;
+    ipam_config->start_ipv4 = 0;
+    ipam_config->total_ipv4s = 0;
 
     if (!subnet_str) {
         return;
@@ -261,25 +272,35 @@ init_ipam_ipv4(const char *subnet_str, const char *exclude_ip_list,
     if (error || mask == OVS_BE32_MAX || !ip_is_cidr(mask)) {
         static struct vlog_rate_limit rl
             = VLOG_RATE_LIMIT_INIT(5, 1);
-        VLOG_WARN_RL(&rl, "%s: bad 'subnet' %s", info->id, subnet_str);
+        VLOG_WARN_RL(&rl, "%s: bad 'subnet' %s", ipam_config->id, subnet_str);
         free(error);
         return;
     }
 
-    info->start_ipv4 = ntohl(subnet & mask) + 1;
-    info->total_ipv4s = ~ntohl(mask);
-    info->allocated_ipv4s =
-        bitmap_allocate(info->total_ipv4s);
+    ipam_config->start_ipv4 = ntohl(subnet & mask) + 1;
+    ipam_config->total_ipv4s = ~ntohl(mask);
+}
+
+static void
+init_ipam_ipv4(struct ipam_info *info)
+{
+
+    if (!info->cfg->start_ipv4) {
+        info->allocated_ipv4s = NULL;
+        return;
+    }
+
+    info->allocated_ipv4s = bitmap_allocate(info->cfg->total_ipv4s);
 
     /* Mark first IP as taken */
     bitmap_set1(info->allocated_ipv4s, 0);
 
-    if (!exclude_ip_list) {
+    if (!info->cfg->exclude_ip_list) {
         return;
     }
 
     struct lexer lexer;
-    lexer_init(&lexer, exclude_ip_list);
+    lexer_init(&lexer, info->cfg->exclude_ip_list);
     /* exclude_ip_list could be in the format -
     *  "10.0.0.4 10.0.0.10 10.0.0.20..10.0.0.50 10.0.0.100..10.0.0.110".
     */
@@ -303,11 +324,11 @@ init_ipam_ipv4(const char *subnet_str, const char *exclude_ip_list,
         }
 
         /* Clamp start...end to fit the subnet. */
-        start = MAX(info->start_ipv4, start);
-        end = MIN(info->start_ipv4 + info->total_ipv4s, end);
+        start = MAX(info->cfg->start_ipv4, start);
+        end = MIN(info->cfg->start_ipv4 + info->cfg->total_ipv4s, end);
         if (end > start) {
             bitmap_set_multiple(info->allocated_ipv4s,
-                                start - info->start_ipv4,
+                                start - info->cfg->start_ipv4,
                                 end - start, 1);
         } else {
             lexer_error(&lexer, "excluded addresses not in subnet");
@@ -315,7 +336,8 @@ init_ipam_ipv4(const char *subnet_str, const char *exclude_ip_list,
     }
     if (lexer.error) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
-        VLOG_WARN_RL(&rl, "%s: bad exclude_ips (%s)", info->id, lexer.error);
+        VLOG_WARN_RL(&rl, "%s: bad exclude_ips (%s)", info->cfg->id,
+                     lexer.error);
     }
     lexer_destroy(&lexer);
 }

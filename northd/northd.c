@@ -599,6 +599,7 @@ struct ovn_datapath {
     bool has_acls;
 
     /* IPAM data. */
+    struct ipam_config ipam_config;
     struct ipam_info ipam_info;
 
     /* Multicast data. */
@@ -996,6 +997,7 @@ ovn_datapath_destroy(struct hmap *datapaths, struct ovn_datapath *od)
         hmap_remove(datapaths, &od->key_node);
         ovn_destroy_tnlids(&od->port_tnlids);
         destroy_ipam_info(&od->ipam_info);
+        destroy_ipam_config(&od->ipam_config);
         free(od->router_ports);
         destroy_nat_entries(od);
         destroy_router_external_ips(od);
@@ -1084,7 +1086,8 @@ init_ipam_info_for_datapath(struct ovn_datapath *od)
 
     char uuid_s[UUID_LEN + 1];
     sprintf(uuid_s, UUID_FMT, UUID_ARGS(&od->key));
-    init_ipam_info(&od->ipam_info, &od->nbs->other_config, uuid_s);
+    init_ipam_config(&od->ipam_config, &od->nbs->other_config, uuid_s);
+    init_ipam_info(&od->ipam_info, &od->ipam_config);
 }
 
 static void
@@ -1888,7 +1891,7 @@ ipam_add_port_addresses(struct ovn_datapath *od, struct ovn_port *op)
              * the datapath. This will just result in an erroneous message
              * about a duplicate IP address.
              */
-            if (ip != op->peer->od->ipam_info.start_ipv4) {
+            if (ip != op->peer->od->ipam_info.cfg->start_ipv4) {
                 ipam_insert_ip_for_datapath(op->peer->od, ip);
             }
         }
@@ -1967,12 +1970,12 @@ dynamic_ip4_changed(const char *lsp_addrs,
     }
 
     uint32_t ip4 = ntohl(cur_addresses->ipv4_addrs[0].addr);
-    if (ip4 < ipam->start_ipv4) {
+    if (ip4 < ipam->cfg->start_ipv4) {
         return DYNAMIC;
     }
 
-    uint32_t index = ip4 - ipam->start_ipv4;
-    if (index >= ipam->total_ipv4s - 1 ||
+    uint32_t index = ip4 - ipam->cfg->start_ipv4;
+    if (index >= ipam->cfg->total_ipv4s - 1 ||
         bitmap_is_set(ipam->allocated_ipv4s, index)) {
         /* Previously assigned dynamic IPv4 address can no longer be used.
          * It's either outside the subnet, conflicts with an excluded IP,
@@ -1990,9 +1993,9 @@ dynamic_ip4_changed(const char *lsp_addrs,
             (ovs_scan(lsp_addrs, "dynamic "IP_SCAN_FMT" "IPV6_SCAN_FMT"%n",
                       IP_SCAN_ARGS(&new_ip), ipv6_s, &n)
              && lsp_addrs[n] == '\0')) {
-            index = ntohl(new_ip) - ipam->start_ipv4;
-            if (ntohl(new_ip) < ipam->start_ipv4 ||
-                index > ipam->total_ipv4s ||
+            index = ntohl(new_ip) - ipam->cfg->start_ipv4;
+            if (ntohl(new_ip) < ipam->cfg->start_ipv4 ||
+                index > ipam->cfg->total_ipv4s ||
                 bitmap_is_set(ipam->allocated_ipv4s, index)) {
                 /* new static ip is not valid */
                 return DYNAMIC;
@@ -2010,7 +2013,7 @@ static enum dynamic_update_type
 dynamic_ip6_changed(const char *lsp_addrs,
                     struct dynamic_address_update *update)
 {
-    bool dynamic_ip6 = update->op->od->ipam_info.ipv6_prefix_set;
+    bool dynamic_ip6 = update->op->od->ipam_info.cfg->ipv6_prefix_set;
     struct eth_addr ea;
 
     if (!dynamic_ip6) {
@@ -2046,9 +2049,9 @@ dynamic_ip6_changed(const char *lsp_addrs,
         }
 
         struct in6_addr masked = ipv6_addr_bitand(&ipv6,
-                &update->op->od->ipam_info.ipv6_prefix);
+                &update->op->od->ipam_info.cfg->ipv6_prefix);
         if (!IN6_ARE_ADDR_EQUAL(&masked,
-                                &update->op->od->ipam_info.ipv6_prefix)) {
+                                &update->op->od->ipam_info.cfg->ipv6_prefix)) {
             return DYNAMIC;
         }
 
@@ -2155,7 +2158,7 @@ set_dynamic_updates(const char *addrspec,
 
     if (has_ipv6 && ipv6_parse(ipv6_s, &update->static_ipv6)) {
         update->ipv6 = STATIC;
-    } else if (update->op->od->ipam_info.ipv6_prefix_set) {
+    } else if (update->op->od->ipam_info.cfg->ipv6_prefix_set) {
         update->ipv6 = DYNAMIC;
     } else {
         update->ipv6 = NONE;
@@ -2213,7 +2216,7 @@ update_dynamic_addresses(struct dynamic_address_update *update)
         ip6 = update->static_ipv6;
         break;
     case DYNAMIC:
-        in6_generate_eui64(mac, &update->od->ipam_info.ipv6_prefix, &ip6);
+        in6_generate_eui64(mac, &update->od->ipam_info.cfg->ipv6_prefix, &ip6);
         struct ds ip6_ds = DS_EMPTY_INITIALIZER;
         ipv6_format_addr(&ip6, &ip6_ds);
         VLOG_INFO("Assigned dynamic IPv6 address '%s' to port '%s'",
@@ -2265,8 +2268,8 @@ build_ipam(struct hmap *datapaths, struct hmap *ports)
             const struct nbrec_logical_switch_port *nbsp = od->nbs->ports[i];
 
             if (!od->ipam_info.allocated_ipv4s &&
-                !od->ipam_info.ipv6_prefix_set &&
-                !od->ipam_info.mac_only) {
+                !od->ipam_info.cfg->ipv6_prefix_set &&
+                !od->ipam_info.cfg->mac_only) {
                 if (nbsp->dynamic_addresses) {
                     nbrec_logical_switch_port_set_dynamic_addresses(nbsp,
                                                                     NULL);

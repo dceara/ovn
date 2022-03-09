@@ -6,19 +6,29 @@
 
 #include "openvswitch/types.h"
 
-struct ipam_info {
+struct ipam_config {
     uint32_t start_ipv4;
     size_t total_ipv4s;
-    unsigned long *allocated_ipv4s; /* A bitmap of allocated IPv4s */
     bool ipv6_prefix_set;
     struct in6_addr ipv6_prefix;
     bool mac_only;
-    const char *id;
+    char *exclude_ip_list;
+    char *id;
+};
+
+struct ipam_info {
+    const struct ipam_config *cfg;
+
+    unsigned long *allocated_ipv4s; /* A bitmap of allocated IPv4s */
 };
 
 struct smap;
-void init_ipam_info(struct ipam_info *info, const struct smap *config,
-                    const char *id);
+void init_ipam_config(struct ipam_config *ipam_config,
+                      const struct smap *config,
+                      const char *id);
+void destroy_ipam_config(struct ipam_config *ipam_config);
+void init_ipam_info(struct ipam_info *info,
+                    const struct ipam_config *ipam_config);
 
 void destroy_ipam_info(struct ipam_info *info);
 
