@@ -298,7 +298,7 @@ void engine_ovsdb_node_add_index(struct engine_node *, const char *name,
                                  struct ovsdb_idl_index *);
 
 /* Macro to define an engine node. */
-#define ENGINE_NODE_DEF(NAME, NAME_STR) \
+#define ENGINE_NODE_DEF(NAME, NAME_STR, IS_VALID, CLEAR_TRACKED) \
     struct engine_node en_##NAME = { \
         .name = NAME_STR, \
         .data = NULL, \
@@ -306,21 +306,19 @@ void engine_ovsdb_node_add_index(struct engine_node *, const char *name,
         .init = en_##NAME##_init, \
         .run = en_##NAME##_run, \
         .cleanup = en_##NAME##_cleanup, \
-        .is_valid = NULL, \
-        .clear_tracked_data = NULL, \
-    };
+        .is_valid = IS_VALID, \
+        .clear_tracked_data = CLEAR_TRACKED, \
+    }
 
 #define ENGINE_NODE_WITH_CLEAR_TRACK_DATA_IS_VALID(NAME, NAME_STR) \
-    ENGINE_NODE(NAME, NAME_STR) \
-    en_##NAME.clear_tracked_data = en_##NAME##_clear_tracked_data; \
-    en_##NAME.is_valid = en_##NAME##_is_valid;
+    ENGINE_NODE_DEF(NAME, NAME_STR, en_##NAME##_is_valid, \
+                    en_##NAME##_clear_tracked_data)
 
 #define ENGINE_NODE(NAME, NAME_STR) \
-    ENGINE_NODE_DEF(NAME, NAME_STR)
+    ENGINE_NODE_DEF(NAME, NAME_STR, NULL, NULL)
 
 #define ENGINE_NODE_WITH_CLEAR_TRACK_DATA(NAME, NAME_STR) \
-    ENGINE_NODE(NAME, NAME_STR) \
-    en_##NAME.clear_tracked_data = en_##NAME##_clear_tracked_data;
+    ENGINE_NODE_DEF(NAME, NAME_STR, NULL, en_##NAME##_clear_tracked_data)
 
 /* Macro to define member functions of an engine node which represents
  * a table of OVSDB */
