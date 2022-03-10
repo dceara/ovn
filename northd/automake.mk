@@ -8,6 +8,10 @@ northd_ovn_northd_SOURCES = \
 	northd/en-northd.h \
 	northd/en-lflow.c \
 	northd/en-lflow.h \
+	northd/en-lrouter.c \
+	northd/en-lrouter.h \
+	northd/en-lswitch.c \
+	northd/en-lswitch.h \
 	northd/inc-proc-northd.c \
 	northd/inc-proc-northd.h \
 	northd/ipam.c \

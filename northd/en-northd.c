@@ -24,6 +24,8 @@
                                * lib/ovn-parallel-hmap.h should be updated
                                * to include this dependency itself */
 #include "lib/ovn-parallel-hmap.h"
+#include "lrouter.h"
+#include "lswitch.h"
 #include "northd.h"
 #include "lib/util.h"
 #include "openvswitch/vlog.h"
@@ -38,6 +40,12 @@ void en_northd_run(struct engine_node *node, void *data)
 
     northd_destroy(data);
     northd_init(data);
+
+    struct lswitch_data *lswitch_data = engine_get_input_data("lswitch", node);
+    struct lrouter_data *lrouter_data = engine_get_input_data("lrouter", node);
+
+    input_data.northd_logical_switches = &lswitch_data->switches;
+    input_data.northd_logical_routers = &lrouter_data->routers;
 
     input_data.sbrec_chassis_by_name =
         engine_ovsdb_node_get_index(
@@ -58,10 +66,6 @@ void en_northd_run(struct engine_node *node, void *data)
 
     input_data.nbrec_nb_global_table =
         EN_OVSDB_GET(engine_get_input("NB_nb_global", node));
-    input_data.nbrec_logical_switch =
-        EN_OVSDB_GET(engine_get_input("NB_logical_switch", node));
-    input_data.nbrec_logical_router =
-        EN_OVSDB_GET(engine_get_input("NB_logical_router", node));
     input_data.nbrec_load_balancer_table =
         EN_OVSDB_GET(engine_get_input("NB_load_balancer", node));
     input_data.nbrec_port_group_table =

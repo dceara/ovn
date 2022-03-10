@@ -29,6 +29,8 @@
 #include "inc-proc-northd.h"
 #include "en-northd.h"
 #include "en-lflow.h"
+#include "en-lrouter.h"
+#include "en-lswitch.h"
 #include "util.h"
 
 VLOG_DEFINE_THIS_MODULE(inc_proc_northd);
@@ -144,6 +146,8 @@ enum sb_engine_node {
 
 /* Define engine nodes for other nodes. They should be defined as static to
  * avoid sparse errors. */
+static ENGINE_NODE(lswitch, "lswitch");
+static ENGINE_NODE(lrouter, "lrouter");
 static ENGINE_NODE(northd, "northd");
 static ENGINE_NODE(lflow, "lflow");
 
@@ -152,9 +156,13 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
 {
     /* Define relationships between nodes where first argument is dependent
      * on the second argument */
+    engine_add_input(&en_lswitch, &en_nb_logical_switch, NULL);
+
+    engine_add_input(&en_lrouter, &en_nb_logical_router, NULL);
+
     engine_add_input(&en_northd, &en_nb_nb_global, NULL);
     engine_add_input(&en_northd, &en_nb_copp, NULL);
-    engine_add_input(&en_northd, &en_nb_logical_switch, NULL);
+    engine_add_input(&en_northd, &en_lswitch, NULL);
     engine_add_input(&en_northd, &en_nb_logical_switch_port, NULL);
     engine_add_input(&en_northd, &en_nb_forwarding_group, NULL);
     engine_add_input(&en_northd, &en_nb_address_set, NULL);
@@ -163,7 +171,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_northd, &en_nb_load_balancer_group, NULL);
     engine_add_input(&en_northd, &en_nb_load_balancer_health_check, NULL);
     engine_add_input(&en_northd, &en_nb_acl, NULL);
-    engine_add_input(&en_northd, &en_nb_logical_router, NULL);
+    engine_add_input(&en_northd, &en_lrouter, NULL);
     engine_add_input(&en_northd, &en_nb_qos, NULL);
     engine_add_input(&en_northd, &en_nb_meter, NULL);
     engine_add_input(&en_northd, &en_nb_meter_band, NULL);

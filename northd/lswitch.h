@@ -17,10 +17,12 @@
 
 #include "ipam.h"
 #include "mcast.h"
+#include "openvswitch/hmap.h"
 
 struct ovn_datapath;
 
 struct northd_logical_switch {
+    struct hmap_node node;
     const struct nbrec_logical_switch *nbs;
     struct ovn_datapath *od;
 
@@ -28,9 +30,20 @@ struct northd_logical_switch {
     struct mcast_switch_config mcast_config;
 };
 
-struct northd_logical_switch *create_northd_logical_switch(
-    const struct nbrec_logical_switch *nbs,
-    struct ovn_datapath *od);
-void destroy_northd_logical_switch(struct northd_logical_switch *nls);
+struct lswitch_input {
+    /* Input data for 'en-lswitch'. */
+
+    /* Northbound table references */
+    const struct nbrec_logical_switch_table *nbrec_logical_switch;
+};
+
+struct lswitch_data {
+    /* Global state for 'en-lswitch'. */
+    struct hmap switches;
+};
+
+void lswitch_init(struct lswitch_data *data);
+void lswitch_destroy(struct lswitch_data *data);
+void lswitch_run(struct lswitch_input *input_data, struct lswitch_data *data);
 
 #endif /* northd/lswitch.h */

@@ -17,6 +17,7 @@
 
 #include "lib/ovn-util.h"
 #include "mcast.h"
+#include "openvswitch/hmap.h"
 
 struct ovn_datapath;
 
@@ -42,6 +43,7 @@ struct northd_snat_ip {
 };
 
 struct northd_logical_router {
+    struct hmap_node node;
     const struct nbrec_logical_router *nbr;
     struct ovn_datapath *od;
 
@@ -68,9 +70,20 @@ struct northd_logical_router {
     bool lb_force_snat_router_ip;
 };
 
-struct northd_logical_router *create_northd_logical_router(
-    const struct nbrec_logical_router *nbr,
-    struct ovn_datapath *od);
-void destroy_northd_logical_router(struct northd_logical_router *nlr);
+struct lrouter_input {
+    /* Input data for 'en-lrouter'. */
+
+    /* Northbound table references */
+    const struct nbrec_logical_router_table *nbrec_logical_router;
+};
+
+struct lrouter_data {
+    /* Global state for 'en-lswitch'. */
+    struct hmap routers;
+};
+
+void lrouter_init(struct lrouter_data *data);
+void lrouter_destroy(struct lrouter_data *data);
+void lrouter_run(struct lrouter_input *input_data, struct lrouter_data *data);
 
 #endif /* northd/lrouter.h */

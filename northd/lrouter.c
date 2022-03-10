@@ -15,6 +15,7 @@
 #include <config.h>
 
 #include "lrouter.h"
+#include "northd.h"
 #include "openvswitch/vlog.h"
 
 VLOG_DEFINE_THIS_MODULE(lrouter)
@@ -196,13 +197,12 @@ northd_logical_router_destroy_external_ips(struct northd_logical_router *nlr)
     sset_destroy(&nlr->external_ips);
 }
 
-struct northd_logical_router *
-create_northd_logical_router(const struct nbrec_logical_router *nbr,
-                             struct ovn_datapath *od)
+static void
+create_northd_logical_router(struct lrouter_data *data,
+                             const struct nbrec_logical_router *nbr)
 {
     struct northd_logical_router *nlr = xzalloc(sizeof *nlr);
     nlr->nbr = nbr;
-    nlr->od = od;
 
     init_mcast_router_config(&nlr->mcast_config, nbr);
     northd_logical_router_init_nat(nlr);
@@ -211,17 +211,61 @@ create_northd_logical_router(const struct nbrec_logical_router *nbr,
     if (smap_get(&nbr->options, "chassis")) {
         nlr->is_gw_router = true;
     }
-    return nlr;
+
+    hmap_insert(&data->routers, &nlr->node, uuid_hash(&nbr->header_.uuid));
 }
 
-void
-destroy_northd_logical_router(struct northd_logical_router *nlr)
+static void
+destroy_northd_logical_router(struct lrouter_data *data,
+                              struct northd_logical_router *nlr)
 {
     if (!nlr) {
         return;
     }
 
+    hmap_remove(&data->routers, &nlr->node);
+    northd_detach_logical_router(nlr);
     northd_logical_router_destroy_nat(nlr);
     northd_logical_router_destroy_external_ips(nlr);
     free(nlr);
+}
+
+// static struct northd_logical_router *
+// northd_logical_router_find(struct lrouter_data *data,
+//                            const struct nbrec_logical_router *nbr)
+// {
+//     struct northd_logical_router *lr;
+
+//     HMAP_FOR_EACH_WITH_HASH (lr, node, uuid_hash(&nbr->header_.uuid),
+//                              &data->routers) {
+//         if (nbr == lr->nbr) {
+//             return lr;
+//         }
+//     }
+//     return NULL;
+// }
+
+void lrouter_init(struct lrouter_data *data)
+{
+    hmap_init(&data->routers);
+}
+
+void lrouter_destroy(struct lrouter_data *data)
+{
+    struct northd_logical_router *lr;
+    struct northd_logical_router *lr_next;
+    HMAP_FOR_EACH_SAFE (lr, lr_next, node, &data->routers) {
+        destroy_northd_logical_router(data, lr);
+    }
+    hmap_destroy(&data->routers);
+}
+
+void lrouter_run(struct lrouter_input *input_data, struct lrouter_data *data)
+{
+    const struct nbrec_logical_router *nbr;
+
+    NBREC_LOGICAL_ROUTER_TABLE_FOR_EACH (nbr,
+                                         input_data->nbrec_logical_router) {
+        create_northd_logical_router(data, nbr);
+    }
 }

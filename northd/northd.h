@@ -18,11 +18,17 @@
 
 #include "openvswitch/hmap.h"
 
+struct ovn_datapath;
+struct northd_logical_switch;
+struct northd_logical_router;
+
 struct northd_input {
+    /* en-lswitch and en-lrouter references. */
+    const struct hmap *northd_logical_switches;
+    const struct hmap *northd_logical_routers;
+
     /* Northbound table references */
     const struct nbrec_nb_global_table *nbrec_nb_global_table;
-    const struct nbrec_logical_switch_table *nbrec_logical_switch;
-    const struct nbrec_logical_router_table *nbrec_logical_router;
     const struct nbrec_load_balancer_table *nbrec_load_balancer_table;
     const struct nbrec_port_group_table *nbrec_port_group_table;
     const struct nbrec_address_set_table *nbrec_address_set_table;
@@ -102,5 +108,13 @@ void build_bfd_table(struct lflow_input *input_data,
                      struct hmap *bfd_connections, struct hmap *ports);
 void bfd_cleanup_connections(struct lflow_input *input_data,
                              struct hmap *bfd_map);
+
+/* XXX: This is awkward. */
+void northd_attach_logical_switch(struct northd_logical_switch *ls,
+                                  struct ovn_datapath *od);
+void northd_detach_logical_switch(struct northd_logical_switch *ls);
+void northd_attach_logical_router(struct northd_logical_router *lr,
+                                  struct ovn_datapath *od);
+void northd_detach_logical_router(struct northd_logical_router *lr);
 
 #endif /* NORTHD_H */

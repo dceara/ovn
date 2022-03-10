@@ -550,6 +550,41 @@ struct ovn_datapath {
     struct ovs_list port_list;
 };
 
+void northd_attach_logical_switch(struct northd_logical_switch *ls,
+                                  struct ovn_datapath *od)
+{
+    ls->od = od;
+    od->ls = ls;
+}
+
+void northd_detach_logical_switch(struct northd_logical_switch *ls)
+{
+    if (ls->od) {
+        /* XXX: We don't do 'lr->od->ls = NULL' because we use the fact
+         * that the od->ls pointer is non-NULL to determine if we need
+         * to cleanup operational switch-specific data. */
+        ls->od = NULL;
+    }
+}
+
+void northd_attach_logical_router(struct northd_logical_router *lr,
+                                  struct ovn_datapath *od)
+{
+    lr->od = od;
+    od->lr = lr;
+}
+
+void northd_detach_logical_router(struct northd_logical_router *lr)
+{
+    if (lr->od) {
+        /* XXX: We don't do 'lr->od->lr = NULL' because we use the fact
+         * that the od->lr pointer is non-NULL to determine if we need
+         * to cleanup operational router-specific data. */
+        lr->od = NULL;
+    }
+}
+
+
 static bool
 lb_has_vip(const struct nbrec_load_balancer *lb)
 {
@@ -709,9 +744,6 @@ ovn_datapath_destroy(struct hmap *datapaths, struct ovn_datapath *od)
         free(od->l3dgw_ports);
         ovn_ls_port_group_destroy(&od->nb_pgs);
         destroy_mcast_info_for_datapath(od);
-
-        destroy_northd_logical_switch(od->ls);
-        destroy_northd_logical_router(od->lr);
 
         free(od);
     }
@@ -945,9 +977,9 @@ join_datapaths(struct northd_input *input_data,
         ovs_list_push_back(sb_only, &od->list);
     }
 
-    const struct nbrec_logical_switch *nbs;
-    NBREC_LOGICAL_SWITCH_TABLE_FOR_EACH (nbs,
-                              input_data->nbrec_logical_switch) {
+    struct northd_logical_switch *nls;
+    HMAP_FOR_EACH (nls, node, input_data->northd_logical_switches) {
+        const struct nbrec_logical_switch *nbs = nls->nbs;
         struct ovn_datapath *od = ovn_datapath_find(datapaths,
                                                     &nbs->header_.uuid);
         if (od) {
@@ -957,18 +989,16 @@ join_datapaths(struct northd_input *input_data,
             od = ovn_datapath_create(datapaths, &nbs->header_.uuid, NULL);
             ovs_list_push_back(nb_only, &od->list);
         }
-        struct northd_logical_switch *nls
-            = create_northd_logical_switch(nbs, od);
 
-        od->ls = nls;
+        northd_attach_logical_switch(nls, od);
         init_ipam_info_for_datapath(od);
         init_mcast_info_for_datapath(od);
         init_lb_for_datapath(od);
     }
 
-    const struct nbrec_logical_router *nbr;
-    NBREC_LOGICAL_ROUTER_TABLE_FOR_EACH (nbr,
-                               input_data->nbrec_logical_router) {
+    struct northd_logical_router *nlr;
+    HMAP_FOR_EACH (nlr, node, input_data->northd_logical_routers) {
+        const struct nbrec_logical_router *nbr = nlr->nbr;
         if (!lrouter_is_enabled(nbr)) {
             continue;
         }
@@ -991,10 +1021,8 @@ join_datapaths(struct northd_input *input_data,
             od = ovn_datapath_create(datapaths, &nbr->header_.uuid, NULL);
             ovs_list_push_back(nb_only, &od->list);
         }
-        struct northd_logical_router *nlr
-            = create_northd_logical_router(nbr, od);
 
-        od->lr = nlr;
+        northd_attach_logical_router(nlr, od);
         init_mcast_info_for_datapath(od);
         init_lb_for_datapath(od);
         ovs_list_push_back(lr_list, &od->lr_list);
