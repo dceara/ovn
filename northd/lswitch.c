@@ -25,7 +25,7 @@
 
 VLOG_DEFINE_THIS_MODULE(lswitch)
 
-static void
+static struct northd_logical_switch *
 create_northd_logical_switch(struct lswitch_data *data,
                              const struct nbrec_logical_switch *nbs)
 {
@@ -39,41 +39,50 @@ create_northd_logical_switch(struct lswitch_data *data,
     init_mcast_switch_config(&nls->mcast_config, nbs);
 
     hmap_insert(&data->switches, &nls->node, uuid_hash(&nbs->header_.uuid));
+    return nls;
 }
 
 static void
-destroy_northd_logical_switch(struct lswitch_data *data,
-                              struct northd_logical_switch *nls)
+delete_northd_logical_switch(struct lswitch_data *data,
+                             struct northd_logical_switch *nls)
+{
+    hmap_remove(&data->switches, &nls->node);
+}
+
+static void
+destroy_northd_logical_switch(struct northd_logical_switch *nls)
 {
     if (!nls) {
         return;
     }
 
-    hmap_remove(&data->switches, &nls->node);
     northd_detach_logical_switch(nls);
     destroy_ipam_config(&nls->ipam_config);
     destroy_mcast_switch_config(&nls->mcast_config);
     free(nls);
 }
 
-// static struct northd_logical_switch *
-// northd_logical_switch_find(struct lswitch_data *data,
-//                            const struct nbrec_logical_switch *nbs)
-// {
-//     struct northd_logical_switch *ls;
+static struct northd_logical_switch *
+find_northd_logical_switch(struct lswitch_data *data,
+                           const struct nbrec_logical_switch *nbs)
+{
+    struct northd_logical_switch *ls;
 
-//     HMAP_FOR_EACH_WITH_HASH (ls, node, uuid_hash(&nbs->header_.uuid),
-//                              &data->switches) {
-//         if (nbs == ls->nbs) {
-//             return ls;
-//         }
-//     }
-//     return NULL;
-// }
+    HMAP_FOR_EACH_WITH_HASH (ls, node, uuid_hash(&nbs->header_.uuid),
+                             &data->switches) {
+        if (nbs == ls->nbs) {
+            return ls;
+        }
+    }
+    return NULL;
+}
 
 void lswitch_init(struct lswitch_data *data)
 {
     hmap_init(&data->switches);
+    hmapx_init(&data->new_switches);
+    hmapx_init(&data->deleted_switches);
+    hmapx_init(&data->updated_switches);
 }
 
 void lswitch_destroy(struct lswitch_data *data)
@@ -81,9 +90,13 @@ void lswitch_destroy(struct lswitch_data *data)
     struct northd_logical_switch *ls;
     struct northd_logical_switch *ls_next;
     HMAP_FOR_EACH_SAFE (ls, ls_next, node, &data->switches) {
-        destroy_northd_logical_switch(data, ls);
+        delete_northd_logical_switch(data, ls);
+        destroy_northd_logical_switch(ls);
     }
     hmap_destroy(&data->switches);
+    hmapx_destroy(&data->new_switches);
+    hmapx_destroy(&data->updated_switches);
+    hmapx_destroy(&data->deleted_switches);
 }
 
 void lswitch_run(struct lswitch_input *input_data, struct lswitch_data *data)
@@ -94,4 +107,52 @@ void lswitch_run(struct lswitch_input *input_data, struct lswitch_data *data)
                                          input_data->nbrec_logical_switch) {
         create_northd_logical_switch(data, nbs);
     }
+}
+
+void
+lswitch_clear_tracked(struct lswitch_data *data)
+{
+    hmapx_clear(&data->new_switches);
+    hmapx_clear(&data->updated_switches);
+
+    struct hmapx_node *node;
+    struct hmapx_node *next;
+    HMAPX_FOR_EACH_SAFE (node, next, &data->deleted_switches) {
+        destroy_northd_logical_switch(node->data);
+        hmapx_delete(&data->deleted_switches, node);
+    }
+}
+
+void
+lswitch_track_new(struct lswitch_data *data,
+                  const struct nbrec_logical_switch *nbs)
+{
+    struct northd_logical_switch *nls
+        = create_northd_logical_switch(data, nbs);
+    hmapx_add(&data->new_switches, nls);
+}
+
+void
+lswitch_track_updated(struct lswitch_data *data,
+                      const struct nbrec_logical_switch *nbs)
+{
+    struct northd_logical_switch *nls
+        = find_northd_logical_switch(data, nbs);
+    ovs_assert(nls);
+    delete_northd_logical_switch(data, nls);
+    destroy_northd_logical_switch(nls);
+
+    nls = create_northd_logical_switch(data, nbs);
+    hmapx_add(&data->updated_switches, nls);
+}
+
+void
+lswitch_track_deleted(struct lswitch_data *data,
+                      const struct nbrec_logical_switch *nbs)
+{
+    struct northd_logical_switch *nls
+        = find_northd_logical_switch(data, nbs);
+    ovs_assert(nls);
+    hmap_remove(&data->switches, &nls->node);
+    hmapx_add(&data->deleted_switches, nls);
 }

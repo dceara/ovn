@@ -14,4 +14,8 @@ void *en_northd_init(struct engine_node *node OVS_UNUSED,
                      struct engine_arg *arg);
 void en_northd_cleanup(void *data);
 
+/* I-P change handlers. */
+bool en_northd_lswitch_handler(struct engine_node *node, void *data);
+bool en_northd_lrouter_handler(struct engine_node *node, void *data);
+
 #endif /* EN_NORTHD_H */

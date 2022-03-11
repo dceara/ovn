@@ -128,3 +128,40 @@ void en_northd_cleanup(void *data)
 {
     northd_destroy(data);
 }
+
+bool
+en_northd_lswitch_handler(struct engine_node *node, void *data OVS_UNUSED)
+{
+    struct lswitch_data *lswitch_data =
+        engine_get_input_data("lswitch", node);
+
+    /* If logical switches were not handled incrementally always fall back
+     * to full recompute.
+     */
+    if (!lswitch_data->change_tracked) {
+        return false;
+    }
+
+    /* We don't incrementally process anything now so fall back to
+     * full recompute.
+     */
+    return false;
+}
+bool
+en_northd_lrouter_handler(struct engine_node *node, void *data OVS_UNUSED)
+{
+    struct lrouter_data *lrouter_data =
+        engine_get_input_data("lrouter", node);
+
+    /* If logical routers were not handled incrementally always fall back
+     * to full recompute.
+     */
+    if (!lrouter_data->change_tracked) {
+        return false;
+    }
+
+    /* We don't incrementally process anything now so fall back to
+     * full recompute.
+     */
+    return false;
+}

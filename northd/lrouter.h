@@ -15,6 +15,7 @@
 #ifndef OVN_LROUTER_H
 #define OVN_LROUTER_H 1
 
+#include "hmapx.h"
 #include "lib/ovn-util.h"
 #include "mcast.h"
 #include "openvswitch/hmap.h"
@@ -78,12 +79,25 @@ struct lrouter_input {
 };
 
 struct lrouter_data {
-    /* Global state for 'en-lswitch'. */
+    /* Global state for 'en-lrouter'. */
     struct hmap routers;
+
+    /* Incremental processing information. */
+    bool change_tracked;
+    struct hmapx new_routers;
+    struct hmapx updated_routers;
+    struct hmapx deleted_routers;
 };
 
 void lrouter_init(struct lrouter_data *data);
 void lrouter_destroy(struct lrouter_data *data);
 void lrouter_run(struct lrouter_input *input_data, struct lrouter_data *data);
+void lrouter_clear_tracked(struct lrouter_data *data);
+void lrouter_track_new(struct lrouter_data *data,
+                       const struct nbrec_logical_router *nbr);
+void lrouter_track_updated(struct lrouter_data *data,
+                           const struct nbrec_logical_router *nbr);
+void lrouter_track_deleted(struct lrouter_data *data,
+                           const struct nbrec_logical_router *nbr);
 
 #endif /* northd/lrouter.h */

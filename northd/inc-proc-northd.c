@@ -146,8 +146,8 @@ enum sb_engine_node {
 
 /* Define engine nodes for other nodes. They should be defined as static to
  * avoid sparse errors. */
-static ENGINE_NODE(lswitch, "lswitch");
-static ENGINE_NODE(lrouter, "lrouter");
+static ENGINE_NODE_WITH_CLEAR_TRACK_DATA(lswitch, "lswitch");
+static ENGINE_NODE_WITH_CLEAR_TRACK_DATA(lrouter, "lrouter");
 static ENGINE_NODE(northd, "northd");
 static ENGINE_NODE(lflow, "lflow");
 
@@ -156,13 +156,15 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
 {
     /* Define relationships between nodes where first argument is dependent
      * on the second argument */
-    engine_add_input(&en_lswitch, &en_nb_logical_switch, NULL);
+    engine_add_input(&en_lswitch, &en_nb_logical_switch,
+                     en_lswitch_nb_logical_switch_handler);
 
-    engine_add_input(&en_lrouter, &en_nb_logical_router, NULL);
+    engine_add_input(&en_lrouter, &en_nb_logical_router,
+                     en_lrouter_nb_logical_router_handler);
 
     engine_add_input(&en_northd, &en_nb_nb_global, NULL);
     engine_add_input(&en_northd, &en_nb_copp, NULL);
-    engine_add_input(&en_northd, &en_lswitch, NULL);
+    engine_add_input(&en_northd, &en_lswitch, en_northd_lswitch_handler);
     engine_add_input(&en_northd, &en_nb_logical_switch_port, NULL);
     engine_add_input(&en_northd, &en_nb_forwarding_group, NULL);
     engine_add_input(&en_northd, &en_nb_address_set, NULL);
@@ -171,7 +173,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_northd, &en_nb_load_balancer_group, NULL);
     engine_add_input(&en_northd, &en_nb_load_balancer_health_check, NULL);
     engine_add_input(&en_northd, &en_nb_acl, NULL);
-    engine_add_input(&en_northd, &en_lrouter, NULL);
+    engine_add_input(&en_northd, &en_lrouter, en_northd_lrouter_handler);
     engine_add_input(&en_northd, &en_nb_qos, NULL);
     engine_add_input(&en_northd, &en_nb_meter, NULL);
     engine_add_input(&en_northd, &en_nb_meter_band, NULL);

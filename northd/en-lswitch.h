@@ -19,6 +19,11 @@
 
 void en_lswitch_run(struct engine_node *node, void *data);
 void *en_lswitch_init(struct engine_node *node, struct engine_arg *arg);
+void en_lswitch_clear_tracked_data(void *data);
 void en_lswitch_cleanup(void *data);
+
+/* I-P change handlers. */
+bool en_lswitch_nb_logical_switch_handler(struct engine_node *node,
+                                          void *data);
 
 #endif /* northd/en-lswitch.h */

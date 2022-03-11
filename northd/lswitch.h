@@ -15,6 +15,7 @@
 #ifndef OVN_LSWITCH_H
 #define OVN_LSWITCH_H 1
 
+#include "hmapx.h"
 #include "ipam.h"
 #include "mcast.h"
 #include "openvswitch/hmap.h"
@@ -40,10 +41,23 @@ struct lswitch_input {
 struct lswitch_data {
     /* Global state for 'en-lswitch'. */
     struct hmap switches;
+
+    /* Incremental processing information. */
+    bool change_tracked;
+    struct hmapx new_switches;
+    struct hmapx updated_switches;
+    struct hmapx deleted_switches;
 };
 
 void lswitch_init(struct lswitch_data *data);
 void lswitch_destroy(struct lswitch_data *data);
 void lswitch_run(struct lswitch_input *input_data, struct lswitch_data *data);
+void lswitch_clear_tracked(struct lswitch_data *data);
+void lswitch_track_new(struct lswitch_data *data,
+                       const struct nbrec_logical_switch *nbs);
+void lswitch_track_updated(struct lswitch_data *data,
+                           const struct nbrec_logical_switch *nbs);
+void lswitch_track_deleted(struct lswitch_data *data,
+                           const struct nbrec_logical_switch *nbs);
 
 #endif /* northd/lswitch.h */

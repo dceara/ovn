@@ -19,6 +19,11 @@
 
 void en_lrouter_run(struct engine_node *node, void *data);
 void *en_lrouter_init(struct engine_node *node, struct engine_arg *arg);
+void en_lrouter_clear_tracked_data(void *data);
 void en_lrouter_cleanup(void *data);
+
+/* I-P change handlers. */
+bool en_lrouter_nb_logical_router_handler(struct engine_node *node,
+                                          void *data);
 
 #endif /* northd/en-lrouter.h */
