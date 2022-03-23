@@ -3408,8 +3408,7 @@ build_lrouter_lb_ips(struct ovn_datapath *od, const struct ovn_northd_lb *lb)
 }
 
 static void
-build_lbs(struct northd_input *input_data, struct hmap *datapaths,
-          struct hmap *lbs)
+build_lbs(struct northd_input *input_data, struct hmap *lbs)
 {
     struct ovn_northd_lb *lb;
 
@@ -3423,53 +3422,46 @@ build_lbs(struct northd_input *input_data, struct hmap *datapaths,
                     uuid_hash(&nbrec_lb->header_.uuid));
     }
 
-    struct ovn_datapath *od;
-    HMAP_FOR_EACH (od, key_node, datapaths) {
-        if (!od->ls) {
-            continue;
-        }
-
-        for (size_t i = 0; i < od->ls->nbs->n_load_balancer; i++) {
+    const struct northd_logical_switch *ls;
+    HMAP_FOR_EACH (ls, node, input_data->northd_logical_switches) {
+        for (size_t i = 0; i < ls->nbs->n_load_balancer; i++) {
             const struct uuid *lb_uuid =
-                &od->ls->nbs->load_balancer[i]->header_.uuid;
+                &ls->nbs->load_balancer[i]->header_.uuid;
             lb = ovn_northd_lb_find(lbs, lb_uuid);
-            ovn_northd_lb_add_ls(lb, od);
+            ovn_northd_lb_add_ls(lb, ls);
         }
 
-        for (size_t i = 0; i < od->ls->nbs->n_load_balancer_group; i++) {
+        for (size_t i = 0; i < ls->nbs->n_load_balancer_group; i++) {
             const struct nbrec_load_balancer_group *lbg =
-                od->ls->nbs->load_balancer_group[i];
+                ls->nbs->load_balancer_group[i];
             for (size_t j = 0; j < lbg->n_load_balancer; j++) {
                 const struct uuid *lb_uuid =
                     &lbg->load_balancer[j]->header_.uuid;
                 lb = ovn_northd_lb_find(lbs, lb_uuid);
-                ovn_northd_lb_add_ls(lb, od);
+                ovn_northd_lb_add_ls(lb, ls);
             }
         }
     }
 
-    HMAP_FOR_EACH (od, key_node, datapaths) {
-        if (!od->lr) {
-            continue;
-        }
-
-        for (size_t i = 0; i < od->lr->nbr->n_load_balancer; i++) {
+    const struct northd_logical_router *lr;
+    HMAP_FOR_EACH (lr, node, input_data->northd_logical_routers) {
+        for (size_t i = 0; i < lr->nbr->n_load_balancer; i++) {
             const struct uuid *lb_uuid =
-                &od->lr->nbr->load_balancer[i]->header_.uuid;
+                &lr->nbr->load_balancer[i]->header_.uuid;
             lb = ovn_northd_lb_find(lbs, lb_uuid);
-            ovn_northd_lb_add_lr(lb, od);
-            build_lrouter_lb_ips(od, lb);
+            ovn_northd_lb_add_lr(lb, lr);
+            build_lrouter_lb_ips(lr->od, lb);
         }
 
-        for (size_t i = 0; i < od->lr->nbr->n_load_balancer_group; i++) {
+        for (size_t i = 0; i < lr->nbr->n_load_balancer_group; i++) {
             const struct nbrec_load_balancer_group *lbg =
-                od->lr->nbr->load_balancer_group[i];
+                lr->nbr->load_balancer_group[i];
             for (size_t j = 0; j < lbg->n_load_balancer; j++) {
                 const struct uuid *lb_uuid =
                     &lbg->load_balancer[j]->header_.uuid;
                 lb = ovn_northd_lb_find(lbs, lb_uuid);
-                ovn_northd_lb_add_lr(lb, od);
-                build_lrouter_lb_ips(od, lb);
+                ovn_northd_lb_add_lr(lb, lr);
+                build_lrouter_lb_ips(lr->od, lb);
             }
         }
     }
@@ -3647,7 +3639,7 @@ sb_lb_needs_update(const struct ovn_northd_lb *lb,
 
     struct hmapx nb_datapaths = HMAPX_INITIALIZER(&nb_datapaths);
     for (size_t i = 0; i < lb->n_nb_ls; i++) {
-        hmapx_add(&nb_datapaths, CONST_CAST(void *, lb->nb_ls[i]->sb));
+        hmapx_add(&nb_datapaths, CONST_CAST(void *, lb->nb_ls[i]->od->sb));
     }
 
     bool stale = false;
@@ -3730,7 +3722,7 @@ sync_lbs(struct northd_input *input_data, struct ovsdb_idl_txn *ovnsb_txn,
                 xmalloc(lb->n_nb_ls * sizeof *lb_dps);
             for (size_t i = 0; i < lb->n_nb_ls; i++) {
                 lb_dps[i] = CONST_CAST(struct sbrec_datapath_binding *,
-                                       lb->nb_ls[i]->sb);
+                                       lb->nb_ls[i]->od->sb);
             }
             sbrec_load_balancer_set_datapaths(lb->slb, lb_dps, lb->n_nb_ls);
             free(lb_dps);
@@ -6566,7 +6558,7 @@ build_lb_rules(struct hmap *lflows, struct ovn_northd_lb *lb,
                 ds_cstr(match), ds_cstr(action));
 
         for (size_t j = 0; j < lb->n_nb_ls; j++) {
-            struct ovn_datapath *od = lb->nb_ls[j];
+            struct ovn_datapath *od = lb->nb_ls[j]->od;
 
             if (reject) {
                 meter = copp_meter_get(COPP_REJECT, od->ls->nbs->copp,
@@ -9463,7 +9455,7 @@ build_lrouter_nat_flows_for_lb(struct ovn_lb_vip *lb_vip,
     }
 
     for (size_t i = 0; i < lb->n_nb_lr; i++) {
-        struct ovn_datapath *od = lb->nb_lr[i];
+        struct ovn_datapath *od = lb->nb_lr[i]->od;
         char *new_match_p = new_match;
         char *est_match_p = est_match;
         char *est_actions = NULL;
@@ -9597,7 +9589,7 @@ build_lswitch_flows_for_lb(struct ovn_northd_lb *lb, struct hmap *lflows,
             continue;
         }
         for (size_t j = 0; j < lb->n_nb_ls; j++) {
-            struct ovn_datapath *od = lb->nb_ls[j];
+            struct ovn_datapath *od = lb->nb_ls[j]->od;
             ovn_lflow_add_with_hint__(lflows, od,
                                       S_SWITCH_IN_PRE_LB, 130, ds_cstr(match),
                                       ds_cstr(action),
@@ -9673,7 +9665,7 @@ build_lrouter_defrag_flows_for_lb(struct ovn_northd_lb *lb,
                 ovn_stage_get_pipeline(S_ROUTER_IN_DEFRAG), prio,
                 ds_cstr(match), ds_cstr(&defrag_actions));
         for (size_t j = 0; j < lb->n_nb_lr; j++) {
-            struct ovn_datapath *od = lb->nb_lr[j];
+            struct ovn_datapath *od = lb->nb_lr[j]->od;
             if (ovn_dp_group_add_with_reference(lflow_ref, od)) {
                 continue;
             }
@@ -9707,7 +9699,7 @@ build_lrouter_flows_for_lb(struct ovn_northd_lb *lb, struct hmap *lflows,
             continue;
         }
         for (size_t j = 0; j < lb->n_nb_lr; j++) {
-            struct ovn_datapath *od = lb->nb_lr[j];
+            struct ovn_datapath *od = lb->nb_lr[j]->od;
             ovn_lflow_add_with_hint__(lflows, od, S_ROUTER_IN_DNAT,
                                       130, ds_cstr(match), ds_cstr(action),
                                       NULL,
@@ -9720,7 +9712,8 @@ build_lrouter_flows_for_lb(struct ovn_northd_lb *lb, struct hmap *lflows,
 
     if (smap_get_bool(&lb->nlb->options, "skip_snat", false)) {
         for (size_t i = 0; i < lb->n_nb_lr; i++) {
-            ovn_lflow_add(lflows, lb->nb_lr[i], S_ROUTER_OUT_SNAT, 120,
+            struct ovn_datapath *od = lb->nb_lr[i]->od;
+            ovn_lflow_add(lflows, od, S_ROUTER_OUT_SNAT, 120,
                           "flags.skip_snat_for_lb == 1 && ip", "next;");
         }
     }
@@ -14835,7 +14828,7 @@ ovnnb_db_run(struct northd_input *input_data,
                                      "ignore_lsp_down", true);
 
     build_datapaths(input_data, ovnsb_txn, &data->datapaths, &data->lr_list);
-    build_lbs(input_data, &data->datapaths, &data->lbs);
+    build_lbs(input_data, &data->lbs);
     build_ports(input_data, ovnsb_txn, sbrec_chassis_by_name,
                 sbrec_chassis_by_hostname,
                 &data->datapaths, &data->ports);
