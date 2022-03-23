@@ -3450,7 +3450,6 @@ build_lbs(struct northd_input *input_data, struct hmap *lbs)
                 &lr->nbr->load_balancer[i]->header_.uuid;
             lb = ovn_northd_lb_find(lbs, lb_uuid);
             ovn_northd_lb_add_lr(lb, lr);
-            build_lrouter_lb_ips(lr->od, lb);
         }
 
         for (size_t i = 0; i < lr->nbr->n_load_balancer_group; i++) {
@@ -3461,7 +3460,6 @@ build_lbs(struct northd_input *input_data, struct hmap *lbs)
                     &lbg->load_balancer[j]->header_.uuid;
                 lb = ovn_northd_lb_find(lbs, lb_uuid);
                 ovn_northd_lb_add_lr(lb, lr);
-                build_lrouter_lb_ips(lr->od, lb);
             }
         }
     }
@@ -3567,6 +3565,22 @@ build_lrouter_lbs_reachable_ips(struct hmap *lbs)
         for (size_t i = 0; i < lb->n_nb_lr; i++) {
             const struct northd_logical_router *lr = lb->nb_lr[i];
             build_lrouter_lb_reachable_ips(lr->od, lb);
+        }
+    }
+}
+
+/* This must be called after all datapaths have been processed, i.e., after
+ * build_datapaths() because it relies on datapaths being initialized.
+ */
+static void
+build_lb_datapath_related_data(struct hmap *lbs)
+{
+    struct ovn_northd_lb *lb;
+
+    HMAP_FOR_EACH (lb, hmap_node, lbs) {
+        for (size_t i = 0; i < lb->n_nb_lr; i++) {
+            const struct northd_logical_router *lr = lb->nb_lr[i];
+            build_lrouter_lb_ips(lr->od, lb);
         }
     }
 }
@@ -14812,6 +14826,7 @@ ovnnb_db_run(struct northd_input *input_data,
 
     build_datapaths(input_data, ovnsb_txn, &data->datapaths, &data->lr_list);
     build_lbs(input_data, &data->lbs);
+    build_lb_datapath_related_data(&data->lbs);
     build_ports(input_data, ovnsb_txn, sbrec_chassis_by_name,
                 sbrec_chassis_by_hostname,
                 &data->datapaths, &data->ports);
