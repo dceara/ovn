@@ -27,6 +27,8 @@
 #include "openvswitch/poll-loop.h"
 #include "openvswitch/vlog.h"
 #include "inc-proc-northd.h"
+#include "en-nb-lb.h"
+#include "en-sb-lb.h"
 #include "en-northd.h"
 #include "en-lflow.h"
 #include "en-lrouter.h"
@@ -144,12 +146,41 @@ enum sb_engine_node {
     SB_NODES
 #undef SB_NODE
 
+/* Define I-P engine "end" node handlers. */
+static void *
+en_end_init(struct engine_node *node OVS_UNUSED,
+            struct engine_arg *arg OVS_UNUSED)
+{
+    return NULL;
+}
+
+static void
+en_end_cleanup(void *data OVS_UNUSED)
+{
+}
+
+static void
+en_end_run(struct engine_node *node, void *data OVS_UNUSED)
+{
+    engine_set_node_state(node, EN_UPDATED);
+}
+
+static bool
+end_change_handler(struct engine_node *node, void *data OVS_UNUSED)
+{
+    engine_set_node_state(node, EN_UPDATED);
+    return true;
+}
+
 /* Define engine nodes for other nodes. They should be defined as static to
  * avoid sparse errors. */
 static ENGINE_NODE_WITH_CLEAR_TRACK_DATA(lswitch, "lswitch");
 static ENGINE_NODE_WITH_CLEAR_TRACK_DATA(lrouter, "lrouter");
+static ENGINE_NODE(nb_lb, "nb-lb");
+static ENGINE_NODE(sb_lb, "sb-lb");
 static ENGINE_NODE(northd, "northd");
 static ENGINE_NODE(lflow, "lflow");
+static ENGINE_NODE(end, "end");
 
 void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
                           struct ovsdb_idl_loop *sb)
@@ -162,6 +193,11 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_lrouter, &en_nb_logical_router,
                      en_lrouter_nb_logical_router_handler);
 
+    engine_add_input(&en_nb_lb, &en_lswitch, NULL);
+    engine_add_input(&en_nb_lb, &en_lrouter, NULL);
+    engine_add_input(&en_nb_lb, &en_nb_load_balancer, NULL);
+    engine_add_input(&en_nb_lb, &en_nb_load_balancer_group, NULL);
+
     engine_add_input(&en_northd, &en_nb_nb_global, NULL);
     engine_add_input(&en_northd, &en_nb_copp, NULL);
     engine_add_input(&en_northd, &en_lswitch, en_northd_lswitch_handler);
@@ -169,8 +205,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_northd, &en_nb_forwarding_group, NULL);
     engine_add_input(&en_northd, &en_nb_address_set, NULL);
     engine_add_input(&en_northd, &en_nb_port_group, NULL);
-    engine_add_input(&en_northd, &en_nb_load_balancer, NULL);
-    engine_add_input(&en_northd, &en_nb_load_balancer_group, NULL);
+    engine_add_input(&en_northd, &en_nb_lb, NULL);
     engine_add_input(&en_northd, &en_nb_load_balancer_health_check, NULL);
     engine_add_input(&en_northd, &en_nb_acl, NULL);
     engine_add_input(&en_northd, &en_lrouter, en_northd_lrouter_handler);
@@ -214,7 +249,6 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_northd, &en_sb_controller_event, NULL);
     engine_add_input(&en_northd, &en_sb_ip_multicast, NULL);
     engine_add_input(&en_northd, &en_sb_service_monitor, NULL);
-    engine_add_input(&en_northd, &en_sb_load_balancer, NULL);
     engine_add_input(&en_northd, &en_sb_fdb, NULL);
     engine_add_input(&en_lflow, &en_nb_bfd, NULL);
     engine_add_input(&en_lflow, &en_sb_bfd, NULL);
@@ -222,6 +256,14 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_lflow, &en_sb_multicast_group, NULL);
     engine_add_input(&en_lflow, &en_sb_igmp_group, NULL);
     engine_add_input(&en_lflow, &en_northd, NULL);
+
+    engine_add_input(&en_sb_lb, &en_nb_lb, NULL);
+    engine_add_input(&en_sb_lb, &en_northd, NULL);
+    engine_add_input(&en_sb_lb, &en_sb_load_balancer, NULL);
+
+    /* End the graph. */
+    engine_add_input(&en_end, &en_lflow, end_change_handler);
+    engine_add_input(&en_end, &en_sb_lb, end_change_handler);
 
     struct engine_arg engine_arg = {
         .nb_idl = nb->idl,
@@ -239,7 +281,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     struct ovsdb_idl_index *sbrec_chassis_by_hostname =
         chassis_hostname_index_create(sb->idl);
 
-    engine_init(&en_lflow, &engine_arg);
+    engine_init(&en_end, &engine_arg);
 
     engine_ovsdb_node_add_index(&en_sb_chassis,
                                 "sbrec_chassis_by_name",

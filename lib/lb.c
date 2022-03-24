@@ -106,8 +106,6 @@ void ovn_northd_lb_vip_init(struct ovn_northd_lb_vip *lb_vip_nb,
     lb_vip_nb->vip_port_str = xstrdup(vip_port_str);
     lb_vip_nb->backend_ips = xstrdup(backend_ips);
     lb_vip_nb->n_backends = lb_vip->n_backends;
-    lb_vip_nb->backends_nb = xcalloc(lb_vip_nb->n_backends,
-                                     sizeof *lb_vip_nb->backends_nb);
 
     struct nbrec_load_balancer_health_check *lb_health_check = NULL;
     if (nbrec_lb->protocol && !strcmp(nbrec_lb->protocol, "sctp")) {
@@ -137,10 +135,6 @@ void ovn_northd_lb_vip_destroy(struct ovn_northd_lb_vip *vip)
 {
     free(vip->vip_port_str);
     free(vip->backend_ips);
-    for (size_t i = 0; i < vip->n_backends; i++) {
-        free(vip->backends_nb[i].svc_mon_src_ip);
-    }
-    free(vip->backends_nb);
 }
 
 static void
@@ -275,6 +269,43 @@ ovn_northd_lb_destroy(struct ovn_northd_lb *lb)
     free(lb->nb_lr);
     free(lb->nb_ls);
     free(lb);
+}
+
+struct ovn_northd_svc_lb *
+ovn_northd_svc_lb_create(const struct ovn_northd_lb *lb)
+{
+    struct ovn_northd_svc_lb *svc_lb = xmalloc(sizeof *svc_lb);
+
+    svc_lb->lb = lb;
+    svc_lb->n_vips = lb->n_vips;
+    svc_lb->svc_vips = xzalloc(lb->n_vips * sizeof *svc_lb->svc_vips);
+
+    for (size_t i = 0; i < lb->n_vips; i++) {
+        svc_lb->svc_vips[i].backends_nb =
+            xcalloc(svc_lb->lb->vips_nb[i].n_backends,
+                    sizeof *svc_lb->svc_vips[i].backends_nb);
+    }
+    return svc_lb;
+}
+
+static void
+ovn_northd_svc_lb_vip_destroy(struct ovn_northd_svc_lb_vip *svc_vip)
+{
+    for (size_t i = 0; i < svc_vip->n_backends; i++) {
+        free(svc_vip->backends_nb[i].svc_mon_src_ip);
+    }
+    free(svc_vip->backends_nb);
+}
+
+void
+ovn_northd_svc_lb_destroy(struct ovn_northd_svc_lb *svc_lb)
+{
+    for (size_t i = 0; i < svc_lb->n_vips; i++) {
+        ovn_northd_svc_lb_vip_destroy(&svc_lb->svc_vips[i]);
+    }
+
+    free(svc_lb->svc_vips);
+    free(svc_lb);
 }
 
 struct ovn_controller_lb *

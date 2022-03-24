@@ -12,10 +12,18 @@ northd_ovn_northd_SOURCES = \
 	northd/en-lrouter.h \
 	northd/en-lswitch.c \
 	northd/en-lswitch.h \
+	northd/en-nb-lb.c \
+	northd/en-nb-lb.h \
+	northd/en-sb-lb.c \
+	northd/en-sb-lb.h \
 	northd/inc-proc-northd.c \
 	northd/inc-proc-northd.h \
 	northd/ipam.c \
 	northd/ipam.h \
+	northd/nb-lb.h \
+	northd/nb-lb.c \
+	northd/sb-lb.h \
+	northd/sb-lb.c \
 	northd/lswitch.h \
 	northd/lswitch.c \
 	northd/lrouter.h \

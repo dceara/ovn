@@ -27,9 +27,11 @@ struct northd_input {
     const struct hmap *northd_logical_switches;
     const struct hmap *northd_logical_routers;
 
+    /* en-lb reference. */
+    const struct hmap *lbs;
+
     /* Northbound table references */
     const struct nbrec_nb_global_table *nbrec_nb_global_table;
-    const struct nbrec_load_balancer_table *nbrec_load_balancer_table;
     const struct nbrec_port_group_table *nbrec_port_group_table;
     const struct nbrec_address_set_table *nbrec_address_set_table;
     const struct nbrec_meter_table *nbrec_meter_table;
@@ -43,7 +45,6 @@ struct northd_input {
     const struct sbrec_ha_chassis_group_table *sbrec_ha_chassis_group_table;
     const struct sbrec_chassis_table *sbrec_chassis;
     const struct sbrec_fdb_table *sbrec_fdb_table;
-    const struct sbrec_load_balancer_table *sbrec_load_balancer_table;
     const struct sbrec_service_monitor_table *sbrec_service_monitor_table;
     const struct sbrec_address_set_table *sbrec_address_set_table;
     const struct sbrec_port_group_table *sbrec_port_group_table;
@@ -65,9 +66,9 @@ struct northd_data {
     struct hmap ports;
     struct hmap port_groups;
     struct shash meter_groups;
-    struct hmap lbs;
     struct hmap bfd_connections;
     struct ovs_list lr_list;
+    struct hmap svc_lbs;
     bool ovn_internal_version_changed;
 };
 
@@ -88,7 +89,7 @@ struct lflow_input {
     const struct hmap *ports;
     const struct hmap *port_groups;
     const struct shash *meter_groups;
-    const struct hmap *lbs;
+    const struct hmap *svc_lbs;
     const struct hmap *bfd_connections;
     bool ovn_internal_version_changed;
 };
@@ -116,5 +117,7 @@ void northd_detach_logical_switch(struct northd_logical_switch *ls);
 void northd_attach_logical_router(struct northd_logical_router *lr,
                                   struct ovn_datapath *od);
 void northd_detach_logical_router(struct northd_logical_router *lr);
+const struct sbrec_datapath_binding *northd_get_sb_datapath(
+    struct ovn_datapath *od);
 
 #endif /* NORTHD_H */

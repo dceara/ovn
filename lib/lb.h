@@ -52,6 +52,20 @@ struct ovn_northd_lb {
     const struct northd_logical_router **nb_lr;
 };
 
+struct ovn_northd_svc_lb {
+    struct hmap_node hmap_node;
+
+    const struct ovn_northd_lb *lb;
+
+    size_t n_vips;
+    struct ovn_northd_svc_lb_vip *svc_vips;
+};
+
+struct ovn_northd_svc_lb_vip {
+    size_t n_backends;
+    struct ovn_northd_lb_backend *backends_nb;
+};
+
 struct ovn_lb_vip {
     struct in6_addr vip;
     char *vip_str;
@@ -72,7 +86,6 @@ struct ovn_lb_backend {
 struct ovn_northd_lb_vip {
     char *vip_port_str;
     char *backend_ips;
-    struct ovn_northd_lb_backend *backends_nb;
     size_t n_backends;
 
     struct nbrec_load_balancer_health_check *lb_health_check;
@@ -86,8 +99,14 @@ struct ovn_northd_lb_backend {
 };
 
 struct ovn_northd_lb *ovn_northd_lb_create(const struct nbrec_load_balancer *);
-struct ovn_northd_lb * ovn_northd_lb_find(struct hmap *, const struct uuid *);
+struct ovn_northd_lb *ovn_northd_lb_find(struct hmap *, const struct uuid *);
 void ovn_northd_lb_destroy(struct ovn_northd_lb *);
+
+/* XXX Awkward. */
+struct ovn_northd_svc_lb *ovn_northd_svc_lb_create(
+    const struct ovn_northd_lb *);
+void ovn_northd_svc_lb_destroy(struct ovn_northd_svc_lb *);
+
 void
 ovn_northd_lb_add_lr(struct ovn_northd_lb *lb,
                      const struct northd_logical_router *od);
