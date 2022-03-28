@@ -46,7 +46,6 @@ VLOG_DEFINE_THIS_MODULE(inc_proc_northd);
     NB_NODE(address_set, "address_set") \
     NB_NODE(port_group, "port_group") \
     NB_NODE(load_balancer, "load_balancer") \
-    NB_NODE(load_balancer_group, "load_balancer_group") \
     NB_NODE(load_balancer_health_check, "load_balancer_health_check") \
     NB_NODE(acl, "acl") \
     NB_NODE(logical_router, "logical_router") \
@@ -193,10 +192,11 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_lrouter, &en_nb_logical_router,
                      en_lrouter_nb_logical_router_handler);
 
-    engine_add_input(&en_nb_lb, &en_lswitch, NULL);
-    engine_add_input(&en_nb_lb, &en_lrouter, NULL);
-    engine_add_input(&en_nb_lb, &en_nb_load_balancer, NULL);
-    engine_add_input(&en_nb_lb, &en_nb_load_balancer_group, NULL);
+    // TODO: order matters :(
+    engine_add_input(&en_nb_lb, &en_nb_load_balancer,
+                     en_nb_lb_nb_load_balancer_handler);
+    engine_add_input(&en_nb_lb, &en_lswitch, en_nb_lb_lswitch_handler);
+    engine_add_input(&en_nb_lb, &en_lrouter, en_nb_lb_lrouter_handler);
 
     engine_add_input(&en_northd, &en_nb_nb_global, NULL);
     engine_add_input(&en_northd, &en_nb_copp, NULL);

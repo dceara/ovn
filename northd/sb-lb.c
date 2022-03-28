@@ -181,5 +181,8 @@ sb_lb_run(struct sb_lb_input *input_data, struct sb_lb_data *data OVS_UNUSED,
             sbrec_load_balancer_set_options(lb->slb, &options);
             smap_destroy(&options);
         }
+
+        /* XXX: Awkward. */
+        lb->slb = NULL;
     }
 }

@@ -242,10 +242,24 @@ ovn_northd_lb_add_lr(struct ovn_northd_lb *lb,
 }
 
 void
+ovn_northd_lb_del_lr(struct ovn_northd_lb *lb,
+                     const struct northd_logical_router *lr)
+{
+    hmapx_find_and_delete_assert(&lb->nb_lr, lr);
+}
+
+void
 ovn_northd_lb_add_ls(struct ovn_northd_lb *lb,
                      const struct northd_logical_switch *ls)
 {
     hmapx_add(&lb->nb_ls, CONST_CAST(void *, ls));
+}
+
+void
+ovn_northd_lb_del_ls(struct ovn_northd_lb *lb,
+                     const struct northd_logical_switch *ls)
+{
+    hmapx_find_and_delete_assert(&lb->nb_ls, ls);
 }
 
 void

@@ -127,6 +127,8 @@ northd_logical_router_init_nat(struct northd_logical_router *nlr)
     }
 
     if (!nlr->nbr->n_nat) {
+        nlr->nat_entries = NULL;
+        nlr->n_nat_entries = 0;
         return;
     }
 
@@ -197,20 +199,32 @@ northd_logical_router_destroy_external_ips(struct northd_logical_router *nlr)
     sset_destroy(&nlr->external_ips);
 }
 
+static void
+init_northd_logical_router(struct northd_logical_router *nlr)
+{
+    init_mcast_router_config(&nlr->mcast_config, nlr->nbr);
+    northd_logical_router_init_nat(nlr);
+    northd_logical_router_init_external_ips(nlr);
+
+    if (smap_get(&nlr->nbr->options, "chassis")) {
+        nlr->is_gw_router = true;
+    }
+}
+
+static void
+uninit_northd_logical_router(struct northd_logical_router *nlr)
+{
+    northd_logical_router_destroy_nat(nlr);
+    northd_logical_router_destroy_external_ips(nlr);
+}
+
 static struct northd_logical_router *
 create_northd_logical_router(struct lrouter_data *data,
                              const struct nbrec_logical_router *nbr)
 {
     struct northd_logical_router *nlr = xzalloc(sizeof *nlr);
     nlr->nbr = nbr;
-
-    init_mcast_router_config(&nlr->mcast_config, nbr);
-    northd_logical_router_init_nat(nlr);
-    northd_logical_router_init_external_ips(nlr);
-
-    if (smap_get(&nbr->options, "chassis")) {
-        nlr->is_gw_router = true;
-    }
+    init_northd_logical_router(nlr);
 
     hmap_insert(&data->routers, &nlr->node, uuid_hash(&nbr->header_.uuid));
     return nlr;
@@ -230,9 +244,8 @@ destroy_northd_logical_router(struct northd_logical_router *nlr)
         return;
     }
 
+    uninit_northd_logical_router(nlr);
     northd_detach_logical_router(nlr);
-    northd_logical_router_destroy_nat(nlr);
-    northd_logical_router_destroy_external_ips(nlr);
     free(nlr);
 }
 
@@ -299,34 +312,30 @@ lrouter_clear_tracked(struct lrouter_data *data)
 
 void
 lrouter_track_new(struct lrouter_data *data,
-                  const struct nbrec_logical_router *nbs)
+                  const struct nbrec_logical_router *nbr)
 {
-    struct northd_logical_router *nls
-        = create_northd_logical_router(data, nbs);
-    hmapx_add(&data->new_routers, nls);
+    struct northd_logical_router *nlr
+        = create_northd_logical_router(data, nbr);
+    hmapx_add(&data->new_routers, nlr);
 }
 
 void
 lrouter_track_updated(struct lrouter_data *data,
-                      const struct nbrec_logical_router *nbs)
+                      const struct nbrec_logical_router *nbr)
 {
-    struct northd_logical_router *nls
-        = find_northd_logical_router(data, nbs);
-    ovs_assert(nls);
-    delete_northd_logical_router(data, nls);
-    destroy_northd_logical_router(nls);
-
-    nls = create_northd_logical_router(data, nbs);
-    hmapx_add(&data->updated_routers, nls);
+    struct northd_logical_router *nlr
+        = find_northd_logical_router(data, nbr);
+    uninit_northd_logical_router(nlr);
+    init_northd_logical_router(nlr);
+    hmapx_add(&data->updated_routers, nlr);
 }
 
 void
 lrouter_track_deleted(struct lrouter_data *data,
-                      const struct nbrec_logical_router *nbs)
+                      const struct nbrec_logical_router *nbr)
 {
-    struct northd_logical_router *nls
-        = find_northd_logical_router(data, nbs);
-    ovs_assert(nls);
-    hmap_remove(&data->routers, &nls->node);
-    hmapx_add(&data->deleted_routers, nls);
+    struct northd_logical_router *nlr
+        = find_northd_logical_router(data, nbr);
+    hmap_remove(&data->routers, &nlr->node);
+    hmapx_add(&data->deleted_routers, nlr);
 }

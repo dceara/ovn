@@ -17,6 +17,8 @@
 
 #include "openvswitch/hmap.h"
 
+struct nbrec_load_balancer;
+
 struct nb_lb_input {
     /* Input data for 'en-nb-lb'. */
 
@@ -30,11 +32,25 @@ struct nb_lb_input {
 
 struct nb_lb_data {
     /* Global state for 'en-nb-lb'. */
-    struct hmap lbs;
+    struct hmap lbs;    /* Stores 'struct ovn_northd_lb'. */
+    struct hmap lr_lbs; /* Stores 'struct nb_lb_router_ref'. */
+    struct hmap ls_lbs; /* Stores 'struct nb_lb_switch_ref'. */
 };
 
 void nb_lb_init(struct nb_lb_data *data);
 void nb_lb_destroy(struct nb_lb_data *data);
 void nb_lb_run(struct nb_lb_input *input_data, struct nb_lb_data *data);
+
+void nb_lb_handle_new(struct nb_lb_data *data, const struct nbrec_load_balancer *lb);
+void nb_lb_handle_deleted(struct nb_lb_data *data, const struct nbrec_load_balancer *lb);
+void nb_lb_handle_updated(struct nb_lb_data *data, const struct nbrec_load_balancer *lb);
+
+void nb_lb_handle_new_lrouter(struct nb_lb_data *data, const struct northd_logical_router *lr);
+void nb_lb_handle_deleted_lrouter(struct nb_lb_data *data, const struct northd_logical_router *lr);
+void nb_lb_handle_updated_lrouter(struct nb_lb_data *data, const struct northd_logical_router *lr);
+
+void nb_lb_handle_new_lswitch(struct nb_lb_data *data, const struct northd_logical_switch *ls);
+void nb_lb_handle_deleted_lswitch(struct nb_lb_data *data, const struct northd_logical_switch *ls);
+void nb_lb_handle_updated_lswitch(struct nb_lb_data *data, const struct northd_logical_switch *ls);
 
 #endif /* northd/nb-lb.h */

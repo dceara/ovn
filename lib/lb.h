@@ -109,7 +109,13 @@ void
 ovn_northd_lb_add_lr(struct ovn_northd_lb *lb,
                      const struct northd_logical_router *od);
 void
+ovn_northd_lb_del_lr(struct ovn_northd_lb *lb,
+                     const struct northd_logical_router *od);
+void
 ovn_northd_lb_add_ls(struct ovn_northd_lb *lb,
+                     const struct northd_logical_switch *od);
+void
+ovn_northd_lb_del_ls(struct ovn_northd_lb *lb,
                      const struct northd_logical_switch *od);
 
 struct ovn_controller_lb {

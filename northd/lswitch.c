@@ -25,18 +25,30 @@
 
 VLOG_DEFINE_THIS_MODULE(lswitch)
 
+static void
+init_northd_logical_switch(struct northd_logical_switch *nls)
+{
+    char uuid_s[UUID_LEN + 1];
+    sprintf(uuid_s, UUID_FMT, UUID_ARGS(&nls->nbs->header_.uuid));
+    init_ipam_config(&nls->ipam_config, &nls->nbs->other_config, uuid_s);
+
+    init_mcast_switch_config(&nls->mcast_config, nls->nbs);
+}
+
+static void
+uninit_northd_logical_switch(struct northd_logical_switch *nls)
+{
+    destroy_ipam_config(&nls->ipam_config);
+    destroy_mcast_switch_config(&nls->mcast_config);
+}
+
 static struct northd_logical_switch *
 create_northd_logical_switch(struct lswitch_data *data,
                              const struct nbrec_logical_switch *nbs)
 {
     struct northd_logical_switch *nls = xzalloc(sizeof *nls);
     nls->nbs = nbs;
-
-    char uuid_s[UUID_LEN + 1];
-    sprintf(uuid_s, UUID_FMT, UUID_ARGS(&nls->nbs->header_.uuid));
-    init_ipam_config(&nls->ipam_config, &nbs->other_config, uuid_s);
-
-    init_mcast_switch_config(&nls->mcast_config, nbs);
+    init_northd_logical_switch(nls);
 
     hmap_insert(&data->switches, &nls->node, uuid_hash(&nbs->header_.uuid));
     return nls;
@@ -56,9 +68,8 @@ destroy_northd_logical_switch(struct northd_logical_switch *nls)
         return;
     }
 
+    uninit_northd_logical_switch(nls);
     northd_detach_logical_switch(nls);
-    destroy_ipam_config(&nls->ipam_config);
-    destroy_mcast_switch_config(&nls->mcast_config);
     free(nls);
 }
 
@@ -138,11 +149,8 @@ lswitch_track_updated(struct lswitch_data *data,
 {
     struct northd_logical_switch *nls
         = find_northd_logical_switch(data, nbs);
-    ovs_assert(nls);
-    delete_northd_logical_switch(data, nls);
-    destroy_northd_logical_switch(nls);
-
-    nls = create_northd_logical_switch(data, nbs);
+    uninit_northd_logical_switch(nls);
+    init_northd_logical_switch(nls);
     hmapx_add(&data->updated_switches, nls);
 }
 
@@ -152,7 +160,6 @@ lswitch_track_deleted(struct lswitch_data *data,
 {
     struct northd_logical_switch *nls
         = find_northd_logical_switch(data, nbs);
-    ovs_assert(nls);
     hmap_remove(&data->switches, &nls->node);
     hmapx_add(&data->deleted_switches, nls);
 }

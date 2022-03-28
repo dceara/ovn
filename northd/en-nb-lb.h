@@ -21,4 +21,10 @@ void en_nb_lb_run(struct engine_node *node, void *data);
 void *en_nb_lb_init(struct engine_node *node, struct engine_arg *arg);
 void en_nb_lb_cleanup(void *data);
 
+/* I-P change handlers. */
+bool en_nb_lb_nb_load_balancer_handler(struct engine_node *node,
+                                       void *data);
+bool en_nb_lb_lrouter_handler(struct engine_node *node, void *data);
+bool en_nb_lb_lswitch_handler(struct engine_node *node, void *data);
+
 #endif /* northd/en-nb-lb.h */
