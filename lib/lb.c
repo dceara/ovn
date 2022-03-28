@@ -169,6 +169,8 @@ ovn_northd_lb_create(const struct nbrec_load_balancer *nbrec_lb)
     lb->vips_nb = xcalloc(lb->n_vips, sizeof *lb->vips_nb);
     sset_init(&lb->ips_v4);
     sset_init(&lb->ips_v6);
+    hmapx_init(&lb->nb_lr);
+    hmapx_init(&lb->nb_ls);
     struct smap_node *node;
     size_t n_vips = 0;
 
@@ -236,22 +238,14 @@ void
 ovn_northd_lb_add_lr(struct ovn_northd_lb *lb,
                      const struct northd_logical_router *lr)
 {
-    if (lb->n_allocated_nb_lr == lb->n_nb_lr) {
-        lb->nb_lr = x2nrealloc(lb->nb_lr, &lb->n_allocated_nb_lr,
-                               sizeof *lb->nb_lr);
-    }
-    lb->nb_lr[lb->n_nb_lr++] = lr;
+    hmapx_add(&lb->nb_lr, CONST_CAST(void *, lr));
 }
 
 void
 ovn_northd_lb_add_ls(struct ovn_northd_lb *lb,
                      const struct northd_logical_switch *ls)
 {
-    if (lb->n_allocated_nb_ls == lb->n_nb_ls) {
-        lb->nb_ls = x2nrealloc(lb->nb_ls, &lb->n_allocated_nb_ls,
-                               sizeof *lb->nb_ls);
-    }
-    lb->nb_ls[lb->n_nb_ls++] = ls;
+    hmapx_add(&lb->nb_ls, CONST_CAST(void *, ls));
 }
 
 void
@@ -266,8 +260,8 @@ ovn_northd_lb_destroy(struct ovn_northd_lb *lb)
     sset_destroy(&lb->ips_v4);
     sset_destroy(&lb->ips_v6);
     free(lb->selection_fields);
-    free(lb->nb_lr);
-    free(lb->nb_ls);
+    hmapx_destroy(&lb->nb_lr);
+    hmapx_destroy(&lb->nb_ls);
     free(lb);
 }
 

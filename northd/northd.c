@@ -3541,8 +3541,9 @@ build_lrouter_lbs_reachable_ips(struct hmap *svc_lbs)
     struct ovn_northd_svc_lb *svc_lb;
 
     HMAP_FOR_EACH (svc_lb, hmap_node, svc_lbs) {
-        for (size_t i = 0; i < svc_lb->lb->n_nb_lr; i++) {
-            const struct northd_logical_router *lr = svc_lb->lb->nb_lr[i];
+        struct hmapx_node *node;
+        HMAPX_FOR_EACH (node, &svc_lb->lb->nb_lr) {
+            const struct northd_logical_router *lr = node->data;
             build_lrouter_lb_reachable_ips(lr->od, svc_lb);
         }
     }
@@ -3557,8 +3558,9 @@ build_lb_datapath_related_data(const struct hmap *lbs)
     const struct ovn_northd_lb *lb;
 
     HMAP_FOR_EACH (lb, hmap_node, lbs) {
-        for (size_t i = 0; i < lb->n_nb_lr; i++) {
-            const struct northd_logical_router *lr = lb->nb_lr[i];
+        struct hmapx_node *node;
+        HMAPX_FOR_EACH (node, &lb->nb_lr) {
+            const struct northd_logical_router *lr = node->data;
             build_lrouter_lb_ips(lr->od, lb);
         }
     }
@@ -6395,8 +6397,10 @@ build_lb_rules(struct hmap *lflows, struct ovn_northd_svc_lb *svc_lb,
                 ovn_stage_get_pipeline(S_SWITCH_IN_LB), priority,
                 ds_cstr(match), ds_cstr(action));
 
-        for (size_t j = 0; j < lb->n_nb_ls; j++) {
-            struct ovn_datapath *od = lb->nb_ls[j]->od;
+        struct hmapx_node *node;
+        HMAPX_FOR_EACH (node, &lb->nb_ls) {
+            struct northd_logical_switch *ls = node->data;
+            struct ovn_datapath *od = ls->od;
 
             if (reject) {
                 meter = copp_meter_get(COPP_REJECT, od->ls->nbs->copp,
@@ -9296,8 +9300,10 @@ build_lrouter_nat_flows_for_lb(struct ovn_lb_vip *lb_vip,
                       lb_vip->vip_port);
     }
 
-    for (size_t i = 0; i < lb->n_nb_lr; i++) {
-        struct ovn_datapath *od = lb->nb_lr[i]->od;
+    struct hmapx_node *node;
+    HMAPX_FOR_EACH (node, &lb->nb_lr) {
+        const struct northd_logical_router *lr = node->data;
+        struct ovn_datapath *od = lr->od;
         char *new_match_p = new_match;
         char *est_match_p = est_match;
         char *est_actions = NULL;
@@ -9423,7 +9429,7 @@ build_lswitch_flows_for_lb(struct ovn_northd_svc_lb *svc_lb,
 {
     const struct ovn_northd_lb *lb = svc_lb->lb;
 
-    if (!lb->n_nb_ls) {
+    if (!hmapx_count(&lb->nb_ls)) {
         return;
     }
 
@@ -9434,8 +9440,10 @@ build_lswitch_flows_for_lb(struct ovn_northd_svc_lb *svc_lb,
         if (!build_empty_lb_event_flow(lb_vip, lb->nlb, match, action)) {
             continue;
         }
-        for (size_t j = 0; j < lb->n_nb_ls; j++) {
-            struct ovn_datapath *od = lb->nb_ls[j]->od;
+        struct hmapx_node *node;
+        HMAPX_FOR_EACH (node, &lb->nb_ls) {
+            struct northd_logical_switch *ls = node->data;
+            struct ovn_datapath *od = ls->od;
             ovn_lflow_add_with_hint__(lflows, od,
                                       S_SWITCH_IN_PRE_LB, 130, ds_cstr(match),
                                       ds_cstr(action),
@@ -9474,7 +9482,7 @@ build_lrouter_defrag_flows_for_lb(struct ovn_northd_svc_lb *svc_lb,
                                   struct ds *match)
 {
     const struct ovn_northd_lb *lb = svc_lb->lb;
-    if (!lb->n_nb_lr) {
+    if (!hmapx_count(&lb->nb_lr)) {
         return;
     }
 
@@ -9511,8 +9519,10 @@ build_lrouter_defrag_flows_for_lb(struct ovn_northd_svc_lb *svc_lb,
                 ovn_stage_get_table(S_ROUTER_IN_DEFRAG),
                 ovn_stage_get_pipeline(S_ROUTER_IN_DEFRAG), prio,
                 ds_cstr(match), ds_cstr(&defrag_actions));
-        for (size_t j = 0; j < lb->n_nb_lr; j++) {
-            struct ovn_datapath *od = lb->nb_lr[j]->od;
+        struct hmapx_node *node;
+        HMAPX_FOR_EACH (node, &lb->nb_lr) {
+            struct northd_logical_router *lr = node->data;
+            struct ovn_datapath *od = lr->od;
             if (ovn_dp_group_add_with_reference(lflow_ref, od)) {
                 continue;
             }
@@ -9535,7 +9545,7 @@ build_lrouter_flows_for_lb(struct ovn_northd_svc_lb *svc_lb,
 {
     const struct ovn_northd_lb *lb = svc_lb->lb;
 
-    if (!lb->n_nb_lr) {
+    if (!hmapx_count(&lb->nb_lr)) {
         return;
     }
 
@@ -9550,8 +9560,10 @@ build_lrouter_flows_for_lb(struct ovn_northd_svc_lb *svc_lb,
         if (!build_empty_lb_event_flow(lb_vip, lb->nlb, match, action)) {
             continue;
         }
-        for (size_t j = 0; j < lb->n_nb_lr; j++) {
-            struct ovn_datapath *od = lb->nb_lr[j]->od;
+        struct hmapx_node *node;
+        HMAPX_FOR_EACH (node, &lb->nb_lr) {
+            struct northd_logical_router *lr = node->data;
+            struct ovn_datapath *od = lr->od;
             ovn_lflow_add_with_hint__(lflows, od, S_ROUTER_IN_DNAT,
                                       130, ds_cstr(match), ds_cstr(action),
                                       NULL,
@@ -9563,8 +9575,10 @@ build_lrouter_flows_for_lb(struct ovn_northd_svc_lb *svc_lb,
     }
 
     if (smap_get_bool(&lb->nlb->options, "skip_snat", false)) {
-        for (size_t i = 0; i < lb->n_nb_lr; i++) {
-            struct ovn_datapath *od = lb->nb_lr[i]->od;
+        struct hmapx_node *node;
+        HMAPX_FOR_EACH (node, &lb->nb_lr) {
+            struct northd_logical_router *lr = node->data;
+            struct ovn_datapath *od = lr->od;
             ovn_lflow_add(lflows, od, S_ROUTER_OUT_SNAT, 120,
                           "flags.skip_snat_for_lb == 1 && ip", "next;");
         }

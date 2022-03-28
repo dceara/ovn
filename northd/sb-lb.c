@@ -67,15 +67,16 @@ sb_lb_needs_update(const struct ovn_northd_lb *lb,
         return true;
     }
 
-    if (lb->n_nb_ls != slb->n_datapaths) {
+    if (hmapx_count(&lb->nb_ls) != slb->n_datapaths) {
         return true;
     }
 
     struct hmapx nb_datapaths = HMAPX_INITIALIZER(&nb_datapaths);
-    for (size_t i = 0; i < lb->n_nb_ls; i++) {
+    struct hmapx_node *node;
+    HMAPX_FOR_EACH (node, &lb->nb_ls) {
+        struct northd_logical_switch *ls = node->data;
         hmapx_add(&nb_datapaths,
-                  CONST_CAST(void *,
-                             northd_get_sb_datapath(lb->nb_ls[i]->od)));
+                  CONST_CAST(void *, northd_get_sb_datapath(ls->od)));
     }
 
     bool stale = false;
@@ -116,7 +117,7 @@ sb_lb_run(struct sb_lb_input *input_data, struct sb_lb_data *data OVS_UNUSED,
          * are not indexed in any way.
          */
         lb = ovn_northd_lb_find(input_data->nb_lbs, &lb_uuid);
-        if (!lb || !lb->n_nb_ls || !hmapx_add(&existing_lbs,
+        if (!lb || !hmapx_count(&lb->nb_ls) || !hmapx_add(&existing_lbs,
                                               CONST_CAST(void *, lb))) {
             sbrec_load_balancer_delete(sbrec_lb);
         } else {
@@ -129,7 +130,7 @@ sb_lb_run(struct sb_lb_input *input_data, struct sb_lb_data *data OVS_UNUSED,
      * the SB load balancer columns. */
     HMAP_FOR_EACH (lb, hmap_node, input_data->nb_lbs) {
 
-        if (!lb->n_nb_ls) {
+        if (!hmapx_count(&lb->nb_ls)) {
             continue;
         }
 
@@ -153,13 +154,17 @@ sb_lb_run(struct sb_lb_input *input_data, struct sb_lb_data *data OVS_UNUSED,
             sbrec_load_balancer_set_protocol(lb->slb, lb->nlb->protocol);
 
             struct sbrec_datapath_binding **lb_dps =
-                xmalloc(lb->n_nb_ls * sizeof *lb_dps);
-            for (size_t i = 0; i < lb->n_nb_ls; i++) {
-                lb_dps[i] =
+                xmalloc(hmapx_count(&lb->nb_ls) * sizeof *lb_dps);
+            struct hmapx_node *node;
+            size_t i = 0;
+            HMAPX_FOR_EACH (node, &lb->nb_ls) {
+                struct northd_logical_switch *ls = node->data;
+                lb_dps[i++] =
                     CONST_CAST(struct sbrec_datapath_binding *,
-                               northd_get_sb_datapath(lb->nb_ls[i]->od));
+                               northd_get_sb_datapath(ls->od));
             }
-            sbrec_load_balancer_set_datapaths(lb->slb, lb_dps, lb->n_nb_ls);
+            sbrec_load_balancer_set_datapaths(lb->slb, lb_dps,
+                                              hmapx_count(&lb->nb_ls));
             free(lb_dps);
 
             /* Store the fact that northd provides the original (destination

@@ -19,11 +19,14 @@
 
 #include <sys/types.h>
 #include <netinet/in.h>
+#include "hmapx.h"
 #include "openvswitch/hmap.h"
 #include "sset.h"
 #include "ovn-util.h"
 
 struct nbrec_load_balancer;
+struct northd_logical_router;
+struct northd_logical_switch;
 struct sbrec_load_balancer;
 struct sbrec_datapath_binding;
 struct ovn_port;
@@ -43,13 +46,8 @@ struct ovn_northd_lb {
     struct sset ips_v4;
     struct sset ips_v6;
 
-    size_t n_nb_ls;
-    size_t n_allocated_nb_ls;
-    const struct northd_logical_switch **nb_ls;
-
-    size_t n_nb_lr;
-    size_t n_allocated_nb_lr;
-    const struct northd_logical_router **nb_lr;
+    struct hmapx nb_lr; /* Stores 'struct northd_logical_router *'. */
+    struct hmapx nb_ls; /* Stores 'struct northd_logical_switch *'. */
 };
 
 struct ovn_northd_svc_lb {
