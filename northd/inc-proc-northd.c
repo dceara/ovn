@@ -267,10 +267,7 @@ void inc_proc_northd_run(struct ovsdb_idl_txn *ovnnb_txn,
     };
 
     engine_set_context(&eng_ctx);
-
-    if (ovnnb_txn && ovnsb_txn) {
-        engine_run(true);
-    }
+    engine_run(true);
 
     if (!engine_has_run()) {
         if (engine_need_run()) {

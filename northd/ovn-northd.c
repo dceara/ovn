@@ -817,19 +817,18 @@ main(int argc, char *argv[])
             }
 
             if (ovsdb_idl_has_lock(ovnsb_idl_loop.idl)) {
-                int64_t loop_start_time = time_wall_msec();
-                inc_proc_northd_run(ovnnb_txn, ovnsb_txn, recompute);
-                recompute = false;
-                if (ovnsb_txn) {
+                if (ovnnb_txn && ovnsb_txn) {
+                    int64_t loop_start_time = time_wall_msec();
+
+                    inc_proc_northd_run(ovnnb_txn, ovnsb_txn, recompute);
+                    recompute = false;
+
                     check_and_add_supported_dhcp_opts_to_sb_db(
                                  ovnsb_txn, ovnsb_idl_loop.idl);
                     check_and_add_supported_dhcpv6_opts_to_sb_db(
                                  ovnsb_txn, ovnsb_idl_loop.idl);
                     check_and_update_rbac(
                                  ovnsb_txn, ovnsb_idl_loop.idl);
-                }
-
-                if (ovnnb_txn && ovnsb_txn) {
                     update_sequence_numbers(loop_start_time,
                                             ovnnb_idl_loop.idl,
                                             ovnsb_idl_loop.idl,
@@ -850,6 +849,11 @@ main(int argc, char *argv[])
                               "force recompute next time.");
                     recompute = true;
                 }
+
+                if (ovnnb_txn && ovnsb_txn) {
+                    ovsdb_idl_track_clear(ovnnb_idl_loop.idl);
+                    ovsdb_idl_track_clear(ovnsb_idl_loop.idl);
+                }
             } else {
                 /* Make sure we send any pending requests, e.g., lock. */
                 ovsdb_idl_loop_commit_and_wait(&ovnnb_idl_loop);
@@ -857,6 +861,9 @@ main(int argc, char *argv[])
 
                 /* Force a full recompute next time we become active. */
                 recompute = true;
+
+                ovsdb_idl_track_clear(ovnnb_idl_loop.idl);
+                ovsdb_idl_track_clear(ovnsb_idl_loop.idl);
             }
         } else {
             /* ovn-northd is paused
@@ -881,10 +888,10 @@ main(int argc, char *argv[])
 
             /* Force a full recompute next time we become active. */
             recompute = true;
-        }
 
-        ovsdb_idl_track_clear(ovnnb_idl_loop.idl);
-        ovsdb_idl_track_clear(ovnsb_idl_loop.idl);
+            ovsdb_idl_track_clear(ovnnb_idl_loop.idl);
+            ovsdb_idl_track_clear(ovnsb_idl_loop.idl);
+        }
 
         unixctl_server_run(unixctl);
         unixctl_server_wait(unixctl);
