@@ -723,10 +723,16 @@ main(int argc, char *argv[])
     unixctl_command_register("nb-connection-status", "", 0, 0,
                              ovn_conn_show, ovnnb_idl_loop.idl);
 
-    /* We want to detect all changes to the ovn-sb db. */
+    /* We want to detect all changes to the ovn-sb db but because
+     * northd is (mainly) an exclusive writer of the SB we enable
+     * change tracking for write-only columns. */
     struct ovsdb_idl_loop ovnsb_idl_loop = OVSDB_IDL_LOOP_INITIALIZER(
         ovsdb_idl_create(ovnsb_db, &sbrec_idl_class, true, true));
     ovsdb_idl_track_add_all(ovnsb_idl_loop.idl);
+    ovsdb_idl_set_write_changed_only_all(ovnsb_idl_loop.idl, true);
+
+    /* Disable alerting for pure write-only columns. */
+    ovsdb_idl_omit_alert(ovnsb_idl_loop.idl, &sbrec_sb_global_col_nb_cfg);
 
     unixctl_command_register("sb-connection-status", "", 0, 0,
                              ovn_conn_show, ovnsb_idl_loop.idl);
