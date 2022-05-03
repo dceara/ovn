@@ -19665,7 +19665,8 @@ ovn-nbctl lsp-add sw3 sw3-p1
 ovn-nbctl lsp-add sw3 sw3-p2
 ovn-nbctl lsp-add sw3 sw3-ln                    \
     -- lsp-set-type sw3-ln localnet             \
-    -- lsp-set-options sw3-ln network_name=phys
+    -- lsp-set-options sw3-ln network_name=phys \
+    -- lsp-set-options sw3-ln mcast_flood=true
 
 ovn-nbctl lr-add rtr
 ovn-nbctl lrp-add rtr rtr-sw1 00:00:00:00:01:00 10.0.0.254/24
@@ -20079,18 +20080,6 @@ store_ip_multicast_pkt \
     000000000001 01005e000144 \
     $(ip_to_hex 10 0 0 42) $(ip_to_hex 239 0 1 68) 1e 20 ca70 11 \
     e518e518000a3b3a0000 expected_switched
-
-# TODO: IGMP Relay duplicates IP multicast packets in some conditions, for
-# more details see TODO.rst, section "IP Multicast Relay". Once that issue is
-# fixed the duplicated packets should not appear anymore.
-store_ip_multicast_pkt \
-    000000000100 01005e000144 \
-    $(ip_to_hex 10 0 0 42) $(ip_to_hex 239 0 1 68) 1e 1f cb70 11 \
-    e518e518000a3b3a0000 expected_routed_sw1
-store_ip_multicast_pkt \
-    000000000200 01005e000144 \
-    $(ip_to_hex 10 0 0 42) $(ip_to_hex 239 0 1 68) 1e 1f cb70 11 \
-    e518e518000a3b3a0000 expected_routed_sw2
 
 OVS_WAIT_UNTIL(
   [check_packets 'hv1/vif1-tx.pcap expected_routed_sw1' \

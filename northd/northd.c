@@ -4682,13 +4682,6 @@ ovn_igmp_group_aggregate_ports(struct ovn_igmp_group *igmp_group,
         ovn_igmp_group_destroy_entry(entry);
         free(entry);
     }
-
-    if (igmp_group->datapath->n_localnet_ports) {
-        ovn_multicast_add_ports(mcast_groups, igmp_group->datapath,
-                                &igmp_group->mcgroup,
-                                igmp_group->datapath->localnet_ports,
-                                igmp_group->datapath->n_localnet_ports);
-    }
 }
 
 static void
@@ -14961,6 +14954,16 @@ build_mcast_groups(struct lflow_input *input_data,
 
         /* Add the extracted ports to the IGMP group. */
         ovn_igmp_group_add_entry(igmp_group, igmp_ports, n_igmp_ports);
+        if (!ovn_igmp_group_allocate_id(igmp_group)) {
+            ovn_igmp_group_destroy(igmp_groups, igmp_group);
+            continue;
+        }
+        if (igmp_group->datapath->n_localnet_ports) {
+            ovn_multicast_add_ports(mcast_groups, igmp_group->datapath,
+                                    &igmp_group->mcgroup,
+                                    igmp_group->datapath->localnet_ports,
+                                    igmp_group->datapath->n_localnet_ports);
+        }
     }
 
     /* Build IGMP groups for multicast routers with relay enabled. The router
