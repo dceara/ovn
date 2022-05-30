@@ -3723,6 +3723,7 @@ main(int argc, char *argv[])
     int64_t startup_ts = time_wall_msec();
     bool sb_monitor_all = false;
     while (!exiting) {
+        xmalloc(42);
         memory_run();
         if (memory_should_report()) {
             struct simap usage = SIMAP_INITIALIZER(&usage);

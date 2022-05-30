@@ -71,7 +71,7 @@ if [ "$TESTSUITE" ]; then
         configure_ovn
 
         export DISTCHECK_CONFIGURE_FLAGS="$OPTS"
-        if ! make distcheck -j4 TESTSUITEFLAGS="-j4" RECHECK=yes; then
+        if ! make distcheck -j4 TESTSUITEFLAGS="-j4 2253" RECHECK=yes; then
             # testsuite.log is necessary for debugging.
             cat */_build/sub/tests/testsuite.log
             exit 1

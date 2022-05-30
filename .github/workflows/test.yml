@@ -30,32 +30,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - compiler:     gcc
-            opts:         --disable-ssl
-          - compiler:     clang
-            opts:         --disable-ssl
-
-          - compiler:     gcc
-            testsuite:    test
-          - compiler:     gcc
-            testsuite:    system-test
           - compiler:     clang
             testsuite:    test
             asan:         asan
           - compiler:     clang
             testsuite:    test
             ubsan:        ubsan
-
-          - compiler:     gcc
-            testsuite:    test
-            libs:         -ljemalloc
-          - compiler:     clang
-            testsuite:    test
-            libs:         -ljemalloc
-
-          - compiler:     gcc
-            m32:          m32
-            opts:         --disable-ssl
 
     steps:
     - name: checkout
@@ -133,54 +113,3 @@ jobs:
       with:
         name: logs-linux-${{ join(matrix.*, '-') }}
         path: logs.tgz
-
-  build-osx:
-    env:
-      CC:    clang
-      OPTS:  --disable-ssl
-
-    name:    osx clang --disable-ssl
-    runs-on: macos-latest
-
-    strategy:
-      fail-fast: false
-
-    steps:
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v2
-      with:
-        submodules: recursive
-    # For weekly runs, don't update submodules
-    - name: checkout without submodule
-      if: github.event_name == 'schedule'
-      uses: actions/checkout@v2
-    # Weekly runs test using OVS master instead of the
-    # submodule.
-    - name: checkout OVS master
-      if: github.event_name == 'schedule'
-      uses: actions/checkout@v2
-      with:
-        repository: 'openvswitch/ovs'
-        path: 'ovs'
-        ref: 'master'
-    - name: install dependencies
-      run:  brew install automake libtool
-    - name: update PATH
-      run:  |
-        echo "$HOME/bin"        >> $GITHUB_PATH
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-    - name: set up python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
-    - name: prepare
-      run:  ./.ci/osx-prepare.sh
-    - name: build
-      run:  ./.ci/osx-build.sh
-    - name: upload logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v2
-      with:
-        name: logs-osx-clang---disable-ssl
-        path: config.log
