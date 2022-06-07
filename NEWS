@@ -4,6 +4,7 @@ Post v22.06.0
     "ovn-encap-df_default" to enable or disable tunnel DF flag.
   - Add option "localnet_learn_fdb" to LSP that will allow localnet
     ports to learn MAC addresses and store them in FDB table.
+  - Removed possibility of disabling logical datapath groups.
 
 OVN v22.06.0 - XX XXX XXXX
 --------------------------
