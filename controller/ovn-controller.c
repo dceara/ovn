@@ -821,18 +821,13 @@ restore_ct_zones(const struct ovsrec_bridge_table *bridge_table,
         }
 
         const char *user = node->key + 8;
-        if (!user[0]) {
-            continue;
-        }
+        int zone = atoi(node->value);
 
-        unsigned int zone;
-        if (!str_to_uint(node->value, 10, &zone)) {
-            continue;
+        if (user[0] && zone) {
+            VLOG_DBG("restoring ct zone %"PRId32" for '%s'", zone, user);
+            bitmap_set1(ct_zone_bitmap, zone);
+            simap_put(ct_zones, user, zone);
         }
-
-        VLOG_DBG("restoring ct zone %"PRId32" for '%s'", zone, user);
-        bitmap_set1(ct_zone_bitmap, zone);
-        simap_put(ct_zones, user, zone);
     }
 }
 
