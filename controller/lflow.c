@@ -1686,7 +1686,7 @@ consider_neighbor_flow(struct ovsdb_idl_index *sbrec_port_binding_by_name,
         }
         match_set_reg(&get_arp_match, 0, ntohl(ip_addr));
         match_set_reg(&lookup_arp_match, 0, ntohl(ip_addr));
-        match_set_dl_type(&lookup_arp_match, htons(ETH_TYPE_ARP));
+        // match_set_dl_type(&lookup_arp_match, htons(ETH_TYPE_ARP));
     } else {
         struct in6_addr ip6;
         if (!ipv6_parse(ip, &ip6)) {

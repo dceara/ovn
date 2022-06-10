@@ -9420,13 +9420,25 @@ add_ecmp_symmetric_reply_flows(struct hmap *lflows,
                   cidr);
     free(cidr);
     ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_DEFRAG, 100,
-                            ds_cstr(&match), "ct_next;",
+                            ds_cstr(&match),
+                            REGBIT_LOOKUP_NEIGHBOR_RESULT
+                            " = lookup_arp(inport, ip4.src, eth.src); "
+                            "ct_next;",
                             &st_route->header_);
 
     /* And packets that go out over an ECMP route need conntrack */
     ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_DEFRAG, 100,
-                            ds_cstr(route_match), "ct_next;",
+                            ds_cstr(route_match),
+                            REGBIT_LOOKUP_NEIGHBOR_RESULT
+                            " = lookup_arp(inport, ip4.src, eth.src); "
+                            "ct_next;",
                             &st_route->header_);
+
+    struct ds match2 = DS_EMPTY_INITIALIZER;
+    ds_clone(&match2, &match);
+
+    struct ds match3 = DS_EMPTY_INITIALIZER;
+    ds_clone(&match3, &match);
 
     /* Save src eth and inport in ct_label for packets that arrive over
      * an ECMP route.
@@ -9441,6 +9453,19 @@ add_ecmp_symmetric_reply_flows(struct hmap *lflows,
                   ct_ecmp_reply_port_match, out_port->sb->tunnel_key);
     ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_ECMP_STATEFUL, 100,
                             ds_cstr(&match), ds_cstr(&actions),
+                            &st_route->header_);
+
+    // Packets in the original direction still matching ct_label eth addr.
+    // Just advance.
+    ds_put_cstr(&match2, " && !ct.new && ct.est && !ct.rpl && " REGBIT_LOOKUP_NEIGHBOR_RESULT " == 1");
+    ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_ECMP_STATEFUL, 100,
+                            ds_cstr(&match2), "next;", &st_route->header_);
+
+    // Packets in the original direction not matching ct_label eth addr.
+    // Re-commit.
+    ds_put_cstr(&match2, " && !ct.new && ct.est && !ct.rpl");
+    ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_ECMP_STATEFUL, 99,
+                            ds_cstr(&match3), ds_cstr(&actions),
                             &st_route->header_);
 
     /* Bypass ECMP selection if we already have ct_label information
@@ -9483,6 +9508,8 @@ add_ecmp_symmetric_reply_flows(struct hmap *lflows,
                             action, &st_route->header_);
 
     ds_destroy(&match);
+    ds_destroy(&match2);
+    ds_destroy(&match3);
     ds_destroy(&actions);
     ds_destroy(&ecmp_reply);
 }
