@@ -3142,6 +3142,10 @@
         <ref column="options" key="chassis" table="Logical_Router" /> set).
       </column>
 
+      <column name="options" key="ecmp_nh_mac">
+        TODO: mac of the ecmp next hop, only useful in conjunction with ecmp_symmetric_reply.
+      </column>
+
       <column name="options" key="origin">
         In case ovn-interconnection has been learned this route, it will have
         its origin set: either "connected" or "static".  This key is supposed

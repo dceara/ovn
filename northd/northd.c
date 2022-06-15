@@ -252,13 +252,17 @@ enum ovn_stage {
  * register is saved to stack and then restored in the same flow.
  * Note: the bits must match ct_label.ecmp_reply_eth defined in
  * logical-fields.c */
-#define REG_ECMP_ETH_FULL "xxreg1"
+#define REG_ECMP_ETH_FULL "xxreg0"
 #define REG_ECMP_ETH_FIELD REG_ECMP_ETH_FULL "[" \
     OVN_CT_STR(OVN_CT_ECMP_ETH_1ST_BIT) \
     ".." \
     OVN_CT_STR(OVN_CT_ECMP_ETH_END_BIT) "]"
 
 #define FLAGBIT_NOT_VXLAN "flags[1] == 0"
+
+//TODO: better name
+#define REG_ECMP_ETH "xreg2[0..47]"
+
 
 /*
  * OVS register usage:
@@ -307,9 +311,9 @@ enum ovn_stage {
  * +-----+--------------------------+---+-----------------+---+---------------+
  * | R4  |        UNUSED            | X |                 |   |               |
  * |     |                          | R |                 |   |               |
- * +-----+--------------------------+ E |     UNUSED      | X |               |
- * | R5  |        UNUSED            | G |                 | X |               |
- * |     |                          | 2 |                 | R |SRC_IPV6 for NS|
+ * +-----+--------------------------+ E |     TODO        | X |               |
+ * | R5  |        UNUSED            | G |  USED TO STORE  | X |               |
+ * |     |                          | 2 |ECMP CT_LABEL MAC| R |SRC_IPV6 for NS|
  * +-----+--------------------------+---+-----------------+ E | ( >=          |
  * | R6  |        UNUSED            | X |                 | G | IN_IP_ROUTING)|
  * |     |                          | R |                 | 1 |               |
@@ -8990,6 +8994,7 @@ struct parsed_route {
     uint32_t hash;
     const struct nbrec_logical_router_static_route *route;
     bool ecmp_symmetric_reply;
+    const char *ecmp_nh_mac;
     bool is_discard_route;
 };
 
@@ -9100,6 +9105,7 @@ parsed_routes_add(struct ovn_datapath *od, const struct hmap *ports,
     pr->route = route;
     pr->ecmp_symmetric_reply = smap_get_bool(&route->options,
                                              "ecmp_symmetric_reply", false);
+    pr->ecmp_nh_mac = smap_get(&route->options, "ecmp_nh_mac");
     pr->is_discard_route = is_discard_route;
     ovs_list_insert(routes, &pr->list_node);
     return pr;
@@ -9370,7 +9376,7 @@ find_static_route_outport(struct ovn_datapath *od, const struct hmap *ports,
 static void
 add_ecmp_symmetric_reply_flows(struct hmap *lflows,
                                struct ovn_datapath *od,
-                               bool ct_masked_mark,
+                               const char *ct_ecmp_reply_port_match,
                                const char *port_ip,
                                struct ovn_port *out_port,
                                const struct parsed_route *route,
@@ -9381,9 +9387,6 @@ add_ecmp_symmetric_reply_flows(struct hmap *lflows,
     struct ds actions = DS_EMPTY_INITIALIZER;
     struct ds ecmp_reply = DS_EMPTY_INITIALIZER;
     char *cidr = normalize_v46_prefix(&route->prefix, route->plen);
-    const char *ct_ecmp_reply_port_match = ct_masked_mark
-                                           ? "ct_mark.ecmp_reply_port"
-                                           : "ct_label.ecmp_reply_port";
 
     /* If symmetric ECMP replies are enabled, then packets that arrive over
      * an ECMP route need to go through conntrack.
@@ -9403,33 +9406,66 @@ add_ecmp_symmetric_reply_flows(struct hmap *lflows,
                             ds_cstr(route_match), "ct_next;",
                             &st_route->header_);
 
+    struct ds match_stateful = DS_EMPTY_INITIALIZER;
+
     /* Save src eth and inport in ct_label for packets that arrive over
      * an ECMP route.
      *
      * NOTE: we purposely are not clearing match before this
      * ds_put_cstr() call. The previous contents are needed.
      */
-    ds_put_cstr(&match, " && (ct.new && !ct.est)");
+    ds_clone(&match_stateful, &match);
+    ds_put_cstr(&match_stateful, " && (ct.new && !ct.est)");
 
+    // Store nh eth in REG_ECMP_ETH for new sessions
     ds_put_format(&actions, "ct_commit { ct_label.ecmp_reply_eth = eth.src;"
-                  " %s = %" PRId64 ";}; next;",
+                  " %s = %" PRId64 ";}; " REG_ECMP_ETH " = eth.src; "
+                  "next;",
                   ct_ecmp_reply_port_match, out_port->sb->tunnel_key);
     ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_ECMP_STATEFUL, 100,
-                            ds_cstr(&match), ds_cstr(&actions),
+                            ds_cstr(&match_stateful), ds_cstr(&actions),
                             &st_route->header_);
+    
+    // Store nh eth in REG_ECMP_ETH for reply to sessions.
+    ds_destroy(&match_stateful);
+    ds_clone(&match_stateful, route_match);
+    ds_put_cstr(&match_stateful, " && (ct.rpl && ct.est)");
+
+    /* Use REG_ECMP_ETH_FULL to pass the eth field from ct_label to eth.dst to
+     * avoid masked access to ct_label. Otherwise it may prevent OVS flow
+     * HW offloading to work for some NICs because masked-access of ct_label is
+     * not supported on those NICs due to HW limitations.
+     *
+     * Use push/pop to save the value of the register before using it and
+     * restore it immediately afterwards, so that the use of the register is
+     * temporary and doesn't interfere with other stages. */
+    ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_ECMP_STATEFUL, 100,
+                            ds_cstr(&match_stateful),
+                            "push(" REG_ECMP_ETH_FULL "); "
+                            REG_ECMP_ETH_FULL " = ct_label;"
+                            REG_ECMP_ETH " = " REG_ECMP_ETH_FIELD ";"
+                            " pop(" REG_ECMP_ETH_FULL "); "
+                            "next;",
+                            &st_route->header_);
+    ds_destroy(&match_stateful);
 
     /* Bypass ECMP selection if we already have ct_label information
      * for where to route the packet.
      */
     ds_put_format(&ecmp_reply, "ct.rpl && %s == %"PRId64,
                   ct_ecmp_reply_port_match, out_port->sb->tunnel_key);
+    if (route->ecmp_nh_mac) {
+        ds_put_format(&ecmp_reply, " && " REG_ECMP_ETH " == %s", route->ecmp_nh_mac);
+    }
     ds_clear(&match);
     ds_put_format(&match, "%s && %s", ds_cstr(&ecmp_reply),
                   ds_cstr(route_match));
     ds_clear(&actions);
     ds_put_format(&actions, "ip.ttl--; flags.loopback = 1; "
-                  "eth.src = %s; %sreg1 = %s; outport = %s; next;",
+                  "eth.src = %s; %sreg0 = %s; %sreg1 = %s; outport = %s; next;",
                   out_port->lrp_networks.ea_s,
+                  IN6_IS_ADDR_V4MAPPED(&route->prefix) ? "" : "xx",
+                  st_route->nexthop,
                   IN6_IS_ADDR_V4MAPPED(&route->prefix) ? "" : "xx",
                   port_ip, out_port->json_key);
     ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_IP_ROUTING, 10300,
@@ -9468,6 +9504,9 @@ build_ecmp_route_flow(struct hmap *lflows, struct ovn_datapath *od,
                       struct ecmp_groups_node *eg)
 
 {
+    const char *ct_ecmp_reply_port_match = ct_masked_mark
+                                           ? "ct_mark.ecmp_reply_port"
+                                           : "ct_label.ecmp_reply_port";
     bool is_ipv4 = IN6_IS_ADDR_V4MAPPED(&eg->prefix);
     uint16_t priority;
     struct ecmp_route_list_node *er;
@@ -9519,7 +9558,7 @@ build_ecmp_route_flow(struct hmap *lflows, struct ovn_datapath *od,
         if (smap_get(&od->nbr->options, "chassis") &&
             route_->ecmp_symmetric_reply && sset_add(&visited_ports,
                                                      out_port->key)) {
-            add_ecmp_symmetric_reply_flows(lflows, od, ct_masked_mark,
+            add_ecmp_symmetric_reply_flows(lflows, od, ct_ecmp_reply_port_match,
                                            lrp_addr_s, out_port,
                                            route_, &route_match);
         }
@@ -9528,6 +9567,16 @@ build_ecmp_route_flow(struct hmap *lflows, struct ovn_datapath *od,
                       REG_ECMP_MEMBER_ID" == %"PRIu16,
                       eg->id, er->id);
         ds_clear(&actions);
+        // For ecmp symmetric reply routes with nh mac specified we should
+        // never match this.  If we do then the nh mac from the ct label
+        // is stale so we should recommit.
+        if (route_->ecmp_symmetric_reply && route_->ecmp_nh_mac) {
+            ds_put_format(&actions,
+                          " /* Recommit changed ecmp_symmetric_reply traffic */ "
+                          "ct_commit { ct_label.ecmp_reply_eth = %s; %s = %" PRId64 ";}; ",
+                          route_->ecmp_nh_mac,
+                          ct_ecmp_reply_port_match, out_port->sb->tunnel_key);
+        }
         ds_put_format(&actions, "%s = %s; "
                       "%s = %s; "
                       "eth.src = %s; "
