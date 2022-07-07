@@ -496,8 +496,8 @@ get_allow_vips_share_hairpin_backend(
     const struct ovsrec_open_vswitch *cfg
         = ovsrec_open_vswitch_table_first(ovs_table);
     return cfg ? smap_get_bool(&cfg->external_ids,
-                               "ovn-allow-vips-share-hairpin-backend", true)
-               : true;
+                               "ovn-allow-vips-share-hairpin-backend", false)
+               : false;
 }
 
 static void
