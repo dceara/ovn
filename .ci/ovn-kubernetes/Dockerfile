@@ -1,4 +1,4 @@
-ARG OVNKUBE_COMMIT=master
+ARG OVNKUBE_COMMIT=focus-ecmp-symmetric-reply-test
 ARG LIBOVSDB_COMMIT=8081fe24e48f
 
 FROM fedora:35 AS ovnbuilder
@@ -46,7 +46,7 @@ RUN GO111MODULE=on go install github.com/ovn-org/libovsdb/cmd/modelgen@${LIBOVSD
 
 # Clone OVN Kubernetes and build the binary based on the commit passed as argument
 WORKDIR /root
-RUN git clone https://github.com/ovn-org/ovn-kubernetes.git
+RUN git clone https://github.com/dceara/ovn-kubernetes.git
 WORKDIR /root/ovn-kubernetes/go-controller
 RUN git checkout ${OVNKUBE_COMMIT} && git log -n 1
 

@@ -15,7 +15,7 @@ concurrency:
 env:
   GO_VERSION: "1.17.6"
   K8S_VERSION: v1.23.3
-  OVNKUBE_COMMIT: "master"
+  OVNKUBE_COMMIT: "focus-ecmp-symmetric-reply-test"
   LIBOVSDB_COMMIT: "8081fe24e48f"
   KIND_CLUSTER_NAME: ovn
   KIND_INSTALL_INGRESS: true
@@ -63,12 +63,7 @@ jobs:
         # ipfamily: ["ipv4", "ipv6", "dualstack"]
         # disable-snat-multiple-gws: ["noSnatGW", "snatGW"]
         include:
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "local",  "ipfamily": "ipv6",      "disable-snat-multiple-gws": "snatGW"}
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "local",  "ipfamily": "dualstack", "disable-snat-multiple-gws": "snatGW"}
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv4",      "disable-snat-multiple-gws": "snatGW"}
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv6",      "disable-snat-multiple-gws": "snatGW"}
           - {"target": "control-plane",     "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv4",      "disable-snat-multiple-gws": "noSnatGW"}
-          - {"target": "control-plane",     "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv4",      "disable-snat-multiple-gws": "snatGW"}
     needs: [build]
     env:
       JOB_NAME: "${{ matrix.target }}-${{ matrix.ha }}-${{ matrix.gateway-mode }}-${{ matrix.ipfamily }}-${{ matrix.disable-snat-multiple-gws }}-${{ matrix.second-bridge }}"
@@ -95,7 +90,8 @@ jobs:
       uses: actions/checkout@v2
       with:
           path: src/github.com/ovn-org/ovn-kubernetes
-          repository: ovn-org/ovn-kubernetes
+          repository: dceara/ovn-kubernetes
+          ref: focus-ecmp-symmetric-reply-test
 
     - name: Set up environment
       run: |
