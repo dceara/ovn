@@ -1618,7 +1618,7 @@ OVS_WAIT_UNTIL([
 ovn-nbctl --reject lb-add lb3 30.0.0.10:80 ""
 ovn-nbctl ls-lb-add foo lb3
 # Filter reset segments
-NS_CHECK_EXEC([foo1], [tcpdump -c 1 -neei foo1 ip[[33:1]]=0x14 > rst.pcap 2>/dev/null &])
+NETNS_DAEMONIZE([foo1], [tcpdump -c 1 -neei foo1 ip[[33:1]]=0x14 > rst.pcap 2>/dev/null], [tcpdump.pid])
 sleep 1
 NS_CHECK_EXEC([foo1], [wget -q 30.0.0.10],[4])
 
@@ -3594,7 +3594,7 @@ icmp,orig=(src=192.168.2.2,dst=172.16.1.2,id=<cleared>,type=8,code=0),reply=(src
 ])
 
 # Try to ping external network
-NS_CHECK_EXEC([ext-net], [tcpdump -n -c 3 -i ext-veth dst 172.16.1.3 and icmp > ext-net.pcap &])
+NETNS_DAEMONIZE([ext-net], [tcpdump -n -c 3 -i ext-veth dst 172.16.1.3 and icmp > ext-net.pcap], [tcpdump.pid])
 sleep 1
 AT_CHECK([ovn-nbctl lr-nat-del R1 snat])
 NS_CHECK_EXEC([foo1], [ping -q -c 3 -i 0.3 -w 2 10.0.0.1 | FORMAT_PING], \
@@ -4277,7 +4277,7 @@ ovn-nbctl set Logical_Switch sw2 \
     other_config:mcast_ip6_src="2000::fe"
 
 # Check that v4 queries are generated.
-NS_CHECK_EXEC([sw2-p1], [tcpdump -n -c 2 -i sw2-p1 igmp > sw2-p1-v4.pcap &])
+NETNS_DAEMONIZE([sw2-p1], [tcpdump -n -c 2 -i sw2-p1 igmp > sw2-p1-v4.pcap], [tcpdump0.pid])
 
 OVS_WAIT_UNTIL([
     total_queries=`grep "igmp query" -c sw2-p1-v4.pcap`
@@ -4286,7 +4286,7 @@ OVS_WAIT_UNTIL([
 
 # Check that v6 queries are generated (ip6 next header == Hop-By-Hop and
 # icmpv6 type == MLD Query).
-NS_CHECK_EXEC([sw2-p1], [tcpdump -n -c 2 -i sw2-p1 ip6[[6]]==0 and ip6[[48]]==0x82 > sw2-p1-v6.pcap &])
+NETNS_DAEMONIZE([sw2-p1], [tcpdump -n -c 2 -i sw2-p1 ip6[[6]]==0 and ip6[[48]]==0x82 > sw2-p1-v6.pcap], [tcpdump1.pid])
 
 OVS_WAIT_UNTIL([
     total_queries=`grep "multicast listener query" -c sw2-p1-v6.pcap`
@@ -4509,7 +4509,7 @@ service_monitor protocol=udp | sed '/^$/d' | grep offline | wc -l`])
 pid_file=$(cat l7_pid_file)
 NS_CHECK_EXEC([sw1-p1], [kill $(cat $pid_file)])
 
-NS_CHECK_EXEC([sw0-p2], [tcpdump -c 1 -neei sw0-p2 ip[[33:1]]=0x14 > rst.pcap &])
+NETNS_DAEMONIZE([sw0-p2], [tcpdump -c 1 -neei sw0-p2 ip[[33:1]]=0x14 > rst.pcap], [tcpdump.pid])
 OVS_WAIT_UNTIL([test 2 = `ovn-sbctl --bare --columns status find \
 service_monitor protocol=tcp | sed '/^$/d' | grep offline | wc -l`])
 NS_CHECK_EXEC([sw0-p2], [wget 10.0.0.10 -v -o wget$i.log],[4])
@@ -4587,7 +4587,7 @@ ADD_VETH(lsp, lsp, br-int, "42.42.42.1/24", "00:00:00:00:00:01", \
 ovn-nbctl --wait=hv -t 3 sync
 
 # Start IPv4 TCP server on lsp.
-NS_CHECK_EXEC([lsp], [timeout 2s nc -k -l 42.42.42.1 4041 &], [0])
+NETNS_DAEMONIZE([lsp], [timeout 2s nc -k -l 42.42.42.1 4041], [nc0.pid])
 
 # Check that IPv4 TCP hairpin connection succeeds on both VIPs.
 NS_CHECK_EXEC([lsp], [nc 88.88.88.88 8080 -z], [0])
@@ -4595,13 +4595,13 @@ NS_CHECK_EXEC([lsp], [nc 88.88.88.89 8080 -z], [0])
 
 # Capture IPv4 UDP hairpinned packets.
 filter="dst 42.42.42.1 and dst port 2021 and udp"
-NS_CHECK_EXEC([lsp], [tcpdump -nn -c 2 -i lsp ${filter} > lsp.pcap &])
+NETNS_DAEMONIZE([lsp], [tcpdump -nn -c 2 -i lsp ${filter} > lsp.pcap], [tcpdump.pid])
 
 sleep 1
 
 # Generate IPv4 UDP hairpin traffic.
-NS_CHECK_EXEC([lsp], [echo a | nc -u 88.88.88.88 4040 &], [0])
-NS_CHECK_EXEC([lsp], [echo a | nc -u 88.88.88.89 4040 &], [0])
+NETNS_DAEMONIZE([lsp], [echo a | nc -u 88.88.88.88 4040], [nc1.pid])
+NETNS_DAEMONIZE([lsp], [echo a | nc -u 88.88.88.89 4040], [nc2.pid])
 
 # Check hairpin traffic.
 OVS_WAIT_UNTIL([
@@ -4673,7 +4673,7 @@ OVS_WAIT_UNTIL([test "$(ip netns exec lsp ip a | grep 4200::1 | grep tentative)"
 ovn-nbctl --wait=hv -t 3 sync
 
 # Start IPv6 TCP server on lsp.
-NS_CHECK_EXEC([lsp], [timeout 2s nc -k -l 4200::1 4041 &], [0])
+NETNS_DAEMONIZE([lsp], [timeout 2s nc -k -l 4200::1 4041], [nc0.pid])
 
 # Check that IPv6 TCP hairpin connection succeeds on both VIPs.
 NS_CHECK_EXEC([lsp], [nc 8800::0088 8080 -z], [0])
@@ -4681,13 +4681,13 @@ NS_CHECK_EXEC([lsp], [nc 8800::0089 8080 -z], [0])
 
 # Capture IPv6 UDP hairpinned packets.
 filter="dst 4200::1 and dst port 2021 and udp"
-NS_CHECK_EXEC([lsp], [tcpdump -nn -c 2 -i lsp $filter > lsp.pcap &])
+NETNS_DAEMONIZE([lsp], [tcpdump -nn -c 2 -i lsp $filter > lsp.pcap], [tcpdump.pid])
 
 sleep 1
 
 # Generate IPv6 UDP hairpin traffic.
-NS_CHECK_EXEC([lsp], [echo a | nc -u 8800::0088 4040 &], [0])
-NS_CHECK_EXEC([lsp], [echo a | nc -u 8800::0089 4040 &], [0])
+NETNS_DAEMONIZE([lsp], [echo a | nc -u 8800::0088 4040], [nc1.pid])
+NETNS_DAEMONIZE([lsp], [echo a | nc -u 8800::0089 4040], [nc2.pid])
 
 # Check hairpin traffic.
 OVS_WAIT_UNTIL([
@@ -4797,7 +4797,7 @@ ADD_VETH(sw1-p1-rej, sw1-p1-rej, br-int, "20.0.0.3/24", "40:54:00:00:00:03", \
 sleep 1
 
 # Capture packets in sw0-p1-rej.
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 4 -i sw0-p1-rej tcp > sw0-p1-rej-ip4.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 4 -i sw0-p1-rej tcp > sw0-p1-rej-ip4.pcap], [tcpdump0.pid])
 
 sleep 1
 
@@ -4825,7 +4825,7 @@ OVS_WAIT_UNTIL([
 # Without this sleep, test case fails intermittently.
 sleep 3
 
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 2 -i sw0-p2-rej tcp port 80 > sw0-p2-rej-ip6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 2 -i sw0-p2-rej tcp port 80 > sw0-p2-rej-ip6.pcap], [tcpdump1.pid])
 
 sleep 1
 
@@ -4849,8 +4849,8 @@ OVS_WAIT_UNTIL([
 ])
 
 # Now test for IPv4 UDP.
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 90 > sw0-p1-rej-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 90 > sw0-p1-rej-udp.pcap], [tcpdump2.pid])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap], [tcpdump3.pid])
 
 printf '.%.0s' {1..100} > foo
 OVS_WAIT_UNTIL([
@@ -4862,8 +4862,8 @@ OVS_WAIT_UNTIL([
 
 rm -f *.pcap
 
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 94 > sw0-p1-rej-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 94 > sw0-p1-rej-udp.pcap ], [tcpdump4.pid])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap ], [tcpdump5.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p1-rej nc -u 10.0.0.4 94 < foo
@@ -4873,8 +4873,8 @@ OVS_WAIT_UNTIL([
 ])
 
 # Now test for IPv6 UDP.
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 90 > sw0-p2-rej-ip6-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 90 > sw0-p2-rej-ip6-udp.pcap], [tcpdump6.pid])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap], [tcpdump7.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p2-rej nc -u -6 aef0::3 90 < foo
@@ -4886,8 +4886,8 @@ aef0::3 udp port 90" | uniq | wc -l)
 
 rm -f *.pcap
 
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 94 > sw0-p2-rej-ip6-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 94 > sw0-p2-rej-ip6-udp.pcap], [tcpdump8.pid])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap], [tcpdump9.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p2-rej nc -u -6 aef0::3 94 < foo
@@ -4912,7 +4912,7 @@ OVS_WAIT_UNTIL([
 
 rm -f *.pcap
 
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap], [tcpdump10.pid])
 
 printf '.%.0s' {1..100} > foo
 OVS_WAIT_UNTIL([
@@ -4924,7 +4924,7 @@ OVS_WAIT_UNTIL([
 
 rm -f *.pcap
 # Now test for IPv6 UDP.
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap], [tcpdump11.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p2-rej nc -u -6 aef0::3 90 < foo
@@ -5038,7 +5038,7 @@ ADD_VETH(sw1-p1-rej, sw1-p1-rej, br-int, "20.0.0.3/24", "40:54:00:00:00:03", \
 sleep 1
 
 # Capture packets in sw0-p1-rej.
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 4 -i sw0-p1-rej tcp > sw0-p1-rej-ip4.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 4 -i sw0-p1-rej tcp > sw0-p1-rej-ip4.pcap], [tcpdump0.pid])
 
 sleep 1
 
@@ -5066,7 +5066,7 @@ OVS_WAIT_UNTIL([
 # Without this sleep, test case fails intermittently.
 sleep 3
 
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 2 -i sw0-p2-rej tcp port 80 > sw0-p2-rej-ip6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 2 -i sw0-p2-rej tcp port 80 > sw0-p2-rej-ip6.pcap], [tcpdump1.pid])
 
 sleep 1
 
@@ -5090,8 +5090,8 @@ OVS_WAIT_UNTIL([
 ])
 
 # Now test for IPv4 UDP.
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 90 > sw0-p1-rej-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 90 > sw0-p1-rej-udp.pcap], [tcpdump2.pid])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap], [tcpdump3.pid])
 
 printf '.%.0s' {1..100} > foo
 OVS_WAIT_UNTIL([
@@ -5103,8 +5103,8 @@ OVS_WAIT_UNTIL([
 
 rm -f *.pcap
 
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 94 > sw0-p1-rej-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej udp port 94 > sw0-p1-rej-udp.pcap], [tcpdump4.pid])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap], [tcpdump5.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p1-rej nc -u 10.0.0.4 94 < foo
@@ -5114,8 +5114,8 @@ OVS_WAIT_UNTIL([
 ])
 
 # Now test for IPv6 UDP.
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 90 > sw0-p2-rej-ip6-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 90 > sw0-p2-rej-ip6-udp.pcap], [tcpdump6.pid])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap], [tcpdump7.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p2-rej nc -u -6 aef0::3 90 < foo
@@ -5127,8 +5127,8 @@ aef0::3 udp port 90" | uniq | wc -l)
 
 rm -f *.pcap
 
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 94 > sw0-p2-rej-ip6-udp.pcap &], [0])
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej udp port 94 > sw0-p2-rej-ip6-udp.pcap], [tcpdump8.pid])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap], [tcpdump9.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p2-rej nc -u -6 aef0::3 94 < foo
@@ -5153,7 +5153,7 @@ OVS_WAIT_UNTIL([
 
 rm -f *.pcap
 
-NS_CHECK_EXEC([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p1-rej], [tcpdump -nn -c 1 -i sw0-p1-rej icmp > sw0-p1-rej-icmp.pcap], [tcpdump10.pid])
 
 printf '.%.0s' {1..100} > foo
 OVS_WAIT_UNTIL([
@@ -5165,7 +5165,7 @@ OVS_WAIT_UNTIL([
 
 rm -f *.pcap
 # Now test for IPv6 UDP.
-NS_CHECK_EXEC([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap &], [0])
+NETNS_DAEMONIZE([sw0-p2-rej], [tcpdump -nn -c 1 -i sw0-p2-rej icmp6 > sw0-p2-rej-icmp6.pcap], [tcpdump11.pid])
 
 OVS_WAIT_UNTIL([
     ip netns exec sw0-p2-rej nc -u -6 aef0::3 90 < foo
@@ -5310,9 +5310,9 @@ ovn-nbctl set logical_router_port rp-sw0 options:prefix=false
 ovn-nbctl set logical_router_port rp-sw1 options:prefix=false
 
 # Renew message
-NS_CHECK_EXEC([server], [tcpdump -c 1 -nni s1 ip6[[48:1]]=0x05 and ip6[[113:4]]=0x${prefix} > renew.pcap &])
+NETNS_DAEMONIZE([server], [tcpdump -c 1 -nni s1 ip6[[48:1]]=0x05 and ip6[[113:4]]=0x${prefix} > renew.pcap], [tcpdump0.pid])
 # Reply message with Status OK
-NS_CHECK_EXEC([server], [tcpdump -c 1 -nni s1 ip6[[48:1]]=0x07 and ip6[[81:4]]=0x${prefix} > reply.pcap &])
+NETNS_DAEMONIZE([server], [tcpdump -c 1 -nni s1 ip6[[48:1]]=0x07 and ip6[[81:4]]=0x${prefix} > reply.pcap], [tcpdump1.pid])
 
 OVS_WAIT_UNTIL([
     total_pkts=$(cat renew.pcap | wc -l)
@@ -6467,7 +6467,7 @@ OVS_WAIT_UNTIL([ovn-sbctl dump-flows R1 | grep 'match=(ip4.dst == 100.0.0.0/8)' 
 check ovn-nbctl clear logical_router_static_route $route_uuid bfd
 wait_column "admin_down" nb:bfd status logical_port=rp-public
 OVS_WAIT_UNTIL([ip netns exec server bfdd-control status | grep -qi state=Down])
-NS_CHECK_EXEC([server], [tcpdump -nni s1 udp port 3784 -Q in > bfd.pcap &])
+NETNS_DAEMONIZE([server], [tcpdump -nni s1 udp port 3784 -Q in > bfd.pcap], [tcpdump0.pid])
 sleep 5
 kill $(pidof tcpdump)
 AT_CHECK([grep -qi bfd bfd.pcap],[1])
@@ -6496,7 +6496,7 @@ OVS_WAIT_UNTIL([test "$(ovn-sbctl dump-flows R1 | grep 'match=(ip4.dst == 100.0.
 # remove bfd entry
 ovn-nbctl destroy bfd $uuid
 check_row_count bfd 0
-NS_CHECK_EXEC([server], [tcpdump -nni s1 udp port 3784 -Q in > bfd.pcap &])
+NETNS_DAEMONIZE([server], [tcpdump -nni s1 udp port 3784 -Q in > bfd.pcap], [tcpdump1.pid])
 sleep 5
 kill $(pidof tcpdump)
 AT_CHECK([grep -qi bfd bfd.pcap],[1])
