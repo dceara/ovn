@@ -6409,6 +6409,27 @@ build_acl_log(struct ds *actions, const struct nbrec_acl *acl,
 }
 
 static void
+build_acl_sample(struct ds *actions, const struct nbrec_acl *acl)
+{
+    if (!acl->sample) {
+        return;
+    }
+    ds_put_format(actions, "sample(probability=%"PRId16","
+                           "collector_set=%d,"
+                           "obs_domain=%hd,",
+                            (uint16_t) acl->sample->probability,
+                            (uint32_t) acl->sample->collector_set_id,
+                            (uint8_t) acl->sample->obs_domain_id);
+
+    if (acl->sample->obs_point_id) {
+        ds_put_format(actions, "obs_point=%"PRId32");",
+                      (uint32_t) *acl->sample->obs_point_id);
+    } else {
+        ds_put_cstr(actions, "obs_point=$cookie);");
+    }
+}
+
+static void
 consider_acl(struct lflow_table *lflows, const struct ovn_datapath *od,
              const struct nbrec_acl *acl, bool has_stateful,
              const struct shash *meter_groups, uint64_t max_acl_tier,
@@ -6440,6 +6461,7 @@ consider_acl(struct lflow_table *lflows, const struct ovn_datapath *od,
     ds_clear(actions);
     /* All ACLs will have the same actions as a basis. */
     build_acl_log(actions, acl, meter_groups);
+    build_acl_sample(actions, acl);
     ds_put_cstr(actions, verdict);
     size_t log_verdict_len = actions->length;
     uint16_t priority = acl->priority + OVN_ACL_PRI_OFFSET;
@@ -6753,6 +6775,7 @@ build_acl_log_related_flows(const struct ovn_datapath *od,
 
     ds_clear(actions);
     build_acl_log(actions, acl, meter_groups);
+    build_acl_sample(actions, acl);
     ds_put_cstr(actions, REGBIT_ACL_VERDICT_ALLOW" = 1; next;");
     /* Related/reply flows need to be set on the opposite pipeline
      * from where the ACL itself is set.
