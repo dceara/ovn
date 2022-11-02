@@ -3985,6 +3985,7 @@ main(int argc, char *argv[])
     restart = false;
     bool sb_monitor_all = false;
     while (!exiting) {
+        xmalloc(42);
         memory_run();
         if (memory_should_report()) {
             struct simap usage = SIMAP_INITIALIZER(&usage);
