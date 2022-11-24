@@ -6947,42 +6947,68 @@ build_lb_rules_pre_stateful(struct hmap *lflows, struct ovn_northd_lb *lb,
     }
 }
 
-/* Builds the logical flows related to load balancer affinity in:
- * - Ingress Table 11: Load balancing affinity check
- * - Ingress Table 12: LB
- * - Ingress Table 13: Load balancing affinity learn
+/* Builds the logical router flows related to load balancer affinity.
+ * For a LB configured with 'vip=V:VP' and backends 'B1:BP1,B2:BP2' and
+ * affinity timeout set to T, it generates the following logical flows:
+ * - load balancing affinity check:
+ *   table=lr_in_lb_aff_check, priority=100
+ *      match=(new_lb_match)
+ *      action=(REGBIT_KNOWN_LB_SESSION = chk_lb_aff(); next;)
+ *
+ * - load balancing:
+ *   table=lr_in_dnat, priority=150
+ *      match=(REGBIT_KNOWN_LB_SESSION == 1 && ct.new && ip4
+ *             && REG_LB_AFF_BACKEND_IP4 == B1 && REG_LB_AFF_MATCH_PORT == BP1)
+ *      action=(REG_NEXT_HOP_IPV4 = V; lb_action;
+ *              ct_lb_mark(backends=B1:BP1);)
+ *   table=lr_in_dnat, priority=150
+ *      match=(REGBIT_KNOWN_LB_SESSION == 1 && ct.new && ip4
+ *             && REG_LB_AFF_BACKEND_IP4 == B2 && REG_LB_AFF_MATCH_PORT == BP2)
+ *      action=(REG_NEXT_HOP_IPV4 = V; lb_action;
+ *              ct_lb_mark(backends=B2:BP2);)
+ *
+ * - load balancing affinity learn:
+ *   table=lr_in_lb_aff_learn, priority=100
+ *      match=(REGBIT_KNOWN_LB_SESSION == 0
+ *             && ct.new && ip4
+ *             && REG_ORIG_DIP_IPV4 == V && ip4.dst == B1 && tcp.dst == BP1)
+ *      action=(commit_lb_aff(vip = "V:VP", backend = "B1:BP1",
+ *                            proto = tcp, timeout = T));
+ *   table=lr_in_lb_aff_learn, priority=100
+ *      match=(REGBIT_KNOWN_LB_SESSION == 0
+ *             && ct.new && ip4
+ *             && REG_ORIG_DIP_IPV4 == V && ip4.dst == B2 && tcp.dst == BP2)
+ *      action=(commit_lb_aff(vip = "V:VP", backend = "B2:BP2",
+ *                            proto = tcp, timeout = T));
+ *
  */
 static void
-build_lb_affinity_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
-                        struct ovn_lb_vip *lb_vip, char *check_lb_match,
-                        char *lb_action, struct ovn_datapath **dplist,
-                        int n_dplist, bool router_pipeline)
+build_lb_affinity_lr_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
+                           struct ovn_lb_vip *lb_vip, char *new_lb_match,
+                           char *lb_action, struct ovn_datapath **dplist,
+                           int n_dplist)
 {
     if (!lb->affinity_timeout) {
         return;
     }
 
     static char *aff_check = REGBIT_KNOWN_LB_SESSION" = chk_lb_aff(); next;";
-    enum ovn_stage stage0 = router_pipeline ?
-        S_ROUTER_IN_LB_AFF_CHECK : S_SWITCH_IN_LB_AFF_CHECK;
     struct ovn_lflow *lflow_ref_aff_check = NULL;
     /* Check if we have already a enstablished connection for this
      * tuple and we are in affinity timeslot. */
     uint32_t hash_aff_check = ovn_logical_flow_hash(
-            ovn_stage_get_table(stage0), ovn_stage_get_pipeline(stage0), 100,
-            check_lb_match, aff_check);
+            ovn_stage_get_table(S_ROUTER_IN_LB_AFF_CHECK),
+            ovn_stage_get_pipeline(S_ROUTER_IN_LB_AFF_CHECK), 100,
+            new_lb_match, aff_check);
 
     for (size_t i = 0; i < n_dplist; i++) {
         if (!ovn_dp_group_add_with_reference(lflow_ref_aff_check, dplist[i])) {
             lflow_ref_aff_check = ovn_lflow_add_at_with_hash(
-                    lflows, dplist[i], stage0, 100, check_lb_match,
-                    aff_check, NULL, NULL, &lb->nlb->header_,
+                    lflows, dplist[i], S_ROUTER_IN_LB_AFF_CHECK, 100,
+                    new_lb_match, aff_check, NULL, NULL, &lb->nlb->header_,
                     OVS_SOURCE_LOCATOR, hash_aff_check);
         }
     }
-
-    const char *reg_vip;
-    const char *reg_backend;
 
     struct ds aff_action = DS_EMPTY_INITIALIZER;
     struct ds aff_action_learn = DS_EMPTY_INITIALIZER;
@@ -6992,29 +7018,15 @@ build_lb_affinity_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
     bool ipv6 = !IN6_IS_ADDR_V4MAPPED(&lb_vip->vip);
     const char *ip_match = ipv6 ? "ip6" : "ip4";
 
-    stage0 =
-        router_pipeline ? S_ROUTER_IN_LB_AFF_LEARN : S_SWITCH_IN_LB_AFF_LEARN;
-    enum ovn_stage stage1 =
-        router_pipeline ? S_ROUTER_IN_DNAT : S_SWITCH_IN_LB;
-
-    if (router_pipeline) {
-        reg_vip = ipv6 ? REG_NEXT_HOP_IPV6 : REG_NEXT_HOP_IPV4;
-        reg_backend =
-            ipv6 ? REG_LB_L3_AFF_BACKEND_IP6 : REG_LB_AFF_BACKEND_IP4;
-    } else {
-        reg_vip = ipv6 ? REG_ORIG_DIP_IPV6 : REG_ORIG_DIP_IPV4;
-        reg_backend =
-            ipv6 ? REG_LB_L2_AFF_BACKEND_IP6 : REG_LB_AFF_BACKEND_IP4;
-    }
+    const char *reg_vip = ipv6 ? REG_NEXT_HOP_IPV6 : REG_NEXT_HOP_IPV4;
+    const char *reg_backend =
+        ipv6 ? REG_LB_L3_AFF_BACKEND_IP6 : REG_LB_AFF_BACKEND_IP4;
 
     /* Prepare common part of affinity LB and affinity learn action. */
-    ds_put_format(&aff_action, REGBIT_CONNTRACK_COMMIT" = 0; %s = %s; ",
-                  reg_vip, lb_vip->vip_str);
+    ds_put_format(&aff_action, "%s = %s; ", reg_vip, lb_vip->vip_str);
     ds_put_cstr(&aff_action_learn, "commit_lb_aff(vip = \"");
 
     if (lb_vip->vip_port) {
-        ds_put_format(&aff_action, REG_ORIG_TP_DPORT" = %d; ",
-                      lb_vip->vip_port);
         ds_put_format(&aff_action_learn, ipv6 ? "[%s]:%d" : "%s:%d",
                       lb_vip->vip_str, lb_vip->vip_port);
     } else {
@@ -7076,12 +7088,14 @@ build_lb_affinity_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
 
         struct ovn_lflow *lflow_ref_aff_learn = NULL;
         uint32_t hash_aff_learn = ovn_logical_flow_hash(
-                ovn_stage_get_table(stage0), ovn_stage_get_pipeline(stage0),
+                ovn_stage_get_table(S_ROUTER_IN_LB_AFF_LEARN),
+                ovn_stage_get_pipeline(S_ROUTER_IN_LB_AFF_LEARN),
                 100, ds_cstr(&aff_match_learn), ds_cstr(&aff_action_learn));
 
         struct ovn_lflow *lflow_ref_aff_lb = NULL;
         uint32_t hash_aff_lb = ovn_logical_flow_hash(
-                ovn_stage_get_table(stage1), ovn_stage_get_pipeline(stage1),
+                ovn_stage_get_table(S_ROUTER_IN_DNAT),
+                ovn_stage_get_pipeline(S_ROUTER_IN_DNAT),
                 150, ds_cstr(&aff_match), ds_cstr(&aff_action));
 
         for (size_t j = 0; j < n_dplist; j++) {
@@ -7089,7 +7103,7 @@ build_lb_affinity_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
             if (!ovn_dp_group_add_with_reference(lflow_ref_aff_learn,
                                                  dplist[j])) {
                 lflow_ref_aff_learn = ovn_lflow_add_at_with_hash(
-                        lflows, dplist[j], stage0, 100,
+                        lflows, dplist[j], S_ROUTER_IN_LB_AFF_LEARN, 100,
                         ds_cstr(&aff_match_learn), ds_cstr(&aff_action_learn),
                         NULL, NULL, &lb->nlb->header_, OVS_SOURCE_LOCATOR,
                         hash_aff_learn);
@@ -7098,8 +7112,8 @@ build_lb_affinity_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
             if (!ovn_dp_group_add_with_reference(lflow_ref_aff_lb,
                                                  dplist[j])) {
                 lflow_ref_aff_lb = ovn_lflow_add_at_with_hash(
-                    lflows, dplist[j], stage1, 150, ds_cstr(&aff_match),
-                    ds_cstr(&aff_action), NULL, NULL,
+                    lflows, dplist[j], S_ROUTER_IN_DNAT, 150,
+                    ds_cstr(&aff_match), ds_cstr(&aff_action), NULL, NULL,
                     &lb->nlb->header_, OVS_SOURCE_LOCATOR,
                     hash_aff_lb);
             }
@@ -7117,27 +7131,207 @@ build_lb_affinity_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
     ds_destroy(&aff_match_learn);
 }
 
+/* Builds the logical switch flows related to load balancer affinity.
+ * For a LB configured with 'vip=V:VP' and backends 'B1:BP1,B2:BP2' and
+ * affinity timeout set to T, it generates the following logical flows:
+ * - load balancing affinity check:
+ *   table=ls_in_lb_aff_check, priority=100
+ *      match=(ct.new && ip4
+ *             && REG_ORIG_DIP_IPV4 == V && REG_ORIG_TP_DPORT == VP)
+ *      action=(REGBIT_KNOWN_LB_SESSION = chk_lb_aff(); next;)
+ *
+ * - load balancing:
+ *   table=ls_in_lb, priority=150
+ *      match=(REGBIT_KNOWN_LB_SESSION == 1 && ct.new && ip4
+ *             && REG_LB_AFF_BACKEND_IP4 == B1 && REG_LB_AFF_MATCH_PORT == BP1)
+ *      action=(REGBIT_CONNTRACK_COMMIT = 0;
+ *              REG_ORIG_DIP_IPV4 = V; REG_ORIG_TP_DPORT = VP;
+ *              ct_lb_mark(backends=B1:BP1);)
+ *   table=ls_in_lb, priority=150
+ *      match=(REGBIT_KNOWN_LB_SESSION == 1 && ct.new && ip4
+ *             && REG_LB_AFF_BACKEND_IP4 == B2 && REG_LB_AFF_MATCH_PORT == BP2)
+ *      action=(REGBIT_CONNTRACK_COMMIT = 0;
+ *              REG_ORIG_DIP_IPV4 = V;
+ *              REG_ORIG_TP_DPORT = VP;
+ *              ct_lb_mark(backends=B1:BP2);)
+ *
+ * - load balancing affinity learn:
+ *   table=ls_in_lb_aff_learn, priority=100
+ *      match=(REGBIT_KNOWN_LB_SESSION == 0
+ *             && ct.new && ip4
+ *             && REG_ORIG_DIP_IPV4 == V && ip4.dst == B1 && tcp.dst == BP1)
+ *      action=(commit_lb_aff(vip = "V:VP", backend = "B1:BP1",
+ *                            proto = tcp, timeout = T));
+ *   table=ls_in_lb_aff_learn, priority=100
+ *      match=(REGBIT_KNOWN_LB_SESSION == 0
+ *             && ct.new && ip4
+ *             && REG_ORIG_DIP_IPV4 == V && ip4.dst == B2 && tcp.dst == BP2)
+ *      action=(commit_lb_aff(vip = "V:VP", backend = "B2:BP2",
+ *                            proto = tcp, timeout = T));
+ *
+ */
 static void
 build_lb_affinity_ls_flows(struct hmap *lflows, struct ovn_northd_lb *lb,
                            struct ovn_lb_vip *lb_vip)
 {
-    struct ds match = DS_EMPTY_INITIALIZER;
+    if (!lb->affinity_timeout) {
+        return;
+    }
+
+    struct ds new_lb_match = DS_EMPTY_INITIALIZER;
     if (IN6_IS_ADDR_V4MAPPED(&lb_vip->vip)) {
-        ds_put_format(&match, "ct.new && ip4 && "REG_ORIG_DIP_IPV4 " == %s",
+        ds_put_format(&new_lb_match,
+                      "ct.new && ip4 && "REG_ORIG_DIP_IPV4 " == %s",
                       lb_vip->vip_str);
     } else {
-        ds_put_format(&match, "ct.new && ip6 && "REG_ORIG_DIP_IPV6 " == %s",
+        ds_put_format(&new_lb_match,
+                      "ct.new && ip6 && "REG_ORIG_DIP_IPV6 " == %s",
                       lb_vip->vip_str);
     }
 
     if (lb_vip->vip_port) {
-        ds_put_format(&match, " && "REG_ORIG_TP_DPORT " == %"PRIu16,
+        ds_put_format(&new_lb_match, " && "REG_ORIG_TP_DPORT " == %"PRIu16,
                       lb_vip->vip_port);
     }
 
-    build_lb_affinity_flows(lflows, lb, lb_vip, ds_cstr(&match), NULL,
-                            lb->nb_ls, lb->n_nb_ls, false);
-    ds_destroy(&match);
+    static char *aff_check = REGBIT_KNOWN_LB_SESSION" = chk_lb_aff(); next;";
+    struct ovn_lflow *lflow_ref_aff_check = NULL;
+    /* Check if we have already a enstablished connection for this
+     * tuple and we are in affinity timeslot. */
+    uint32_t hash_aff_check = ovn_logical_flow_hash(
+            ovn_stage_get_table(S_SWITCH_IN_LB_AFF_CHECK),
+            ovn_stage_get_pipeline(S_SWITCH_IN_LB_AFF_CHECK), 100,
+            ds_cstr(&new_lb_match), aff_check);
+
+    for (size_t i = 0; i < lb->n_nb_ls; i++) {
+        if (!ovn_dp_group_add_with_reference(lflow_ref_aff_check,
+                                             lb->nb_ls[i])) {
+            lflow_ref_aff_check = ovn_lflow_add_at_with_hash(
+                    lflows, lb->nb_ls[i], S_SWITCH_IN_LB_AFF_CHECK, 100,
+                    ds_cstr(&new_lb_match), aff_check, NULL, NULL,
+                    &lb->nlb->header_, OVS_SOURCE_LOCATOR, hash_aff_check);
+        }
+    }
+    ds_destroy(&new_lb_match);
+
+    struct ds aff_action = DS_EMPTY_INITIALIZER;
+    struct ds aff_action_learn = DS_EMPTY_INITIALIZER;
+    struct ds aff_match = DS_EMPTY_INITIALIZER;
+    struct ds aff_match_learn = DS_EMPTY_INITIALIZER;
+
+    bool ipv6 = !IN6_IS_ADDR_V4MAPPED(&lb_vip->vip);
+    const char *ip_match = ipv6 ? "ip6" : "ip4";
+
+    const char *reg_vip = ipv6 ? REG_ORIG_DIP_IPV6 : REG_ORIG_DIP_IPV4;
+    const char *reg_backend =
+        ipv6 ? REG_LB_L2_AFF_BACKEND_IP6 : REG_LB_AFF_BACKEND_IP4;
+
+    /* Prepare common part of affinity LB and affinity learn action. */
+    ds_put_format(&aff_action, REGBIT_CONNTRACK_COMMIT" = 0; %s = %s; ",
+                  reg_vip, lb_vip->vip_str);
+    ds_put_cstr(&aff_action_learn, "commit_lb_aff(vip = \"");
+
+    if (lb_vip->vip_port) {
+        ds_put_format(&aff_action, REG_ORIG_TP_DPORT" = %d; ",
+                      lb_vip->vip_port);
+        ds_put_format(&aff_action_learn, ipv6 ? "[%s]:%d" : "%s:%d",
+                      lb_vip->vip_str, lb_vip->vip_port);
+    } else {
+        ds_put_cstr(&aff_action_learn, lb_vip->vip_str);
+    }
+
+    ds_put_cstr(&aff_action, "ct_lb_mark(backends=");
+    ds_put_cstr(&aff_action_learn, "\", backend = \"");
+
+    /* Prepare common part of affinity learn match. */
+    ds_put_format(&aff_match_learn, REGBIT_KNOWN_LB_SESSION" == 0 && "
+                  "ct.new && %s && %s == %s && %s.dst == ", ip_match,
+                  reg_vip, lb_vip->vip_str, ip_match);
+
+    /* Prepare common part of affinity match. */
+    ds_put_format(&aff_match, REGBIT_KNOWN_LB_SESSION" == 1 && "
+                  "ct.new && %s && %s == ", ip_match, reg_backend);
+
+    /* Store the common part length. */
+    size_t aff_action_len = aff_action.length;
+    size_t aff_action_learn_len = aff_action_learn.length;
+    size_t aff_match_len = aff_match.length;
+    size_t aff_match_learn_len = aff_match_learn.length;
+
+    for (size_t i = 0; i < lb_vip->n_backends; i++) {
+        struct ovn_lb_backend *backend = &lb_vip->backends[i];
+
+        ds_put_cstr(&aff_match_learn, backend->ip_str);
+        ds_put_cstr(&aff_match, backend->ip_str);
+
+        if (backend->port) {
+            ds_put_format(&aff_action, ipv6 ? "[%s]:%d" : "%s:%d",
+                          backend->ip_str, backend->port);
+            ds_put_format(&aff_action_learn, ipv6 ? "[%s]:%d" : "%s:%d",
+                          backend->ip_str, backend->port);
+
+            ds_put_format(&aff_match_learn, " && %s.dst == %d",
+                          lb->proto, backend->port);
+            ds_put_format(&aff_match, " && "REG_LB_AFF_MATCH_PORT" == %d",
+                          backend->port);
+        } else {
+            ds_put_cstr(&aff_action, backend->ip_str);
+            ds_put_cstr(&aff_action_learn, backend->ip_str);
+        }
+
+        ds_put_cstr(&aff_action, ");");
+        ds_put_char(&aff_action_learn, '"');
+
+        if (lb_vip->vip_port) {
+            ds_put_format(&aff_action_learn, ", proto = %s", lb->proto);
+        }
+
+        ds_put_format(&aff_action_learn, ", timeout = %d); /* drop */",
+                      lb->affinity_timeout);
+
+        struct ovn_lflow *lflow_ref_aff_learn = NULL;
+        uint32_t hash_aff_learn = ovn_logical_flow_hash(
+                ovn_stage_get_table(S_SWITCH_IN_LB_AFF_LEARN),
+                ovn_stage_get_pipeline(S_SWITCH_IN_LB_AFF_LEARN),
+                100, ds_cstr(&aff_match_learn), ds_cstr(&aff_action_learn));
+
+        struct ovn_lflow *lflow_ref_aff_lb = NULL;
+        uint32_t hash_aff_lb = ovn_logical_flow_hash(
+                ovn_stage_get_table(S_SWITCH_IN_LB),
+                ovn_stage_get_pipeline(S_SWITCH_IN_LB),
+                150, ds_cstr(&aff_match), ds_cstr(&aff_action));
+
+        for (size_t j = 0; j < lb->n_nb_ls; j++) {
+            /* Forward to OFTABLE_CHK_LB_AFFINITY table to store flow tuple. */
+            if (!ovn_dp_group_add_with_reference(lflow_ref_aff_learn,
+                                                 lb->nb_ls[j])) {
+                lflow_ref_aff_learn = ovn_lflow_add_at_with_hash(
+                        lflows, lb->nb_ls[j], S_SWITCH_IN_LB_AFF_LEARN, 100,
+                        ds_cstr(&aff_match_learn), ds_cstr(&aff_action_learn),
+                        NULL, NULL, &lb->nlb->header_, OVS_SOURCE_LOCATOR,
+                        hash_aff_learn);
+            }
+            /* Use already selected backend within affinity timeslot. */
+            if (!ovn_dp_group_add_with_reference(lflow_ref_aff_lb,
+                                                 lb->nb_ls[j])) {
+                lflow_ref_aff_lb = ovn_lflow_add_at_with_hash(
+                    lflows, lb->nb_ls[j], S_SWITCH_IN_LB, 150,
+                    ds_cstr(&aff_match), ds_cstr(&aff_action), NULL, NULL,
+                    &lb->nlb->header_, OVS_SOURCE_LOCATOR,
+                    hash_aff_lb);
+            }
+        }
+
+        ds_truncate(&aff_action, aff_action_len);
+        ds_truncate(&aff_action_learn, aff_action_learn_len);
+        ds_truncate(&aff_match, aff_match_len);
+        ds_truncate(&aff_match_learn, aff_match_learn_len);
+    }
+
+    ds_destroy(&aff_action);
+    ds_destroy(&aff_action_learn);
+    ds_destroy(&aff_match);
+    ds_destroy(&aff_match_learn);
 }
 
 static void
@@ -10356,11 +10550,10 @@ build_lrouter_nat_flows_for_lb(struct ovn_lb_vip *lb_vip,
     /* LB affinity flows for datapaths where CMS has specified
      * force_snat_for_lb floag option.
      */
-    build_lb_affinity_flows(lflows, lb, lb_vip, new_match,
-                            "flags.force_snat_for_lb = 1",
-                            lb_aff_force_snat_router,
-                            n_lb_aff_force_snat_router,
-                            true);
+    build_lb_affinity_lr_flows(lflows, lb, lb_vip, new_match,
+                               "flags.force_snat_for_lb = 1",
+                               lb_aff_force_snat_router,
+                               n_lb_aff_force_snat_router);
 
     build_gw_lrouter_nat_flows_for_lb(lb, gw_router, n_gw_router,
             reject, new_match, ds_cstr(action), est_match,
@@ -10370,8 +10563,8 @@ build_lrouter_nat_flows_for_lb(struct ovn_lb_vip *lb_vip,
      * skip_snat_for_lb floag option or regular datapaths.
      */
     char *lb_aff_action = lb->skip_snat ? "flags.skip_snat_for_lb = 1" : NULL;
-    build_lb_affinity_flows(lflows, lb, lb_vip, new_match, lb_aff_action,
-                            lb_aff_router, n_lb_aff_router, true);
+    build_lb_affinity_lr_flows(lflows, lb, lb_vip, new_match, lb_aff_action,
+                               lb_aff_router, n_lb_aff_router);
 
     /* Distributed router logic */
     for (size_t i = 0; i < n_distributed_router; i++) {

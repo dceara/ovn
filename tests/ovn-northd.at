@@ -7999,6 +7999,12 @@ AT_CHECK([grep "ls_in_lb_aff_check" S0flows | sort], [0], [dnl
   table=11(ls_in_lb_aff_check ), priority=0    , match=(1), action=(next;)
   table=11(ls_in_lb_aff_check ), priority=100  , match=(ct.new && ip4 && reg1 == 172.16.0.10 && reg2[[0..15]] == 80), action=(reg9[[6]] = chk_lb_aff(); next;)
 ])
+AT_CHECK([grep "ls_in_lb " S0flows | sort], [0], [dnl
+  table=12(ls_in_lb           ), priority=0    , match=(1), action=(next;)
+  table=12(ls_in_lb           ), priority=120  , match=(ct.new && ip4.dst == 172.16.0.10 && tcp.dst == 80), action=(reg0[[1]] = 0; ct_lb_mark(backends=10.0.0.2:80,20.0.0.2:80);)
+  table=12(ls_in_lb           ), priority=150  , match=(reg9[[6]] == 1 && ct.new && ip4 && reg4 == 10.0.0.2 && reg8[[0..15]] == 80), action=(reg0[[1]] = 0; reg1 = 172.16.0.10; reg2[[0..15]] = 80; ct_lb_mark(backends=10.0.0.2:80);)
+  table=12(ls_in_lb           ), priority=150  , match=(reg9[[6]] == 1 && ct.new && ip4 && reg4 == 20.0.0.2 && reg8[[0..15]] == 80), action=(reg0[[1]] = 0; reg1 = 172.16.0.10; reg2[[0..15]] = 80; ct_lb_mark(backends=20.0.0.2:80);)
+])
 AT_CHECK([grep "ls_in_lb_aff_learn" S0flows | sort], [0], [dnl
   table=13(ls_in_lb_aff_learn ), priority=0    , match=(1), action=(next;)
   table=13(ls_in_lb_aff_learn ), priority=100  , match=(reg9[[6]] == 0 && ct.new && ip4 && reg1 == 172.16.0.10 && ip4.dst == 10.0.0.2 && tcp.dst == 80), action=(commit_lb_aff(vip = "172.16.0.10:80", backend = "10.0.0.2:80", proto = tcp, timeout = 60); /* drop */)
@@ -8008,6 +8014,13 @@ AT_CHECK([grep "ls_in_lb_aff_learn" S0flows | sort], [0], [dnl
 AT_CHECK([grep "lr_in_lb_aff_check" R1flows | sort], [0], [dnl
   table=6 (lr_in_lb_aff_check ), priority=0    , match=(1), action=(next;)
   table=6 (lr_in_lb_aff_check ), priority=100  , match=(ct.new && ip4 && reg0 == 172.16.0.10 && tcp && reg9[[16..31]] == 80), action=(reg9[[6]] = chk_lb_aff(); next;)
+])
+AT_CHECK([grep "lr_in_dnat " R1flows | sort], [0], [dnl
+  table=7 (lr_in_dnat         ), priority=0    , match=(1), action=(next;)
+  table=7 (lr_in_dnat         ), priority=120  , match=(ct.est && ip4 && reg0 == 172.16.0.10 && tcp && reg9[[16..31]] == 80 && ct_mark.natted == 1), action=(next;)
+  table=7 (lr_in_dnat         ), priority=120  , match=(ct.new && ip4 && reg0 == 172.16.0.10 && tcp && reg9[[16..31]] == 80), action=(ct_lb_mark(backends=10.0.0.2:80,20.0.0.2:80);)
+  table=7 (lr_in_dnat         ), priority=150  , match=(reg9[[6]] == 1 && ct.new && ip4 && reg4 == 10.0.0.2 && reg8[[0..15]] == 80), action=(reg0 = 172.16.0.10; ct_lb_mark(backends=10.0.0.2:80);)
+  table=7 (lr_in_dnat         ), priority=150  , match=(reg9[[6]] == 1 && ct.new && ip4 && reg4 == 20.0.0.2 && reg8[[0..15]] == 80), action=(reg0 = 172.16.0.10; ct_lb_mark(backends=20.0.0.2:80);)
 ])
 AT_CHECK([grep "lr_in_lb_aff_learn" R1flows | sort], [0], [dnl
   table=8 (lr_in_lb_aff_learn ), priority=0    , match=(1), action=(next;)
