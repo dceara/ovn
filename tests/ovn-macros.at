@@ -131,7 +131,6 @@ ovn_init_db () {
     fi
 
     as $as_d start_daemon ovsdb-server \
-        -vjsonrpc \
         --remote=punix:"$d"/$1.sock \
         $remote_in_db \
         "$d"/$1.db
@@ -167,7 +166,7 @@ ovn_start_northd() {
 
     case ${NORTHD_TYPE:=ovn-northd} in
         ovn-northd) ;;
-        ovn-northd-ddlog) northd_args="$northd_args --ddlog-record=${AZ:+$AZ/}northd$suffix/replay.dat -v" ;;
+        ovn-northd-ddlog) northd_args="$northd_args --ddlog-record=${AZ:+$AZ/}northd$suffix/replay.dat" ;;
     esac
 
     if test X$NORTHD_USE_PARALLELIZATION = Xyes; then
@@ -177,7 +176,7 @@ ovn_start_northd() {
     local name=${d_prefix}northd${suffix}
     echo "${prefix}starting $name"
     test -d "$ovs_base/$name" || mkdir "$ovs_base/$name"
-    as $name start_daemon $NORTHD_TYPE $northd_args -vjsonrpc \
+    as $name start_daemon $NORTHD_TYPE $northd_args \
                --ovnnb-db=$OVN_NB_DB --ovnsb-db=$OVN_SB_DB
 }
 
@@ -241,7 +240,7 @@ ovn_start () {
 
         echo "${msg_prefix}starting ovn-ic"
         mkdir "$ovs_base"/$d_prefix/ic
-        as $d_prefix/ic start_daemon ovn-ic -v \
+        as $d_prefix/ic start_daemon ovn-ic \
                --ovnnb-db=$OVN_NB_DB --ovnsb-db=$OVN_SB_DB \
                --ic-nb-db=unix:"$ovs_base"/ovn-ic-nb/ovn-ic-nb.sock \
                --ic-sb-db=unix:"$ovs_base"/ovn-ic-sb/ovn-ic-sb.sock

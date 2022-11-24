@@ -133,7 +133,7 @@ sim_add () {
    as $1 ovs-vsctl --no-wait -- init || return 1
 
    # Start ovs-vswitchd
-   as $1 start_daemon ovs-vswitchd --enable-dummy=system -vvconn -vofproto_dpif -vunixctl
+   as $1 start_daemon ovs-vswitchd --enable-dummy=system
    as $1 ovs-appctl vlog/disable-rate-limit vconn
    if test X$HAVE_OPENSSL = Xyes; then
       if test -f $PKIDIR/testpki-$1-privkey.pem; then
@@ -206,7 +206,7 @@ m4_define([_OVS_VSWITCHD_START],
    AT_CHECK([ovs-vsctl --no-wait init $2])
 
    dnl Start ovs-vswitchd.
-   AT_CHECK([ovs-vswitchd $1 --detach --no-chdir --pidfile --log-file -vvconn -vofproto_dpif -vunixctl], [0], [], [stderr])
+   AT_CHECK([ovs-vswitchd $1 --detach --no-chdir --pidfile --log-file], [0], [], [stderr])
    AT_CAPTURE_FILE([ovs-vswitchd.log])
    on_exit "kill_ovs_vswitchd `cat ovs-vswitchd.pid`"
    AT_CHECK([[sed < stderr '
