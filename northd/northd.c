@@ -10551,7 +10551,7 @@ build_lrouter_nat_flows_for_lb(struct ovn_lb_vip *lb_vip,
      * force_snat_for_lb floag option.
      */
     build_lb_affinity_lr_flows(lflows, lb, lb_vip, new_match,
-                               "flags.force_snat_for_lb = 1",
+                               "flags.force_snat_for_lb = 1; ",
                                lb_aff_force_snat_router,
                                n_lb_aff_force_snat_router);
 
@@ -10562,7 +10562,8 @@ build_lrouter_nat_flows_for_lb(struct ovn_lb_vip *lb_vip,
     /* LB affinity flows for datapaths where CMS has specified
      * skip_snat_for_lb floag option or regular datapaths.
      */
-    char *lb_aff_action = lb->skip_snat ? "flags.skip_snat_for_lb = 1" : NULL;
+    char *lb_aff_action =
+        lb->skip_snat ? "flags.skip_snat_for_lb = 1; " : NULL;
     build_lb_affinity_lr_flows(lflows, lb, lb_vip, new_match, lb_aff_action,
                                lb_aff_router, n_lb_aff_router);
 
