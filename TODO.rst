@@ -186,7 +186,4 @@ OVN To-do List
 
 * Load Balancer templates
 
-  * Support combining the VIP (or backend) IP and port into a single
-    template variable.
-
-  * Support combining all backends into a single template variable.
+  * Support combining the VIP IP and port into a single template variable.

@@ -1958,8 +1958,9 @@
         </pre>
 
         <p>
-          where <code>VIP_VAR</code> and <code>PORT_VAR</code> are names of
-        <ref table="Chassis_Template_Var"/> records.
+          where <code>VIP_VAR</code> and <code>PORT_VAR</code> are keys of
+          the <ref table="Chassis_Template_Var"/> <ref column="variables"/>
+          records.
         </p>
 
         <p>
@@ -1982,8 +1983,9 @@ or
         <p>
           where <code>BACKEND_VAR1</code>, <code>PORT_VAR1</code>,
           <code>BACKEND_VAR2</code>, <code>PORT_VAR2</code>,
-          <code>BACKENDS_VAR1</code> and <code>BACKENDS_VAR2</code> are names
-          of <ref table="Chassis_Template_Var"/> records.
+          <code>BACKENDS_VAR1</code> and <code>BACKENDS_VAR2</code> are keys
+          of the <ref table="Chassis_Template_Var"/> <ref column="variables"/>
+          records.
         </p>
       </column>
 
