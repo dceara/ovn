@@ -1,5 +1,12 @@
 #!/bin/bash
 
+usage() {
+    echo "Usage: $1 <n_routers> <n_lbs> <n_backends_per_lb> <use_template>"
+    exit 0
+}
+
+([ "${1:-"--usage"}" = "--usage" ] || [ "$#" -ne "4" ]) && usage $0
+
 nrtr=$1
 nlb=$2
 nbackends=$3
