@@ -15,6 +15,8 @@ OVN v22.12.0 - 16 Dec 2022
     can be advertized.  When upgrading to this version user must ensure that
     all ovn-ic daemons in all availability zones are upgraded before ovn-ic SB
     database schema is converted.
+  - ovn-controller: Experimental support for co-hosting multiple controller
+    instances on the same host.
 
 OVN v22.09.0 - 16 Sep 2022
 --------------------------
