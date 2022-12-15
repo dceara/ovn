@@ -308,9 +308,10 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
                                 sbrec_address_set_by_name);
 }
 
-void inc_proc_northd_run(struct ovsdb_idl_txn *ovnnb_txn,
+bool inc_proc_northd_run(struct ovsdb_idl_txn *ovnnb_txn,
                          struct ovsdb_idl_txn *ovnsb_txn,
                          bool recompute) {
+    bool run_needed = engine_need_run();
     engine_init_run();
 
     /* Force a full recompute if instructed to, for example, after a NB/SB
@@ -347,6 +348,7 @@ void inc_proc_northd_run(struct ovsdb_idl_txn *ovnnb_txn,
     } else {
         engine_set_force_recompute(false);
     }
+    return run_needed;
 }
 
 void inc_proc_northd_cleanup(void)
