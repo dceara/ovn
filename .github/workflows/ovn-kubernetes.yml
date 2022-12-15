@@ -123,6 +123,11 @@ jobs:
         make -C test install-kind
       working-directory: src/github.com/ovn-org/ovn-kubernetes
 
+    - name: Skip affinity tests
+      run: |
+        sed -i 's/SKIPPED_TESTS="/SKIPPED_TESTS="should have session affinity timeout work/' test/scripts/e2e-kind.sh
+      working-directory: src/github.com/ovn-org/ovn-kubernetes
+
     - name: Run Tests
       run: |
         make -C test ${{ matrix.target }}
