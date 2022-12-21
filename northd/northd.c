@@ -11125,7 +11125,10 @@ build_lrouter_arp_flow(struct ovn_datapath *od, struct ovn_port *op,
         ds_put_format(&match, "inport == %s && ", op->json_key);
     }
 
-    ds_put_format(&match, "arp.op == 1 && arp.tpa == %s", ip_address);
+    ds_put_cstr(&match, "arp.op == 1");
+    if (ip_address) {
+        ds_put_format(&match, " && arp.tpa == %s", ip_address);
+    }
 
     if (extra_match && ds_last(extra_match) != EOF) {
         ds_put_format(&match, " && %s", ds_cstr(extra_match));
@@ -11180,7 +11183,10 @@ build_lrouter_nd_flow(struct ovn_datapath *od, struct ovn_port *op,
                       ip_address, sn_ip_address);
     }
 
-    ds_put_format(&match, "nd_ns && nd.target == %s", ip_address);
+    ds_put_cstr(&match, "nd_ns");
+    if (ip_address) {
+        ds_put_format(&match, " && nd.target == %s", ip_address);
+    }
 
     if (extra_match && ds_last(extra_match) != EOF) {
         ds_put_format(&match, " && %s", ds_cstr(extra_match));
@@ -13552,6 +13558,23 @@ build_lrouter_ipv4_ip_input(struct ovn_port *op,
             build_lrouter_drop_own_dest(op, S_ROUTER_IN_IP_INPUT, 60, false,
                                         lflows);
         }
+
+        /* Add a low-prio proxy-arp flow if needed. */
+        if (smap_get_bool(&op->nbrp->options, "proxy-arp", false)) {
+            if (op->lrp_networks.n_ipv6_addrs) {
+                build_lrouter_nd_flow(op->od, op, "nd_na", NULL, NULL,
+                                      REG_INPORT_ETH_ADDR, NULL, false, 89,
+                                      &op->nbrp->header_,
+                                      lflows, meter_groups);
+            }
+            if (op->lrp_networks.n_ipv4_addrs) {
+                build_lrouter_arp_flow(op->od, op, NULL,
+                                       REG_INPORT_ETH_ADDR, NULL, false, 89,
+                                       &op->nbrp->header_,
+                                       lflows);
+            }
+        }
+
         /* ARP / ND handling for external IP addresses.
          *
          * DNAT and SNAT IP addresses are external IP addresses that need ARP
