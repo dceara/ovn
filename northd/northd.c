@@ -15840,6 +15840,10 @@ build_mcast_groups(struct lflow_input *input_data,
 
             if (!lsp_is_router(op->nbsp)) {
                 ovn_multicast_add(mcast_groups, &mc_flood_l2, op);
+            } else if (op->peer && op->peer->nbrp &&
+                            smap_get_bool(&op->peer->nbrp->options,
+                                          "proxy-arp", false)) {
+                ovn_multicast_add(mcast_groups, &mc_flood_l2, op);
             }
 
             /* If this port is connected to a multicast router then add it
