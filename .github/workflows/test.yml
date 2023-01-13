@@ -80,6 +80,9 @@ jobs:
         path: 'ovs'
         ref: 'master'
 
+    - name: workaround azure issues
+      run:  sudo sed -i 's/azure\.//' /etc/apt/sources.list
+
     - name: update APT cache
       run:  sudo apt update
 
