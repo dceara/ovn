@@ -34909,6 +34909,8 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([CT flush load balancer backends])
+dnl XXX: Disable the CT flushing feature forcefully.
+AT_SKIP_IF([:])
 ovn_start
 net_add n1
 

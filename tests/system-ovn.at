@@ -10521,6 +10521,9 @@ OVN_FOR_EACH_NORTHD([
 AT_SETUP([load-balancing CT flush backends])
 AT_KEYWORDS([ovnlb])
 
+dnl XXX: Disable the CT flushing feature forcefully.
+AT_SKIP_IF([:])
+
 CHECK_CONNTRACK()
 CHECK_CONNTRACK_NAT()
 ovn_start

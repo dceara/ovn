@@ -186,7 +186,16 @@ ovs_feature_support_run(const struct smap *ovs_capabilities,
         enum ovs_feature_value value = all_ovs_features[i].value;
         const char *name = all_ovs_features[i].name;
         bool old_state = supported_ovs_features & value;
-        bool new_state = smap_get_bool(ovs_capabilities, name, false);
+        bool new_state;
+
+        /* XXX: Forcefully disable CT flushing by overriding the
+         * advertised feature support from OVS.
+         */
+        if (all_ovs_features[i].value == OVS_CT_TUPLE_FLUSH_SUPPORT) {
+            new_state = false;
+        } else {
+            new_state = smap_get_bool(ovs_capabilities, name, false);
+        }
         if (new_state != old_state) {
             updated = true;
             if (new_state) {
