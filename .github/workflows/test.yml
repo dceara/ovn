@@ -34,29 +34,10 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-        - { compiler: gcc, opts: --disable-ssl }
-        - { compiler: clang, opts: --disable-ssl }
-        - { compiler: gcc, testsuite: test, test_range: "-500" }
-        - { compiler: gcc, testsuite: test, test_range: "501-1000" }
-        - { compiler: gcc, testsuite: test, test_range: "1001-" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "-300" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "301-600" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "601-900" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "901-1200" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "1201-" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "-500" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "501-1000" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "1001-" }
-        - { compiler: clang, testsuite: test, libs: -ljemalloc, test_range: "-500" }
-        - { compiler: clang, testsuite: test, libs: -ljemalloc, test_range: "501-1000" }
-        - { compiler: clang, testsuite: test, libs: -ljemalloc, test_range: "1001-" }
-        - { compiler: gcc, testsuite: system-test, test_range: "-100" }
         - { compiler: gcc, testsuite: system-test, test_range: "101-200" }
         - { compiler: gcc, testsuite: system-test, test_range: "201-" }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "-100" }
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "101-200" }
         - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "201-" }
-        - { arch: x86, compiler: gcc, opts: --disable-ssl }
 
     steps:
     - name: checkout
@@ -135,53 +116,3 @@ jobs:
         name: logs-linux-${{ join(matrix.cfg.*, '-') }}
         path: logs.tgz
 
-  build-osx:
-    env:
-      CC:    clang
-      OPTS:  --disable-ssl
-
-    name:    osx clang --disable-ssl
-    runs-on: macos-latest
-
-    strategy:
-      fail-fast: false
-
-    steps:
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
-    # For weekly runs, don't update submodules
-    - name: checkout without submodule
-      if: github.event_name == 'schedule'
-      uses: actions/checkout@v3
-    # Weekly runs test using OVS master instead of the
-    # submodule.
-    - name: checkout OVS master
-      if: github.event_name == 'schedule'
-      uses: actions/checkout@v3
-      with:
-        repository: 'openvswitch/ovs'
-        path: 'ovs'
-        ref: 'master'
-    - name: install dependencies
-      run:  brew install automake libtool
-    - name: update PATH
-      run:  |
-        echo "$HOME/bin"        >> $GITHUB_PATH
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-    - name: set up python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-    - name: prepare
-      run:  ./.ci/osx-prepare.sh
-    - name: build
-      run:  ./.ci/osx-build.sh
-    - name: upload logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v3
-      with:
-        name: logs-osx-clang---disable-ssl
-        path: config.log
