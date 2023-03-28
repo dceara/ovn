@@ -14,7 +14,7 @@ concurrency:
 jobs:
   build-linux:
     env:
-      IMAGE_NAME:  ghcr.io/ovn-org/ovn-tests:ubuntu
+      IMAGE_NAME:  ghcr.io/dceara/ovn-tests:ubuntu
       ARCH:        ${{ matrix.cfg.arch }}
       CC:          ${{ matrix.cfg.compiler }}
       LIBS:        ${{ matrix.cfg.libs }}

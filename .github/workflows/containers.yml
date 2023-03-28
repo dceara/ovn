@@ -8,7 +8,7 @@ on:
 
 env:
   IMAGE_REGISTRY: ghcr.io
-  IMAGE_NAMESPACE: ovn-org
+  IMAGE_NAMESPACE: dceara
   IMAGE_NAME: ovn-tests
   CONTAINERS_PATH: ./utilities/containers
   DEPENDENCIES: podman
