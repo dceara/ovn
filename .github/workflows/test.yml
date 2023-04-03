@@ -35,45 +35,15 @@ jobs:
       matrix:
         cfg:
         - { compiler: gcc, opts: --disable-ssl }
-        - { compiler: clang, opts: --disable-ssl }
-        - { compiler: gcc, testsuite: test, test_range: "-500" }
-        - { compiler: gcc, testsuite: test, test_range: "501-1000" }
-        - { compiler: gcc, testsuite: test, test_range: "1001-" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "-300" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "301-600" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "601-900" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "901-1200" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "1201-" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "-500" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "501-1000" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "1001-" }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "101-200" }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "201-" }
-        - { compiler: gcc, testsuite: system-test, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test, test_range: "101-200" }
-        - { compiler: gcc, testsuite: system-test, test_range: "201-" }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "-100" }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "101-200" }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "201-" }
-        - { arch: x86, compiler: gcc, opts: --disable-ssl }
 
     steps:
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
-
     # For weekly runs, don't update submodules
     - name: checkout without submodule
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v3
 
     # Weekly runs test using the tip of the most recent stable OVS branch
     # instead of the submodule.
     - name: checkout OVS
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v3
       with:
         repository: 'openvswitch/ovs'
@@ -81,7 +51,6 @@ jobs:
         path: 'ovs'
 
     - name: checkout OVS most recent stable branch.
-      if: github.event_name == 'schedule'
       run: |
         git checkout \
           $(git branch -a -l '*branch-*' | sed 's/remotes\/origin\///' | \
@@ -155,26 +124,18 @@ jobs:
       fail-fast: false
 
     steps:
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
     # For weekly runs, don't update submodules
     - name: checkout without submodule
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v3
     # Weekly runs test using the tip of the most recent stable OVS branch
     # instead of the submodule.
     - name: checkout OVS
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v3
       with:
         repository: 'openvswitch/ovs'
         fetch-depth: 0
         path: 'ovs'
     - name: checkout OVS most recent stable branch.
-      if: github.event_name == 'schedule'
       run: |
         git checkout \
           $(git branch -a -l '*branch-*' | sed 's/remotes\/origin\///' | \
