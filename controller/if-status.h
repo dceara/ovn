@@ -20,6 +20,7 @@
 #include "lib/vswitch-idl.h"
 
 #include "binding.h"
+#include "lport.h"
 
 struct if_status_mgr;
 struct simap;
@@ -31,7 +32,7 @@ void if_status_mgr_claim_iface(struct if_status_mgr *,
                                const struct sbrec_port_binding *pb,
                                const struct sbrec_chassis *chassis_rec,
                                const struct ovsrec_interface *iface_rec,
-                               bool sb_readonly);
+                               bool sb_readonly, enum can_bind bind_type);
 void if_status_mgr_release_iface(struct if_status_mgr *, const char *iface_id);
 void if_status_mgr_delete_iface(struct if_status_mgr *, const char *iface_id);
 
@@ -49,6 +50,8 @@ void if_status_mgr_get_memory_usage(struct if_status_mgr *mgr,
                                     struct simap *usage);
 bool if_status_mgr_iface_is_present(struct if_status_mgr *mgr,
                                     const char *iface_id);
+uint16_t if_status_mgr_iface_get_mtu(const struct if_status_mgr *mgr,
+                                     const char *iface_id);
 bool if_status_handle_claims(struct if_status_mgr *mgr,
                              struct local_binding_data *binding_data,
                              const struct sbrec_chassis *chassis_rec,
