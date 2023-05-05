@@ -1,6 +1,7 @@
 name: System tests using ovn-fake-multinode
 
 on:
+  push:
   schedule:
     # Run everyday at midnight
     - cron: '0 0 * * *'
