@@ -11205,16 +11205,11 @@ ADD_VETH(bar1, bar1, br-int, "2002::2/64", "f0:00:00:01:02:05", \
 ovn-nbctl lsp-add bar bar1 \
 -- lsp-set-addresses bar1 "f0:00:00:01:02:05 192.168.2.2 2002::2"
 
-# Warm up the datapath (needed to make the DPDK datapth happy)
-NS_CHECK_EXEC([foo1], [ping -q -c 3 -i 0.3 -w 2 192.168.2.2 | FORMAT_PING], \
-[0], [dnl
-3 packets transmitted, 3 received, 0% packet loss, time 0ms
-])
-
 ovn-nbctl mirror-add mirror0 gre 1 to-lport 172.16.0.100
 ovn-nbctl lsp-attach-mirror bar1 mirror0
 
 OVN_POPULATE_ARP
+wait_for_ports_up
 check ovn-nbctl --wait=hv sync
 
 ADD_NAMESPACES(mirror)
