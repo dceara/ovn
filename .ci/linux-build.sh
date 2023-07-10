@@ -107,7 +107,7 @@ function run_tests()
     then
         # testsuite.log is necessary for debugging.
         cat */_build/sub/tests/testsuite.log
-        exit 1
+        return 1
     fi
 }
 
@@ -119,24 +119,35 @@ function execute_tests()
 
     export DISTCHECK_CONFIGURE_FLAGS="$OPTS"
 
-    SKIP_UNSTABLE=yes run_tests
+    local stable_rc=0
+    local unstable_rc=0
+
+    if ! SKIP_UNSTABLE=yes run_tests; then
+        stable_rc=1
+    fi
 
     if [ "$UNSTABLE" ]; then
-        SKIP_UNSTABLE=no TEST_RANGE="-k unstable" RECHECK=yes \
-            run_tests
+        if ! SKIP_UNSTABLE=no TEST_RANGE="-k unstable" RECHECK=yes \
+                run_tests; then
+            unstable_rc=1
+        fi
+    fi
+
+    if [[ $stable_rc -ne 0 ]] || [[ $unstable_rc -ne 0 ]]; then
+        exit 1
     fi
 }
 
 function run_system_tests()
 {
-    type=$1
-    log_file=$2
+    local type=$1
+    local log_file=$2
 
     if ! sudo make $JOBS $type TESTSUITEFLAGS="$TEST_RANGE" \
             RECHECK=$RECHECK; then
         # $log_file is necessary for debugging.
         cat tests/$log_file
-        exit 1
+        return 1
     fi
 }
 
@@ -145,11 +156,22 @@ function execute_system_tests()
     configure_ovn $OPTS
     make $JOBS || { cat config.log; exit 1; }
 
-    SKIP_UNSTABLE=yes run_system_tests $@
+    local stable_rc=0
+    local unstable_rc=0
+
+    if ! SKIP_UNSTABLE=yes run_system_tests $@; then
+        stable_rc=1
+    fi
 
     if [ "$UNSTABLE" ]; then
-        SKIP_UNSTABLE=no TEST_RANGE="-k unstable" RECHECK=yes \
-            run_system_tests $@
+        if ! SKIP_UNSTABLE=no TEST_RANGE="-k unstable" RECHECK=yes \
+                run_system_tests $@; then
+            unstable_rc=1
+        fi
+    fi
+
+    if [[ $stable_rc -ne 0 ]] || [[ $unstable_rc -ne 0 ]]; then
+        exit 1
     fi
 }
 
