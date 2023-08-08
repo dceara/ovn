@@ -710,6 +710,12 @@ run_idl_loop(struct ovsdb_idl_loop *idl_loop, const char *name)
         VLOG(duration > 500 ? VLL_INFO : VLL_DBG,
              "%s IDL run: %d iterations in %lld ms", name, n + 1, duration);
     }
+
+    /* Wake the northd immediately if the duration exceeds 500 ms. */
+    if (duration >= 500) {
+        poll_immediate_wake();
+    }
+
     return txn;
 }
 
@@ -876,6 +882,7 @@ main(int argc, char *argv[])
     /* Main loop. */
     exiting = false;
 
+    uint32_t northd_backoff_ms = 0;
     bool recompute = false;
     while (!exiting) {
         update_ssl_config();
@@ -940,10 +947,12 @@ main(int argc, char *argv[])
 
             if (ovsdb_idl_has_lock(ovnsb_idl_loop.idl)) {
                 bool activity = false;
-                if (ovnnb_txn && ovnsb_txn) {
+                if (ovnnb_txn && ovnsb_txn &&
+                    inc_proc_northd_can_run(recompute)) {
                     int64_t loop_start_time = time_wall_msec();
                     activity = inc_proc_northd_run(ovnnb_txn, ovnsb_txn,
-                                                        recompute);
+                                                   recompute,
+                                                   northd_backoff_ms);
                     recompute = false;
                     check_and_add_supported_dhcp_opts_to_sb_db(
                                  ovnsb_txn, ovnsb_idl_loop.idl);
@@ -1027,6 +1036,9 @@ main(int argc, char *argv[])
         if (nb) {
             interval = smap_get_int(&nb->options, "northd_probe_interval",
                                     interval);
+            northd_backoff_ms = smap_get_uint(&nb->options,
+                                              "northd-backoff-interval-ms",
+                                              200);
         }
         set_idl_probe_interval(ovnnb_idl_loop.idl, ovnnb_db, interval);
         set_idl_probe_interval(ovnsb_idl_loop.idl, ovnsb_db, interval);
