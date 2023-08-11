@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  OVNKUBE_COMMIT: "21923d9dd33ab398dd0f8ea1ef79ef5ddc6e2e1e"
+  OVNKUBE_COMMIT: "master"
   KIND_CLUSTER_NAME: ovn
   KIND_INSTALL_INGRESS: true
   KIND_ALLOW_SYSTEM_WRITES: true
@@ -41,7 +41,6 @@ jobs:
       with:
           path: src/github.com/ovn-org/ovn-kubernetes
           repository: ovn-org/ovn-kubernetes
-          ref: 21923d9dd33ab398dd0f8ea1ef79ef5ddc6e2e1e
 
     - name: Prepare
       run: |

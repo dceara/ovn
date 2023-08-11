@@ -1,4 +1,4 @@
-ARG OVNKUBE_COMMIT=21923d9dd33ab398dd0f8ea1ef79ef5ddc6e2e1e
+ARG OVNKUBE_COMMIT=master
 ARG GO_VERSION
 
 FROM fedora:37 AS ovnbuilder
