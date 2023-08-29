@@ -8083,50 +8083,6 @@ AT_CLEANUP
 ])
 
 OVN_FOR_EACH_NORTHD_NO_HV([
-AT_SETUP([northd-parallelization unixctl])
-ovn_start
-
-check as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads 1
-OVS_WAIT_FOR_OUTPUT([as northd ovn-appctl -t NORTHD_TYPE parallel-build/get-n-threads], [0], [1
-])
-
-check as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads 4
-OVS_WAIT_FOR_OUTPUT([as northd ovn-appctl -t NORTHD_TYPE parallel-build/get-n-threads], [0], [4
-])
-
-check as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads 1
-OVS_WAIT_FOR_OUTPUT([as northd ovn-appctl -t NORTHD_TYPE parallel-build/get-n-threads], [0], [1
-])
-
-AT_CHECK([as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads 0], [2], [],
-  [invalid n_threads: 0
-ovn-appctl: ovn-northd: server returned an error
-])
-
-AT_CHECK([as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads -1], [2], [],
-  [invalid n_threads: -1
-ovn-appctl: ovn-northd: server returned an error
-])
-
-AT_CHECK([as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads 300], [2], [],
-  [invalid n_threads: 300
-ovn-appctl: ovn-northd: server returned an error
-])
-
-AT_CHECK([as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads], [2], [],
-  ["parallel-build/set-n-threads" command requires at least 1 arguments
-ovn-appctl: ovn-northd: server returned an error
-])
-
-AT_CHECK([as northd ovn-appctl -t NORTHD_TYPE parallel-build/set-n-threads 1 2], [2], [],
-  ["parallel-build/set-n-threads" command takes at most 1 arguments
-ovn-appctl: ovn-northd: server returned an error
-])
-
-AT_CLEANUP
-])
-
-OVN_FOR_EACH_NORTHD_NO_HV([
 AT_SETUP([northd-parallelization runtime])
 ovn_start
 

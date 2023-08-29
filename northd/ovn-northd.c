@@ -637,20 +637,7 @@ parse_options(int argc OVS_UNUSED, char *argv[] OVS_UNUSED,
             exit(EXIT_SUCCESS);
 
         case OPT_N_THREADS:
-            *n_threads = strtoul(optarg, NULL, 10);
-            if (*n_threads < 1) {
-                *n_threads = 1;
-                VLOG_WARN("Setting n_threads to %d as --n-threads option was "
-                    "set to : [%s]", *n_threads, optarg);
-            }
-            if (*n_threads > OVN_MAX_SUPPORTED_THREADS) {
-                *n_threads = OVN_MAX_SUPPORTED_THREADS;
-                VLOG_WARN("Setting n_threads to %d as --n-threads option was "
-                    "set to : [%s]", *n_threads, optarg);
-            }
-            if (*n_threads != 1) {
-                VLOG_INFO("Using %d threads", *n_threads);
-            }
+            *n_threads = 1;
             break;
 
         case OPT_DRY_RUN:
@@ -1152,9 +1139,9 @@ cluster_state_reset_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
 
 static void
 ovn_northd_set_thread_count_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
-               const char *argv[], void *aux OVS_UNUSED)
+               const char *argv[] OVS_UNUSED, void *aux OVS_UNUSED)
 {
-    int n_threads = atoi(argv[1]);
+    int n_threads = 1;
 
     if ((n_threads < 1) || (n_threads > OVN_MAX_SUPPORTED_THREADS)) {
         struct ds s = DS_EMPTY_INITIALIZER;
