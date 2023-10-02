@@ -30,10 +30,11 @@ ovn_extend_table_delete_desired(struct ovn_extend_table *table,
                                 struct ovn_extend_table_lflow_to_desired *l);
 
 void
-ovn_extend_table_init(struct ovn_extend_table *table)
+ovn_extend_table_init(struct ovn_extend_table *table, uint32_t max_size)
 {
-    table->table_ids = bitmap_allocate(MAX_EXT_TABLE_ID);
+    table->table_ids = bitmap_allocate(max_size);
     bitmap_set1(table->table_ids, 0); /* table id 0 is invalid. */
+    table->max_size = max_size;
     hmap_init(&table->desired);
     hmap_init(&table->lflow_to_desired);
     hmap_init(&table->existing);
@@ -320,10 +321,10 @@ ovn_extend_table_assign_id(struct ovn_extend_table *table, const char *name,
 
     if (!existing_info) {
         /* Reserve a new id. */
-        table_id = bitmap_scan(table->table_ids, 0, 1, MAX_EXT_TABLE_ID + 1);
+        table_id = bitmap_scan(table->table_ids, 0, 1, table->max_size + 1);
     }
 
-    if (table_id == MAX_EXT_TABLE_ID + 1) {
+    if (table_id == table->max_size + 1) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
         VLOG_ERR_RL(&rl, "%"PRIu32" out of table ids.", table_id);
         return EXT_TABLE_ID_INVALID;

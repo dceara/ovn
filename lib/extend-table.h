@@ -17,7 +17,6 @@
 #ifndef EXTEND_TABLE_H
 #define EXTEND_TABLE_H 1
 
-#define MAX_EXT_TABLE_ID 65535
 #define EXT_TABLE_ID_INVALID 0
 
 #include "openvswitch/hmap.h"
@@ -34,6 +33,7 @@ struct ovn_extend_table {
                                 * they must share the same ID.  The "peer"
                                 * pointer would tell if the ID is still used by
                                 * the same item in the peer table. */
+    uint32_t max_size;
     struct hmap desired;
     struct hmap lflow_to_desired; /* Index for looking up desired table
                                    * items from given lflow uuid, with
@@ -81,7 +81,7 @@ struct ovn_extend_table_lflow_ref {
     struct ovn_extend_table_info *desired;
 };
 
-void ovn_extend_table_init(struct ovn_extend_table *);
+void ovn_extend_table_init(struct ovn_extend_table *, uint32_t max_size);
 
 void ovn_extend_table_destroy(struct ovn_extend_table *);
 
