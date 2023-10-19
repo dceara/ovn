@@ -84,6 +84,7 @@ jobs:
       OS_IMAGE: "fedora:37"
       CENTRAL_IMAGE: "ovn/ovn-multi-node:${{ matrix.cfg.branch }}"
       CHASSIS_IMAGE: "ovn/ovn-multi-node:main"
+      CENTRAL_NAME: "ovn-central"
       RELAY_IMAGE: "ovn/ovn-multi-node:main"
       GW_IMAGE: "ovn/ovn-multi-node:main"
       # Disable SSL for now. Revisit this if required.
