@@ -103,7 +103,8 @@ function configure_clang()
 function run_tests()
 {
     if ! make distcheck CFLAGS="${COMMON_CFLAGS} ${OVN_CFLAGS}" $JOBS \
-        TESTSUITEFLAGS="$JOBS $TEST_RANGE" RECHECK=$RECHECK
+        TESTSUITEFLAGS="$JOBS $TEST_RANGE" RECHECK=$RECHECK \
+        SKIP_UNSTABLE=$SKIP_UNSTABLE
     then
         # testsuite.log is necessary for debugging.
         cat */_build/sub/tests/testsuite.log
@@ -144,7 +145,7 @@ function run_system_tests()
     local log_file=$2
 
     if ! sudo make $JOBS $type TESTSUITEFLAGS="$TEST_RANGE" \
-            RECHECK=$RECHECK; then
+            RECHECK=$RECHECK SKIP_UNSTABLE=$SKIP_UNSTABLE; then
         # $log_file is necessary for debugging.
         cat tests/$log_file
         return 1
