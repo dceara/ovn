@@ -1,4 +1,4 @@
-flake8
+flake8>=6.1.0
 hacking>=3.0
 scapy
 sphinx
