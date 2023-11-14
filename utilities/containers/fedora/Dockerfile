@@ -1,4 +1,4 @@
-FROM quay.io/fedora/fedora:37
+FROM registry.fedoraproject.org/fedora:37
 
 # Update distro, install packages and clean any possible leftovers
 RUN dnf -y update \
