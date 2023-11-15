@@ -19,7 +19,8 @@ OVS_PATH=${OVS_PATH:-$OVN_PATH/ovs}
 CONTAINER_CMD=${CONTAINER_CMD:-podman}
 CONTAINER_WORKSPACE="/workspace"
 CONTAINER_WORKDIR="/workspace/ovn-tmp"
-IMAGE_NAME=${IMAGE_NAME:-"ovn-org/ovn-tests"}
+DEFAULT_IMAGE_NAME="ovn-org/ovn-tests:main-fedora"
+IMAGE_NAME=${IMAGE_NAME:-${DEFAULT_IMAGE_NAME}}
 
 # Test variables
 ARCH=${ARCH:-$(uname -m)}
@@ -156,6 +157,12 @@ done
 # Workaround for https://bugzilla.redhat.com/2153359
 if [ "$ARCH" = "aarch64" ] && ! check_clang_version_ge "16.0.0"; then
     ASAN_OPTIONS="detect_leaks=0"
+fi
+
+# Check if the IMAGE_NAME is a real image we can pull, otherwise fall
+# back to DEFAULT_IMAGE_NAME.
+if ! $CONTAINER_CMD pull $IMAGE_NAME; then
+    IMAGE_NAME=$DEFAULT_IMAGE_NAME
 fi
 
 CONTAINER_ID="$($CONTAINER_CMD run --privileged -d \
