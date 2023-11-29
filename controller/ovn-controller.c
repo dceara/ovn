@@ -5664,7 +5664,7 @@ main(int argc, char *argv[])
                 }
             }
 
-            if (br_int && ovs_feature_set_discovered()) {
+            if (br_int) {
                 ct_zones_data = engine_get_data(&en_ct_zones);
                 if (ct_zones_data && ofctrl_run(br_int, ovs_table,
                                                 &ct_zones_data->pending)) {
