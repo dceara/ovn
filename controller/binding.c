@@ -63,6 +63,58 @@ static struct shash _claimed_ports = SHASH_INITIALIZER(&_claimed_ports);
 static struct sset _postponed_ports = SSET_INITIALIZER(&_postponed_ports);
 static struct shash _qos_ports = SHASH_INITIALIZER(&_qos_ports);
 
+
+void add_lrp_claim(struct binding_ctx_out *ctx, const char *lrp_id) {
+    if (find_lrp_claim(ctx, lrp_id)) {
+        return;
+    }
+
+    struct lrp_claim *new_claim = xmalloc(sizeof *new_claim);
+    new_claim->lrp_id = xstrdup(lrp_id);
+    new_claim->next = ctx->lrp_claims->claim;
+    ctx->lrp_claims->claim = new_claim;
+    ctx->lrp_claims->size++;
+}
+
+void remove_lrp_claim(struct binding_ctx_out *ctx, char *lrp_id) {
+    struct lrp_claim *prev = NULL;
+    struct lrp_claim *current = ctx->lrp_claims->claim;
+
+    while (current) {
+        if (current->lrp_id && !strcmp(current->lrp_id, lrp_id)) {
+            if (prev) {
+                prev->next = current->next;
+            } else {
+                ctx->lrp_claims->claim = current->next;
+            }
+
+            free(current->lrp_id);
+            free(current);
+
+            ctx->lrp_claims->size--;
+
+            return;
+        }
+
+        prev = current;
+        current = current->next;
+    }
+}
+
+bool find_lrp_claim(struct binding_ctx_out *ctx, const char *lrp_id) {
+    if (!ctx->lrp_claims || !lrp_id) {
+        return false;
+    }
+    struct lrp_claim *current = ctx->lrp_claims->claim;
+    while (current) {
+        if (current->lrp_id && strcmp(current->lrp_id, lrp_id) == 0) {
+            return true;
+        }
+        current = current->next;
+    }
+    return false;
+}
+
 static void
 remove_additional_chassis(const struct sbrec_port_binding *pb,
                           const struct sbrec_chassis *chassis_rec);
@@ -1821,7 +1873,8 @@ static bool
 consider_nonvif_lport_(const struct sbrec_port_binding *pb,
                        bool our_chassis,
                        struct binding_ctx_in *b_ctx_in,
-                       struct binding_ctx_out *b_ctx_out)
+                       struct binding_ctx_out *b_ctx_out,
+                       bool should_release)
 {
     if (our_chassis) {
         update_local_lports(pb->logical_port, b_ctx_out);
@@ -1831,8 +1884,8 @@ consider_nonvif_lport_(const struct sbrec_port_binding *pb,
                            pb->datapath, b_ctx_in->chassis_rec,
                            b_ctx_out->local_datapaths,
                            b_ctx_out->tracked_dp_bindings);
-
         update_related_lport(pb, b_ctx_out);
+        add_lrp_claim(b_ctx_out, pb->logical_port);
         return claim_lport(pb, NULL, b_ctx_in->chassis_rec, NULL,
                            !b_ctx_in->ovnsb_idl_txn, false,
                            b_ctx_out->tracked_dp_bindings,
@@ -1840,16 +1893,13 @@ consider_nonvif_lport_(const struct sbrec_port_binding *pb,
                            b_ctx_out->postponed_ports);
     }
 
-    if (pb->chassis == b_ctx_in->chassis_rec
-            || is_additional_chassis(pb, b_ctx_in->chassis_rec)
-            || if_status_is_port_claimed(b_ctx_out->if_mgr,
-                                         pb->logical_port)) {
+    if (should_release) {
+        remove_lrp_claim(b_ctx_out, pb->logical_port);
         return release_lport(pb, b_ctx_in->chassis_rec,
                              !b_ctx_in->ovnsb_idl_txn,
                              b_ctx_out->tracked_dp_bindings,
                              b_ctx_out->if_mgr);
     }
-
     return true;
 }
 
@@ -1862,7 +1912,7 @@ consider_l2gw_lport(const struct sbrec_port_binding *pb,
     bool our_chassis = chassis_id && !strcmp(chassis_id,
                                              b_ctx_in->chassis_rec->name);
 
-    return consider_nonvif_lport_(pb, our_chassis, b_ctx_in, b_ctx_out);
+    return consider_nonvif_lport_(pb, our_chassis, b_ctx_in, b_ctx_out, true);
 }
 
 static bool
@@ -1874,7 +1924,7 @@ consider_l3gw_lport(const struct sbrec_port_binding *pb,
     bool our_chassis = chassis_id && !strcmp(chassis_id,
                                              b_ctx_in->chassis_rec->name);
 
-    return consider_nonvif_lport_(pb, our_chassis, b_ctx_in, b_ctx_out);
+    return consider_nonvif_lport_(pb, our_chassis, b_ctx_in, b_ctx_out, true);
 }
 
 static void
@@ -1920,6 +1970,11 @@ consider_ha_lport(const struct sbrec_port_binding *pb,
                                              b_ctx_in->active_tunnels,
                                              b_ctx_in->chassis_rec);
 
+    bool should_release = false;
+    if (pb && pb->chassis){
+        should_release = find_lrp_claim(b_ctx_out, pb->logical_port) && strcmp(pb->chassis->hostname, b_ctx_in->chassis_rec->hostname)  && !our_chassis;
+    }
+
     if (is_ha_chassis && !our_chassis) {
         /* If the chassis_rec is part of ha_chassis_group associated with
          * the port_binding 'pb', we need to add to the local_datapath
@@ -1937,7 +1992,8 @@ consider_ha_lport(const struct sbrec_port_binding *pb,
         update_related_lport(pb, b_ctx_out);
     }
 
-    return consider_nonvif_lport_(pb, our_chassis, b_ctx_in, b_ctx_out);
+    return consider_nonvif_lport_(pb, our_chassis, b_ctx_in, b_ctx_out,
+                                  should_release);
 }
 
 static bool

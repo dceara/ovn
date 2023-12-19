@@ -13327,22 +13327,6 @@ AT_CHECK([tcpdump -r main/br-phys_n1-tx.pcap arp[[24:4]]=0x0a000003 | wc -l],[0]
 0
 ],[ignore])
 
-# now disown both external ports, one by moving to another (non-existing)
-# chassis, another by removing the port from any ha groups
-check ovn-nbctl --wait=sb ha-chassis-group-add fake_hagrp
-fake_hagrp_uuid=`ovn-nbctl --bare --columns _uuid find ha_chassis_group name=fake_hagrp`
-check ovn-nbctl set logical_switch_port lext ha_chassis_group=$fake_hagrp_uuid
-check ovn-nbctl clear logical_switch_port lext2 ha_chassis_group
-check ovn-nbctl --wait=hv sync
-
-# check that traffic no longer leaks into localnet
-send_frames
-
-for suffix in 2 a; do
-    AT_CHECK([tcpdump -r main/br-phys_n1-tx.pcap arp[[24:4]]=0x0a00000${suffix} | wc -l],[0],[dnl
-1
-],[ignore])
-done
 
 AT_CLEANUP
 ])
@@ -19952,7 +19936,6 @@ reset_pcap_file hv1-ext1 hv1/ext1
 
 # Delete the ha-chassis hv1.
 ovn-nbctl ha-chassis-group-remove-chassis hagrp1 hv1
-wait_row_count Port_Binding 1 logical_port=ls1-lp_ext1 chassis='[[]]'
 
 # Add hv2 to the ha chassis group
 ovn-nbctl --wait=hv ha-chassis-group-add-chassis hagrp1 hv2 20

@@ -1459,6 +1459,54 @@ en_postponed_ports_run(struct engine_node *node, void *data_)
     engine_set_node_state(node, state);
 }
 
+struct ed_type_lrp_claims {
+    struct lrp_claim_list *lrp_claims;
+};
+
+static void *
+en_lrp_claims_init(struct engine_node *node OVS_UNUSED, struct engine_arg *arg OVS_UNUSED)
+{
+    struct ed_type_lrp_claims *data = xzalloc(sizeof *data);
+    data->lrp_claims = xzalloc(sizeof *(data->lrp_claims));
+
+    data->lrp_claims->claim = NULL;
+    data->lrp_claims->size = 0;
+
+    return data;
+}
+
+static void
+en_lrp_claims_cleanup(void *data_)
+{
+    struct ed_type_lrp_claims *data = data_;
+
+    if(data->lrp_claims->size == 0){
+        return;
+    }
+    struct lrp_claim *current = data->lrp_claims->claim;
+    while (data->lrp_claims->size > 0) {
+        struct lrp_claim *next = current->next;
+        free(current->lrp_id);
+        free(current);
+        current = next;
+        data->lrp_claims->size--;
+    }
+    data->lrp_claims = NULL;
+}
+
+static void
+en_lrp_claims_run(struct engine_node *node, void *data_)
+{
+    struct ed_type_lrp_claims *data = data_;
+    enum engine_node_state state = EN_UNCHANGED;
+
+    if (data->lrp_claims) {
+        state = EN_UPDATED;
+    }
+
+    engine_set_node_state(node, state);
+}
+
 struct ed_type_runtime_data {
     /* Contains "struct local_datapath" nodes. */
     struct hmap local_datapaths;
@@ -1493,6 +1541,8 @@ struct ed_type_runtime_data {
     struct shash local_active_ports_ras;
 
     struct sset *postponed_ports;
+
+    struct lrp_claim_list *lrp_claims;
 };
 
 /* struct ed_type_runtime_data has the below members for tracking the
@@ -1699,6 +1749,7 @@ init_binding_ctx(struct engine_node *node,
     b_ctx_out->if_mgr = ctrl_ctx->if_mgr;
     b_ctx_out->localnet_learn_fdb = rt_data->localnet_learn_fdb;
     b_ctx_out->localnet_learn_fdb_changed = false;
+    b_ctx_out->lrp_claims = rt_data->lrp_claims;
 }
 
 static void
@@ -1737,6 +1788,9 @@ en_runtime_data_run(struct engine_node *node, void *data)
     struct ed_type_postponed_ports *pp_data =
         engine_get_input_data("postponed_ports", node);
     rt_data->postponed_ports = pp_data->postponed_ports;
+    struct ed_type_lrp_claims *lrp_claims_data =
+        engine_get_input_data("lrp_claims", node);
+    rt_data->lrp_claims = lrp_claims_data->lrp_claims;
 
     struct binding_ctx_in b_ctx_in;
     struct binding_ctx_out b_ctx_out;
@@ -5177,6 +5231,7 @@ main(int argc, char *argv[])
     ENGINE_NODE(ofctrl_is_connected, "ofctrl_is_connected");
     ENGINE_NODE_WITH_CLEAR_TRACK_DATA(activated_ports, "activated_ports");
     ENGINE_NODE(postponed_ports, "postponed_ports");
+    ENGINE_NODE(lrp_claims, "lrp_claims");
     ENGINE_NODE(pflow_output, "physical_flow_output");
     ENGINE_NODE_WITH_CLEAR_TRACK_DATA(lflow_output, "logical_flow_output");
     ENGINE_NODE(controller_output, "controller_output");
@@ -5349,6 +5404,8 @@ main(int argc, char *argv[])
                      runtime_data_sb_port_binding_handler);
     /* Reuse the same handler for any previously postponed ports. */
     engine_add_input(&en_runtime_data, &en_postponed_ports,
+                     runtime_data_sb_port_binding_handler);
+    engine_add_input(&en_runtime_data, &en_lrp_claims,
                      runtime_data_sb_port_binding_handler);
     /* Run sb_ro_handler after port_binding_handler in case port get deleted */
     engine_add_input(&en_runtime_data, &en_sb_ro, runtime_data_sb_ro_handler);

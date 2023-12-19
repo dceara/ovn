@@ -74,6 +74,16 @@ struct related_lports {
 void related_lports_init(struct related_lports *);
 void related_lports_destroy(struct related_lports *);
 
+struct lrp_claim {
+    char *lrp_id;
+    struct lrp_claim *next;
+};
+
+struct lrp_claim_list {
+    struct lrp_claim *claim;
+    size_t size;
+};
+
 struct binding_ctx_out {
     struct hmap *local_datapaths;
     struct shash *local_active_ports_ipv6_pd;
@@ -111,7 +121,16 @@ struct binding_ctx_out {
 
     bool localnet_learn_fdb;
     bool localnet_learn_fdb_changed;
+
+    struct lrp_claim_list *lrp_claims;
 };
+
+
+void add_lrp_claim(struct binding_ctx_out *ctx, const char *lrp_id);
+
+void remove_lrp_claim(struct binding_ctx_out *ctx, char *lrp_id);
+
+bool find_lrp_claim(struct binding_ctx_out *ctx, const char *lrp_id);
 
 /* Local bindings. binding.c module binds the logical port (represented by
  * Port_Binding rows) and sets the 'chassis' column when it sees the
