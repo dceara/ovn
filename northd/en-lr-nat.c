@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, Red Hat, Inc.
+ * Copyright (c) 2024, Red Hat, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -51,16 +51,17 @@ static struct lr_nat_record *lr_nat_table_find_by_index_(
 
 static struct lr_nat_record *lr_nat_record_create(
     struct lr_nat_table *, const struct ovn_datapath *);
-static void lr_nat_record_init(struct lr_nat_record *);
+static void lr_nat_record_init(struct lr_nat_record *,
+                               const struct ovn_datapath *);
+static void lr_nat_record_clear(struct lr_nat_record *);
 static void lr_nat_record_reinit(struct lr_nat_record *);
 static void lr_nat_record_destroy(struct lr_nat_record *);
 
-static void lr_nat_entries_init(struct lr_nat_record *);
-static void lr_nat_entries_destroy(struct lr_nat_record *);
-static void lr_nat_external_ips_init(struct lr_nat_record *);
-static void lr_nat_external_ips_destroy(struct lr_nat_record *);
 static bool get_force_snat_ip(struct lr_nat_record *, const char *key_type,
                               struct lport_addresses *);
+
+static void snat_ip_add(struct lr_nat_record *, const char *ip,
+                        struct ovn_nat *);
 
 const struct lr_nat_record *
 lr_nat_table_find_by_index(const struct lr_nat_table *table,
@@ -128,7 +129,7 @@ lr_nat_northd_handler(struct engine_node *node, void *data_)
     const struct ovn_datapath *od;
     struct hmapx_node *hmapx_node;
 
-    HMAPX_FOR_EACH (hmapx_node, &northd_data->trk_data.lr_with_changed_nats) {
+    HMAPX_FOR_EACH (hmapx_node, &northd_data->trk_data.trk_nat_lrs) {
         od = hmapx_node->data;
         lrnat_rec = lr_nat_table_find_(&data->lr_nats, od->nbr);
         ovs_assert(lrnat_rec);
@@ -218,8 +219,7 @@ lr_nat_record_create(struct lr_nat_table *table,
     ovs_assert(od->nbr);
 
     struct lr_nat_record *lrnat_rec = xzalloc(sizeof *lrnat_rec);
-    lrnat_rec->od = od;
-    lr_nat_record_init(lrnat_rec);
+    lr_nat_record_init(lrnat_rec, od);
 
     hmap_insert(&table->entries, &lrnat_rec->key_node,
                 uuid_hash(&od->nbr->header_.uuid));
@@ -228,66 +228,19 @@ lr_nat_record_create(struct lr_nat_table *table,
 }
 
 static void
-lr_nat_record_init(struct lr_nat_record *lrnat_rec)
+lr_nat_record_init(struct lr_nat_record *lrnat_rec,
+                   const struct ovn_datapath *od)
 {
-    lr_nat_entries_init(lrnat_rec);
-    lr_nat_external_ips_init(lrnat_rec);
-}
+    lrnat_rec->od = od;
 
-static void
-lr_nat_record_reinit(struct lr_nat_record *lrnat_rec)
-{
-    lr_nat_entries_destroy(lrnat_rec);
-    lr_nat_external_ips_destroy(lrnat_rec);
-    lr_nat_record_init(lrnat_rec);
-}
+    shash_init(&lrnat_rec->snat_ips);
 
-static void
-lr_nat_record_destroy(struct lr_nat_record *lrnat_rec)
-{
-    lr_nat_entries_destroy(lrnat_rec);
-    lr_nat_external_ips_destroy(lrnat_rec);
-    free(lrnat_rec);
-}
-
-static void
-lr_nat_external_ips_init(struct lr_nat_record *lrnat_rec)
-{
     sset_init(&lrnat_rec->external_ips);
     for (size_t i = 0; i < lrnat_rec->od->nbr->n_nat; i++) {
         sset_add(&lrnat_rec->external_ips,
                  lrnat_rec->od->nbr->nat[i]->external_ip);
     }
-}
 
-static void
-lr_nat_external_ips_destroy(struct lr_nat_record *lrnat_rec)
-{
-    sset_destroy(&lrnat_rec->external_ips);
-}
-
-static void
-snat_ip_add(struct lr_nat_record *lrnat_rec, const char *ip,
-            struct ovn_nat *nat_entry)
-{
-    struct ovn_snat_ip *snat_ip = shash_find_data(&lrnat_rec->snat_ips, ip);
-
-    if (!snat_ip) {
-        snat_ip = xzalloc(sizeof *snat_ip);
-        ovs_list_init(&snat_ip->snat_entries);
-        shash_add(&lrnat_rec->snat_ips, ip, snat_ip);
-    }
-
-    if (nat_entry) {
-        ovs_list_push_back(&snat_ip->snat_entries,
-                           &nat_entry->ext_addr_list_node);
-    }
-}
-
-static void
-lr_nat_entries_init(struct lr_nat_record *lrnat_rec)
-{
-    shash_init(&lrnat_rec->snat_ips);
     sset_init(&lrnat_rec->external_macs);
     lrnat_rec->has_distributed_nat = false;
 
@@ -303,6 +256,8 @@ lr_nat_entries_init(struct lr_nat_record *lrnat_rec)
                         lrnat_rec->dnat_force_snat_addrs.ipv6_addrs[0].addr_s,
                         NULL);
         }
+    } else {
+        init_lport_addresses(&lrnat_rec->dnat_force_snat_addrs);
     }
 
     /* Check if 'lb_force_snat_ip' is configured with 'router_ip'. */
@@ -331,10 +286,14 @@ lr_nat_entries_init(struct lr_nat_record *lrnat_rec)
                         lrnat_rec->lb_force_snat_addrs.ipv6_addrs[0].addr_s,
                         NULL);
             }
+        } else {
+            init_lport_addresses(&lrnat_rec->lb_force_snat_addrs);
         }
     }
 
     if (!lrnat_rec->od->nbr->n_nat) {
+        lrnat_rec->nat_entries = NULL;
+        lrnat_rec->n_nat_entries = 0;
         return;
     }
 
@@ -383,6 +342,54 @@ lr_nat_entries_init(struct lr_nat_record *lrnat_rec)
     lrnat_rec->n_nat_entries = lrnat_rec->od->nbr->n_nat;
 }
 
+static void
+lr_nat_record_clear(struct lr_nat_record *lrnat_rec)
+{
+    shash_destroy_free_data(&lrnat_rec->snat_ips);
+    destroy_lport_addresses(&lrnat_rec->dnat_force_snat_addrs);
+    destroy_lport_addresses(&lrnat_rec->lb_force_snat_addrs);
+
+    for (size_t i = 0; i < lrnat_rec->n_nat_entries; i++) {
+        destroy_lport_addresses(&lrnat_rec->nat_entries[i].ext_addrs);
+    }
+
+    free(lrnat_rec->nat_entries);
+    sset_destroy(&lrnat_rec->external_ips);
+    sset_destroy(&lrnat_rec->external_macs);
+}
+
+static void
+lr_nat_record_reinit(struct lr_nat_record *lrnat_rec)
+{
+    lr_nat_record_clear(lrnat_rec);
+    lr_nat_record_init(lrnat_rec, lrnat_rec->od);
+}
+
+static void
+lr_nat_record_destroy(struct lr_nat_record *lrnat_rec)
+{
+    lr_nat_record_clear(lrnat_rec);
+    free(lrnat_rec);
+}
+
+static void
+snat_ip_add(struct lr_nat_record *lrnat_rec, const char *ip,
+            struct ovn_nat *nat_entry)
+{
+    struct ovn_snat_ip *snat_ip = shash_find_data(&lrnat_rec->snat_ips, ip);
+
+    if (!snat_ip) {
+        snat_ip = xzalloc(sizeof *snat_ip);
+        ovs_list_init(&snat_ip->snat_entries);
+        shash_add(&lrnat_rec->snat_ips, ip, snat_ip);
+    }
+
+    if (nat_entry) {
+        ovs_list_push_back(&snat_ip->snat_entries,
+                           &nat_entry->ext_addr_list_node);
+    }
+}
+
 static bool
 get_force_snat_ip(struct lr_nat_record *lrnat_rec, const char *key_type,
                   struct lport_addresses *laddrs)
@@ -403,21 +410,4 @@ get_force_snat_ip(struct lr_nat_record *lrnat_rec, const char *key_type,
     }
 
     return true;
-}
-
-static void
-lr_nat_entries_destroy(struct lr_nat_record *lrnat_rec)
-{
-    shash_destroy_free_data(&lrnat_rec->snat_ips);
-    destroy_lport_addresses(&lrnat_rec->dnat_force_snat_addrs);
-    destroy_lport_addresses(&lrnat_rec->lb_force_snat_addrs);
-
-    for (size_t i = 0; i < lrnat_rec->n_nat_entries; i++) {
-        destroy_lport_addresses(&lrnat_rec->nat_entries[i].ext_addrs);
-    }
-
-    free(lrnat_rec->nat_entries);
-    lrnat_rec->nat_entries = NULL;
-    lrnat_rec->n_nat_entries = 0;
-    sset_destroy(&lrnat_rec->external_macs);
 }

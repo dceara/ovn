@@ -5015,7 +5015,7 @@ destroy_northd_data_tracked_changes(struct northd_data *nd)
     struct northd_tracked_data *trk_changes = &nd->trk_data;
     destroy_tracked_ovn_ports(&trk_changes->trk_lsps);
     destroy_tracked_lbs(&trk_changes->trk_lbs);
-    hmapx_clear(&trk_changes->lr_with_changed_nats);
+    hmapx_clear(&trk_changes->trk_nat_lrs);
     nd->trk_data.type = NORTHD_TRACKED_NONE;
 }
 
@@ -5029,7 +5029,7 @@ init_northd_tracked_data(struct northd_data *nd)
     hmapx_init(&trk_data->trk_lsps.deleted);
     hmapx_init(&trk_data->trk_lbs.crupdated);
     hmapx_init(&trk_data->trk_lbs.deleted);
-    hmapx_init(&trk_data->lr_with_changed_nats);
+    hmapx_init(&trk_data->trk_nat_lrs);
 }
 
 static void
@@ -5042,7 +5042,7 @@ destroy_northd_tracked_data(struct northd_data *nd)
     hmapx_destroy(&trk_data->trk_lsps.deleted);
     hmapx_destroy(&trk_data->trk_lbs.crupdated);
     hmapx_destroy(&trk_data->trk_lbs.deleted);
-    hmapx_destroy(&trk_data->lr_with_changed_nats);
+    hmapx_destroy(&trk_data->trk_nat_lrs);
 }
 
 /* Check if a changed LSP can be handled incrementally within the I-P engine
@@ -5565,11 +5565,11 @@ northd_handle_lr_changes(const struct northd_input *ni,
                 goto fail;
             }
 
-            hmapx_add(&nd->trk_data.lr_with_changed_nats, od);
+            hmapx_add(&nd->trk_data.trk_nat_lrs, od);
         }
     }
 
-    if (!hmapx_is_empty(&nd->trk_data.lr_with_changed_nats)) {
+    if (!hmapx_is_empty(&nd->trk_data.trk_nat_lrs)) {
         nd->trk_data.type |= NORTHD_TRACKED_LR_NATS;
     }
 
@@ -14647,7 +14647,7 @@ build_lrouter_arp_nd_for_datapath(struct ovn_datapath *od,
         lr_nats, od->index);
     ovs_assert(lrnat_rec);
 
-    for (int i = 0; i < lrnat_rec->n_nat_entries; i++) {
+    for (size_t i = 0; i < lrnat_rec->n_nat_entries; i++) {
         struct ovn_nat *nat_entry = &lrnat_rec->nat_entries[i];
 
         /* Skip entries we failed to parse. */
@@ -15783,7 +15783,7 @@ build_lrouter_nat_defrag_and_lb(struct ovn_datapath *od, struct hmap *lflows,
     bool lb_force_snat_ip =
         !lport_addresses_is_empty(&lrnat_rec->lb_force_snat_addrs);
 
-    for (int i = 0; i < lrnat_rec->n_nat_entries; i++) {
+    for (size_t i = 0; i < lrnat_rec->n_nat_entries; i++) {
         struct ovn_nat *nat_entry = &lrnat_rec->nat_entries[i];
         const struct nbrec_nat *nat = nat_entry->nb;
         struct eth_addr mac = eth_addr_broadcast;

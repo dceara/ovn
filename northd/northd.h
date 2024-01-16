@@ -131,7 +131,7 @@ struct northd_tracked_data {
 
     /* Tracked logical routers whose NATs have changed.
      * hmapx node is 'struct ovn_datapath *'. */
-    struct hmapx lr_with_changed_nats;
+    struct hmapx trk_nat_lrs;
 };
 
 struct northd_data {
@@ -421,7 +421,7 @@ northd_has_lsps_in_tracked_data(struct northd_tracked_data *trk_nd_changes)
 static inline bool
 northd_has_lr_nats_in_tracked_data(struct northd_tracked_data *trk_nd_changes)
 {
-    return (trk_nd_changes->type & NORTHD_TRACKED_LR_NATS);
+    return trk_nd_changes->type & NORTHD_TRACKED_LR_NATS;
 }
 
 #endif /* NORTHD_H */

@@ -391,14 +391,16 @@ lport_addresses_is_empty(const struct lport_addresses *laddrs)
 }
 
 void
+init_lport_addresses(struct lport_addresses *laddrs)
+{
+    *laddrs = (struct lport_addresses) { 0 };
+}
+
+void
 destroy_lport_addresses(struct lport_addresses *laddrs)
 {
     free(laddrs->ipv4_addrs);
     free(laddrs->ipv6_addrs);
-    laddrs->ipv4_addrs = NULL;
-    laddrs->ipv6_addrs = NULL;
-    laddrs->n_ipv4_addrs = 0;
-    laddrs->n_ipv6_addrs = 0;
 }
 
 /* Returns a string of the IP address of 'laddrs' that overlaps with 'ip_s'.
