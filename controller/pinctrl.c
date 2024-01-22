@@ -5456,6 +5456,7 @@ pinctrl_ip_mcast_handle_igmp(struct rconn *swconn,
 {
     void *port_key_data = (void *)(uintptr_t)in_port_key;
     const struct igmp_header *igmp;
+    mcast_group_proto grp_proto;
     size_t offset;
 
     offset = (char *) dp_packet_l4(pkt_in) - (char *) dp_packet_data(pkt_in);
@@ -5474,9 +5475,12 @@ pinctrl_ip_mcast_handle_igmp(struct rconn *swconn,
     switch (ntohs(ip_flow->tp_src)) {
     case IGMP_HOST_MEMBERSHIP_REPORT:
     case IGMPV2_HOST_MEMBERSHIP_REPORT:
+        grp_proto = ntohs(ip_flow->tp_src) == IGMP_HOST_MEMBERSHIP_REPORT
+                    ? MCAST_GROUP_IGMPV1
+                    : MCAST_GROUP_IGMPV2;
         group_change =
             mcast_snooping_add_group4(ip_ms->ms, ip4, IP_MCAST_VLAN,
-                                      port_key_data);
+                                      port_key_data, grp_proto);
         break;
     case IGMP_HOST_LEAVE_MESSAGE:
         group_change =
