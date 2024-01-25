@@ -2808,11 +2808,20 @@ or
     </column>
 
     <column name="action">
-      <p>When specified, matching flows will have DSCP marking applied.</p>
+      <p>
+        When DSCP action is specified, matching flows will have DSCP marking
+        applied.
+        When MARK action is specified, matching flows will have packet
+        marking applied.
+      </p>
+
       <ul>
         <li>
           <code>dscp</code>: The value of this action should be in the
           range of 0 to 63 (inclusive).
+        </li>
+        <li>
+          <code>mark</code>: The value of this action should be positive.
         </li>
       </ul>
     </column>
