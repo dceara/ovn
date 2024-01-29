@@ -13,6 +13,9 @@ RECHECK=${RECHECK:-"no"}
 
 function install_dpdk()
 {
+    echo DEBUG DEBUG
+    find $PWD -name rte_config.h
+    echo DEBUG DEBUG
     local VERSION_FILE="dpdk-dir/cached-version"
     local DPDK_LIB=$(pwd)/dpdk-dir/build/lib/x86_64-linux-gnu
 
