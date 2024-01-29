@@ -2611,12 +2611,12 @@ nbctl_qos_list(struct ctl_context *ctx)
             }
         }
         for (size_t j = 0; j < qos_rule->n_action; j++) {
-            if (!strcmp(qos_rule->key_action[j], "dscp") ||
-                !strcmp(qos_rule->key_action[j], "mark")) {
-                ds_put_format(&ctx->output, " %s=%"PRId64"",
-                        !strcmp(qos_rule->key_action[j], "dscp")
-                            ? "dscp" : "mark",
-                        qos_rule->value_action[j]);
+            if (!strcmp(qos_rule->key_action[j], "dscp")) {
+                ds_put_format(&ctx->output, " dscp=%"PRId64"",
+                              qos_rule->value_action[j]);
+            } else if (!strcmp(qos_rule->key_action[j], "mark")) {
+                ds_put_format(&ctx->output, " mark=%"PRId64"",
+                              qos_rule->value_action[j]);
             }
         }
         ds_put_cstr(&ctx->output, "\n");
@@ -2634,6 +2634,7 @@ nbctl_pre_qos_add(struct ctl_context *ctx)
     ovsdb_idl_add_column(ctx->idl, &nbrec_qos_col_direction);
     ovsdb_idl_add_column(ctx->idl, &nbrec_qos_col_priority);
     ovsdb_idl_add_column(ctx->idl, &nbrec_qos_col_match);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_qos_col_action);
 }
 
 static void
@@ -2704,8 +2705,8 @@ nbctl_qos_add(struct ctl_context *ctx)
 
     /* Validate rate and dscp. */
     if (-1 == dscp && !rate && !mark) {
-        ctl_error(ctx,
-                  "Either \"mark\", \"rate\" and/or \"dscp\" must be specified");
+        ctl_error(ctx, "Either \"mark\", \"rate\" and/or \"dscp\" must be "
+                       "specified");
         return;
     }
 
@@ -2715,12 +2716,10 @@ nbctl_qos_add(struct ctl_context *ctx)
     nbrec_qos_set_direction(qos, direction);
     nbrec_qos_set_match(qos, ctx->argv[4]);
     if (mark) {
-        const char *mark_key = "mark";
-        nbrec_qos_set_action(qos, &mark_key, &mark, 1);
+        nbrec_qos_update_action_setkey(qos, "mark", mark);
     }
     if (-1 != dscp) {
-        const char *dscp_key = "dscp";
-        nbrec_qos_set_action(qos, &dscp_key, &dscp, 1);
+        nbrec_qos_update_action_setkey(qos, "dscp", dscp);
     }
     if (rate) {
         const char *bandwidth_key[2] = {"rate", "burst"};

@@ -1093,7 +1093,7 @@
 
     <ul>
       <li>
-        For every qos_rules entry in a logical switch with Pkt marking
+        For every qos_rules entry in a logical switch with packet marking
         enabled, a flow will be added at the priority mentioned in the
         QoS table.
       </li>

@@ -37836,6 +37836,7 @@ AT_CLEANUP
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([QoS packet marking])
 AT_KEYWORDS([ovn-qos-pkt-marking])
+AT_SKIP_IF([test $HAVE_SCAPY = no])
 ovn_start
 
 check ovn-nbctl lr-add lr0
@@ -37883,38 +37884,33 @@ check ovs-vsctl add-port br-int vif2 -- \
     options:rxq_pcap=hv/vif2-rx.pcap \
     ofport-request=3
 
-wait_for_ports_up lp0 lp1 lp2
+# Create QoS rules for packet marking.
+check ovn-nbctl qos-add ls0 from-lport 100 "inport==\"lp0\" && udp" mark=48
+check ovn-nbctl qos-add ls0 to-lport 100 "outport==\"lrp-s0\" && udp" mark=49
+check_row_count nb:QoS 2
 
-send_icmp_packet() {
-    local inport=$1 eth_src=$2 eth_dst=$3 ipv4_src=$4 ipv4_dst=$5 ip_chksum=$6 data=$7
-    shift 7
+# Create some flows to count pkt marking.
+check ovn-nbctl acl-add ls0 to-lport 1002 "outport==\"lp1\" && pkt.mark == 48" drop
+check ovn-nbctl lr-policy-add lr0 200 "pkt.mark == 49" drop
+wait_for_ports_up
+check ovn-nbctl --wait=hv sync
 
-    local ip_ttl=ff
-    local ip_len=001c
-    local packet=${eth_dst}${eth_src}08004500${ip_len}00004000${ip_ttl}01${ip_chksum}${ipv4_src}${ipv4_dst}${data}
+send_udp_packet() {
+    local inport=$1 eth_src=$2 eth_dst=$3 ipv4_src=$4 ipv4_dst=$5
+    local packet=$(fmt_pkt "Ether(dst='${eth_dst}', src='${eth_src}')/ \
+                            IP(src='${ipv4_src}', dst='${ipv4_dst}', ttl=0x40)/ \
+                            UDP(sport=4242, dport=4343)")
     as hv ovs-appctl netdev-dummy/receive vif$inport $packet
 }
 
-# create QoS rules for packet marking
-check ovn-nbctl qos-add ls0 from-lport 100 "inport==\"lp0\"" mark=48
-check ovn-nbctl qos-add ls0 to-lport 100 "outport==\"lrp-s0\"" mark=49
-as hv check_row_count nb:QoS 2
+ls0_dp_key=$(printf "0x%x" $(fetch_column Datapath_Binding tunnel_key external_ids:name=ls0))
+lr0_dp_key=$(printf "0x%x" $(fetch_column Datapath_Binding tunnel_key external_ids:name=lr0))
 
-# create some flows to count pkt marking
-check ovn-nbctl acl-add ls0 to-lport 1002 "outport==\"lp1\" && pkt.mark==48" drop
-check ovn-nbctl lr-policy-add lr0 200 "pkt.mark==49" drop
+send_udp_packet 0 f0:00:00:00:00:01 f0:00:00:00:00:02 10.0.0.1 10.0.0.2
+OVS_WAIT_UNTIL([test 1 = $(as hv ovs-ofctl dump-flows br-int | grep -E "pkt_mark=0x30.*metadata=$ls0_dp_key" | grep -c n_packets=1)])
 
-ip_src=$(ip_to_hex 10 0 0 1)
-ip_dst=$(ip_to_hex 10 0 0 2)
-send_icmp_packet 0 f00000000001 f00000000002 $ip_src $ip_dst 67de 0000000000000000000000
-
-OVS_WAIT_UNTIL([test 1 = $(as hv ovs-ofctl dump-flows br-int table=51 |awk '/pkt_mark=0x30/{print substr($4,11,1)}')])
-
-ip_src=$(ip_to_hex 10 0 0 2)
-ip_dst=$(ip_to_hex 10 0 0 10)
-send_icmp_packet 1 f00000000002 f00000000010 $ip_src $ip_dst 67d5 0000000000000000000000
-
-OVS_WAIT_UNTIL([test 1 = $(as hv ovs-ofctl dump-flows br-int table=23 |awk '/pkt_mark=0x31/{print substr($4,11,1)}')])
+send_udp_packet 0 f0:00:00:00:00:01 f0:00:00:00:00:10 10.0.0.1 10.0.0.10
+OVS_WAIT_UNTIL([test 1 = $(as hv ovs-ofctl dump-flows br-int | grep -E "pkt_mark=0x31.*metadata=$lr0_dp_key" | grep -c n_packets=1)])
 
 OVN_CLEANUP([hv])
 AT_CLEANUP

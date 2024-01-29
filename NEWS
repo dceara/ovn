@@ -16,7 +16,7 @@ Post v23.09.0
     conntrack for the router port whose peer is l3dgw_port if set it true.
   - Enable PMTU discovery on geneve/vxlan tunnels for E/W traffic.
   - Add the capbility to mark (through pkt.mark) incoming/outgoing packets
-    in logical_switch datapath according to user configured QoS rule.
+    in the logical switch datapath according to user configured QoS rule.
 
 OVN v23.09.0 - 15 Sep 2023
 --------------------------

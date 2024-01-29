@@ -484,7 +484,7 @@
           are required arguments.
           If <code>mark=</code><var>mark</var> is specified, then matching
           packets will be marked (through <code>pkt.mark</code>).
-          <var>mark</var> must be positive.
+          <var>mark</var> must be a positive integer.
         </p>
 
         <p>
