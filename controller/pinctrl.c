@@ -606,12 +606,12 @@ static void
 enqueue_packet(struct rconn *swconn, enum ofp_version version,
                const struct dp_packet *packet, const struct ofpbuf *ofpacts)
 {
-    struct ofputil_packet_out po = {
-            .packet = dp_packet_data(packet),
-            .packet_len = dp_packet_size(packet),
-            .buffer_id = UINT32_MAX,
-            .ofpacts = ofpacts->data,
-            .ofpacts_len = ofpacts->size,
+    struct ofputil_packet_out po = (struct ofputil_packet_out) {
+        .packet = dp_packet_data(packet),
+        .packet_len = dp_packet_size(packet),
+        .buffer_id = UINT32_MAX,
+        .ofpacts = ofpacts->data,
+        .ofpacts_len = ofpacts->size,
     };
 
     match_set_in_port(&po.flow_metadata, OFPP_CONTROLLER);

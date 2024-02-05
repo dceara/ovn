@@ -120,14 +120,13 @@ encode_controller_op(enum action_opcode opcode, uint32_t meter_id,
 size_t
 encode_start_ovn_field_note(enum ovn_field_id id, struct ofpbuf *ofpacts)
 {
+    struct ovn_field_note_header *hdr;
     size_t offset = ofpacts->size;
 
     ofpact_put_NOTE(ofpacts);
-    struct ovn_field_note_header *hdr = ofpbuf_put_uninit(ofpacts,
-                                                          sizeof *hdr);
+    hdr = ofpbuf_put_zeros(ofpacts, sizeof *hdr);
     *hdr = (struct ovn_field_note_header) {
             .magic = OVN_FIELD_NOTE_MAGIC,
-            .pad = {0},
             .type = htons(id),
     };
 

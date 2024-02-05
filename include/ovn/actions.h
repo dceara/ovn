@@ -23,6 +23,7 @@
 #include "expr.h"
 #include "openvswitch/dynamic-string.h"
 #include "openvswitch/hmap.h"
+#include "openvswitch/ofp-actions.h"
 #include "openvswitch/uuid.h"
 #include "util.h"
 #include "ovn/features.h"
@@ -517,10 +518,11 @@ struct ovnact_commit_lb_aff {
 #define OVN_FIELD_NOTE_MAGIC "ovn"
 
 struct ovn_field_note_header {
-    char magic[4];
-    uint8_t pad[2];
-    ovs_be16 type;   /* The type of ovn field note, based
-                      * on 'enum ovn_field_id'. */
+    OFPACT_PADDED_MEMBERS(
+        char magic[4];
+        ovs_be16 type;   /* The type of ovn field note, based
+                          * on 'enum ovn_field_id'. */
+    );
     uint8_t data[];
 };
 
@@ -913,8 +915,7 @@ void encode_finish_controller_op(size_t ofs, struct ofpbuf *ofpacts);
 void encode_controller_op(enum action_opcode opcode, uint32_t meter_id,
                           struct ofpbuf *ofpacts);
 
-size_t encode_start_ovn_field_note(enum ovn_field_id id,
-                                   struct ofpbuf *ofpacts);
+size_t encode_start_ovn_field_note(enum ovn_field_id, struct ofpbuf *ofpacts);
 void encode_finish_ovn_field_note(size_t offset, struct ofpbuf *ofpacts);
 
 #endif /* ovn/actions.h */
