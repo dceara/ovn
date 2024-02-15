@@ -1,0 +1,4 @@
+FROM ovn-daemonset-f:ocp
+
+COPY rpm/rpmbuild/RPMS/*/ovn*.rpm /root/
+RUN rpm -Uvh --force --nodeps /root/*.rpm && yum clean all && rm -rf /var/cache/*

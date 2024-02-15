@@ -301,13 +301,15 @@ jobs:
     runs-on: ubuntu-22.04
     container: fedora:latest
     timeout-minutes: 30
+    env:
+      OVNKUBE_COMMIT: "master"
 
     strategy:
       fail-fast: false
 
     steps:
       - name: install dependencies
-        run: dnf install -y dnf-plugins-core git rpm-build
+        run: dnf install -y dnf-plugins-core git rpm-build podman
 
       - name: checkout
         uses: actions/checkout@v4
@@ -345,3 +347,28 @@ jobs:
             rpm/rpmbuild/SRPMS/*.rpm
             rpm/rpmbuild/RPMS/*/*.rpm
           retention-days: 14
+
+      - name: Check out ovn-kubernetes
+        uses: actions/checkout@v4
+        with:
+            path: src/github.com/openshift/ovn-kubernetes
+            repository: openshift/ovn-kubernetes
+
+      - name: Build OCP ovn-kubernetes container
+        run: |
+          podman build -t ovn-daemonset-f:ocp -f Dockerfile .
+        working-directory: src/github.com/openshift/ovn-kubernetes
+
+      - name: Build custom OCP ovn-kubernetes container
+        run: |
+          podman build -t ovn-daemonset-f:dev -f .ci/ovn-kubernetes/Dockerfile.ocp .
+
+      - name: Push to ghcr.io
+        id: push-to-registry
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ovn-daemonset-f
+          tags: dev
+          registry: ghcr.io/dceara
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
