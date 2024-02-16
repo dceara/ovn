@@ -1,0 +1,63 @@
+# 1) Run the container
+podman run -it --rm --privileged -v .:/root/ovn --arch riscv64 docker.io/imbearchild/fedora-rv64
+
+# 2) Install OVN dependencies
+dnf -y install \
+    autoconf \
+    automake \
+    checkpolicy \
+    clang \
+    curl \
+    desktop-file-utils \
+    dhcp-server \
+    ethtool \
+    gcc \
+    gcc-c++ \
+    gdb \
+    git \
+    glibc-langpack-en \
+    groff \
+    iproute \
+    iproute-tc \
+    iputils \
+    kernel-devel \
+    kmod \
+    libcap-ng-devel \
+    libtool \
+    net-tools \
+    nmap-ncat \
+    openssh-server \
+    openssl \
+    openssl-devel \
+    passwd \
+    procps-ng \
+    python3-devel \
+    python3-pip \
+    rpmdevtools \
+    rsync \
+    selinux-policy-devel \
+    tcpdump \
+    unbound \
+    unbound-devel \
+    wget \
+    which
+
+# 3) Install Rust (required for pyOpenSSL)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+PATH="${PATH}:/root/.cargo/bin"
+
+# 4) Install libffi-devel (required for pyOpenSSL)
+dnf install -y libffi-devel
+
+# 5) Install Python OVN dependencies
+python3 -m pip install --upgrade pip \
+    && \
+    python3 -m pip install wheel \
+    && \
+    python3 -m pip install flake8 sphinx setuptools pyelftools \
+    pyOpenSSL scapy
+
+# 6) Compile & test as usual
+
+# The clang sanitizers are not yep supported https://github.com/google/sanitizers/issues/1707 it needs custom qemu build
+ 
