@@ -1,0 +1,57 @@
+# To build this:
+# podman build --arch linux/riscv64  -t ovn-riscv:dev -f Dockerfile.riscv .
+
+FROM docker.io/imbearchild/fedora-rv64:latest
+
+RUN dnf -y install \
+    autoconf \
+    automake \
+    checkpolicy \
+    clang \
+    curl \
+    desktop-file-utils \
+    dhcp-server \
+    ethtool \
+    gcc \
+    gcc-c++ \
+    gdb \
+    git \
+    glibc-langpack-en \
+    groff \
+    iproute \
+    iproute-tc \
+    iputils \
+    kernel-devel \
+    kmod \
+    libcap-ng-devel \
+    libtool \
+    net-tools \
+    nmap-ncat \
+    openssh-server \
+    openssl \
+    openssl-devel \
+    passwd \
+    procps-ng \
+    python3-devel \
+    python3-pip \
+    rpmdevtools \
+    rsync \
+    selinux-policy-devel \
+    tcpdump \
+    unbound \
+    unbound-devel \
+    wget \
+    which
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="${PATH}:/root/.cargo/bin"
+
+RUN dnf install -y libffi-devel
+
+RUN python3 -m pip install --upgrade pip \
+    && \
+    python3 -m pip install wheel \
+    && \
+    python3 -m pip install flake8 sphinx setuptools pyelftools \
+    pyOpenSSL scapy
+
