@@ -25,6 +25,10 @@ RUN dnf -y install \
     kmod \
     libcap-ng-devel \
     libtool \
+    numactl \
+    numactl-libs \
+    numactl-devel \
+    ninja-build \
     net-tools \
     nmap-ncat \
     openssh-server \
@@ -50,7 +54,7 @@ RUN dnf install -y libffi-devel
 
 RUN python3 -m pip install --upgrade pip \
     && \
-    python3 -m pip install wheel \
+    python3 -m pip install wheel meson==0.53.2 \
     && \
     python3 -m pip install flake8 sphinx setuptools pyelftools \
     pyOpenSSL scapy

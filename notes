@@ -2,9 +2,16 @@
 podman build --arch linux/riscv64  -t ovn-riscv:dev -f Dockerfile.riscv .
 
 # 1) Run the container
-podman run -it --rm --privileged -v .:/root/ovn -v /lib/modules/$(uname -r):/lib/modules/$(uname -r):ro --arch riscv64 ovn-riscv:dev
+podman run -it --rm --privileged -v .:/root/ovn -v /lib/modules/$(uname -r):/lib/modules/$(uname -r):ro -v /dev/hugepages:/dev/hugepages --arch riscv64 ovn-riscv:dev
 
 # 2) Compile & test as usual
 
 # The clang sanitizers are not yep supported https://github.com/google/sanitizers/issues/1707 it needs custom qemu build
- 
+
+export DPDK_VER=23.11
+export DPDK_GIT=https://dpdk.org/git/dpdk
+export DPDK_INSTALL_DIR=$PWD/dpdk-dir
+export VERSION_FILE="${DPDK_INSTALL_DIR}/cached-version"
+export PATH=$(pwd)/dpdk-dir/build/bin:$PATH
+export DPDK_LIB=${DPDK_INSTALL_DIR}/lib64/
+export PKG_CONFIG_PATH=$DPDK_LIB/pkgconfig/:$PKG_CONFIG_PATH
