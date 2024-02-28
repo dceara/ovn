@@ -8,7 +8,6 @@ RUN dnf -y update \
     dnf -y install \
         autoconf \
         automake \
-        checkpolicy \
         clang \
         curl \
         dhcp-server \
@@ -35,7 +34,6 @@ RUN dnf -y update \
         python3-pip \
         rpmdevtools \
         rsync \
-        selinux-policy-devel \
         tcpdump \
         unbound \
         unbound-devel \

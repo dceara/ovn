@@ -93,8 +93,8 @@ jobs:
       dependencies: |
         automake libtool gcc bc libjemalloc2 libjemalloc-dev    \
         libssl-dev llvm-dev libelf-dev libnuma-dev libpcap-dev  \
-        selinux-policy-dev ncat python3-scapy isc-dhcp-server \
-        podman openvswitch-switch libunbound-dev libunwind-dev
+        ncat python3-scapy isc-dhcp-server podman openvswitch-switch \
+        libunbound-dev libunwind-dev
       # https://github.com/actions/runner-images/issues/6282
       XDG_RUNTIME_DIR: ''
 

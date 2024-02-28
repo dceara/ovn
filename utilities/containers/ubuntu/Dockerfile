@@ -34,7 +34,6 @@ RUN apt update -y \
         net-tools \
         python3-dev \
         python3-pip \
-        selinux-policy-dev \
         sudo \
         tcpdump \
         wget \
