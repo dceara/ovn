@@ -128,22 +128,21 @@ bool
 encaps_tunnel_id_parse(const char *tunnel_id, char **chassis_id,
                        char **remote_encap_ip, char **local_encap_ip)
 {
-    char *tokstr = xstrdup(tunnel_id);
-    char *saveptr = NULL;
+    char *str = xstrdup(tunnel_id);
+    char *next = str;
     bool ret = false;
 
-    char *token_chassis = strtok_r(tokstr, "@", &saveptr);
+    char *token_chassis = strsep(&next, "@");
     if (!token_chassis) {
         goto out;
     }
 
-    char *token_remote_ip = strtok_r(NULL, "%", &saveptr);
+    char *token_remote_ip = strsep(&next, "%");
     if (!token_remote_ip) {
         goto out;
     }
 
-    char *token_local_ip = strtok_r(NULL, "", &saveptr);
-
+    char *token_local_ip = next;
     if (chassis_id) {
         *chassis_id = xstrdup(token_chassis);
     }
@@ -153,12 +152,12 @@ encaps_tunnel_id_parse(const char *tunnel_id, char **chassis_id,
     if (local_encap_ip) {
         /* To support backward compatibility during upgrade, ignore local ip if
          * it is not encoded in the tunnel id yet. */
-        *local_encap_ip = token_local_ip ? xstrdup(token_local_ip) : NULL;
+        *local_encap_ip = nullable_xstrdup(token_local_ip);
     }
 
     ret = true;
 out:
-    free(tokstr);
+    free(str);
     return ret;
 }
 

@@ -2802,7 +2802,7 @@ as hv1
 ovs-vsctl add-br br-phys
 ovn_attach n1 br-phys 192.168.0.1
 
-ovn-nbctl --wait=sb sync
+check ovn-nbctl --wait=sb sync
 wait_row_count Chassis 1 name=hv1
 
 ovn-sbctl chassis-add fakechassis geneve 192.168.0.2
@@ -2815,7 +2815,7 @@ AT_CHECK([ovs-vsctl get port $fakech_tunnel external_ids:ovn-chassis-id], [0], [
 ])
 
 # Stop ovn-controller without deleting tunnel
-ovs-appctl --timeout=10 -t ovn-controller exit --restart
+check ovn-appctl -t ovn-controller exit --restart
 
 # Change the tunnel external id to the old format, and then start
 # ovn-controller, pretending we are upgrading from an older version.
