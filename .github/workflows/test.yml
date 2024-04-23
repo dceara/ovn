@@ -107,7 +107,7 @@ jobs:
       - name: Choose image distro
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         run: |
-          echo "IMAGE_DISTRO=ubuntu" >> $GITHUB_ENV
+          echo "IMAGE_DISTRO=fedora" >> $GITHUB_ENV
 
       - name: Choose image distro
         if: github.event_name == 'schedule'
