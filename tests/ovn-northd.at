@@ -4814,6 +4814,9 @@ AT_CLEANUP
 OVN_FOR_EACH_NORTHD_NO_HV([
 AT_SETUP([northd ssl file change])
 TAG_UNSTABLE
+
+check false
+
 AT_SKIP_IF([test "$HAVE_OPENSSL" = no])
 PKIDIR="$(cd $abs_top_builddir/tests && pwd)"
 AT_SKIP_IF([expr "$PKIDIR" : ".*[[ 	'\"
@@ -6798,6 +6801,8 @@ AT_SETUP([ovn-northd -- lrp with chassis-redirect and ls with vtep lport])
 AT_KEYWORDS([multiple-l3dgw-ports])
 ovn_start
 check ovn-sbctl chassis-add ch1 geneve 127.0.0.2
+
+check false
 
 check ovn-nbctl lr-add lr1
 check ovn-nbctl lrp-add lr1 lrp1 00:00:00:00:00:01 10.0.0.1/24

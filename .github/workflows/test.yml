@@ -12,74 +12,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-dpdk:
-    env:
-      dependencies: gcc libnuma-dev ninja-build
-      CC: gcc
-      DPDK_GIT: https://dpdk.org/git/dpdk
-      DPDK_VER: 23.11
-    name: dpdk gcc
-    outputs:
-      dpdk_key: ${{ steps.gen_dpdk_key.outputs.key }}
-    runs-on: ubuntu-20.04
-    timeout-minutes: 30
-
-    steps:
-    - name: checkout
-      uses: actions/checkout@v4
-
-    - name: update PATH
-      run: |
-        echo "$HOME/bin"        >> $GITHUB_PATH
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-    - name: create ci signature file for the dpdk cache key
-      # This will collect most of DPDK related lines, so hash will be different
-      # if something changed in a way we're building DPDK including DPDK_VER.
-      # This also allows us to use cache from any branch as long as version
-      # and a way we're building DPDK stays the same.
-      run: |
-        grep -irE 'RTE_|DPDK|meson|ninja' .ci/dpdk-* > dpdk-ci-signature
-        grep -rwE 'DPDK_GIT|DPDK_VER' .github/ >> dpdk-ci-signature
-        if [ "${DPDK_VER##refs/*/}" != "${DPDK_VER}" ]; then
-            git ls-remote --heads $DPDK_GIT $DPDK_VER >> dpdk-ci-signature
-        fi
-        cat dpdk-ci-signature
-
-    - name: generate ci DPDK key
-      id: gen_dpdk_key
-      env:
-        ci_key: ${{ hashFiles('dpdk-ci-signature') }}
-      run: echo 'key=dpdk-${{ env.ci_key }}' >> $GITHUB_OUTPUT
-
-    - name: cache
-      id: dpdk_cache
-      uses: actions/cache@v4
-      with:
-        path: dpdk-dir
-        key: ${{ steps.gen_dpdk_key.outputs.key }}
-
-    - name: set up python
-      if: steps.dpdk_cache.outputs.cache-hit != 'true'
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.9'
-
-    - name: update APT cache
-      if: steps.dpdk_cache.outputs.cache-hit != 'true'
-      run: sudo apt update || true
-    - name: install common dependencies
-      if: steps.dpdk_cache.outputs.cache-hit != 'true'
-      run: sudo apt install -y ${{ env.dependencies }}
-
-    - name: prepare
-      if: steps.dpdk_cache.outputs.cache-hit != 'true'
-      run: ./.ci/dpdk-prepare.sh
-
-    - name: build
-      if: steps.dpdk_cache.outputs.cache-hit != 'true'
-      run: ./.ci/dpdk-build.sh
-
   prepare-container:
     # This job has the following matrix, x: Job trigger, y: Branch
     # (scheduled jobs run only on main):
@@ -134,11 +66,10 @@ jobs:
           key: ${{ github.sha }}
 
   build-linux:
-    needs: [build-dpdk, prepare-container]
+    needs: [prepare-container]
     env:
       ARCH:        ${{ matrix.cfg.arch }}
       CC:          ${{ matrix.cfg.compiler }}
-      DPDK:        ${{ matrix.cfg.dpdk }}
       LIBS:        ${{ matrix.cfg.libs }}
       OPTS:        ${{ matrix.cfg.opts }}
       TESTSUITE:   ${{ matrix.cfg.testsuite }}
@@ -153,26 +84,8 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-        - { compiler: gcc, opts: --disable-ssl }
-        - { compiler: clang, opts: --disable-ssl }
-        - { compiler: gcc, testsuite: test, test_range: "-300" }
-        - { compiler: gcc, testsuite: test, test_range: "301-600" }
-        - { compiler: gcc, testsuite: test, test_range: "601-", unstable: unstable }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "-300" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "301-600" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "601-", unstable: unstable }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "-300" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "301-600" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "601-", unstable: unstable }
-        - { compiler: gcc, testsuite: system-test-dpdk, dpdk: dpdk, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test-dpdk, dpdk: dpdk, test_range: "101-", unstable: unstable }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "101-", unstable: unstable }
-        - { compiler: gcc, testsuite: system-test, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test, test_range: "101-", unstable: unstable }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "-100" }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "101-", unstable: unstable }
-        - { arch: x86, compiler: gcc, opts: --disable-ssl }
+        - { compiler: gcc, testsuite: test, test_range: "601-602", unstable: unstable }
+        - { compiler: gcc, testsuite: system-test, test_range: "1-2", unstable: unstable }
 
     steps:
     - name: checkout
@@ -203,13 +116,6 @@ jobs:
           $(git branch -a -l '*branch-*' | sed 's/remotes\/origin\///' | \
             sort -V | tail -1)
       working-directory: ovs
-
-    - name: cache dpdk
-      if: matrix.cfg.dpdk != ''
-      uses: actions/cache@v4
-      with:
-        path: dpdk-dir
-        key: ${{ needs.build-dpdk.outputs.dpdk_key }}
 
     - name: image cache
       uses: actions/cache@v4
@@ -253,111 +159,3 @@ jobs:
       with:
         name: logs-linux-${{ join(matrix.cfg.*, '-') }}
         path: logs.tgz
-
-  build-osx:
-    env:
-      CC:    clang
-      OPTS:  --disable-ssl
-
-    name:    osx clang --disable-ssl
-    runs-on: macos-latest
-
-    strategy:
-      fail-fast: false
-
-    steps:
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    # For weekly runs, don't update submodules
-    - name: checkout without submodule
-      if: github.event_name == 'schedule'
-      uses: actions/checkout@v4
-    # Weekly runs test using the tip of the most recent stable OVS branch
-    # instead of the submodule.
-    - name: checkout OVS
-      if: github.event_name == 'schedule'
-      uses: actions/checkout@v4
-      with:
-        repository: 'openvswitch/ovs'
-        fetch-depth: 0
-        path: 'ovs'
-    - name: checkout OVS most recent stable branch.
-      if: github.event_name == 'schedule'
-      run: |
-        git checkout \
-          $(git branch -a -l '*branch-*' | sed 's/remotes\/origin\///' | \
-            sort -V | tail -1)
-      working-directory: ovs
-    - name: install dependencies
-      run:  brew install automake libtool
-    - name: update PATH
-      run:  |
-        echo "$HOME/bin"        >> $GITHUB_PATH
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-    - name: set up python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
-    - name: prepare
-      run:  ./.ci/osx-prepare.sh
-    - name: build
-      run:  ./.ci/osx-build.sh
-    - name: upload logs on failure
-      if: failure()
-      uses: actions/upload-artifact@v4
-      with:
-        name: logs-osx-clang---disable-ssl
-        path: config.log
-
-  build-linux-rpm:
-    name: linux rpm fedora
-    runs-on: ubuntu-22.04
-    container: fedora:latest
-    timeout-minutes: 30
-
-    strategy:
-      fail-fast: false
-
-    steps:
-      - name: install dependencies
-        run: dnf install -y dnf-plugins-core git rpm-build
-
-      - name: checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: install build dependencies
-        run: |
-          sed -e 's/@VERSION@/0.0.1/' rhel/ovn-fedora.spec.in \
-          > /tmp/ovn.spec
-          dnf builddep -y /tmp/ovn.spec
-
-      - name: configure OvS
-        run: ./boot.sh && ./configure
-        working-directory: ovs
-
-      - name: make dist OvS
-        run: make dist
-        working-directory: ovs
-
-      - name: configure OVN
-        run:  ./boot.sh && ./configure
-
-      - name: make dist OVN
-        run: make dist
-
-      - name: build RPM
-        run:  make rpm-fedora
-
-      - name: upload rpm packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: rpm-packages
-          path: |
-            rpm/rpmbuild/SRPMS/*.rpm
-            rpm/rpmbuild/RPMS/*/*.rpm
-          retention-days: 14
