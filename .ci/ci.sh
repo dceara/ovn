@@ -48,7 +48,9 @@ function archive_logs() {
         && \
         cp $CONTAINER_WORKDIR/config.log $log_dir \
         && \
-        cp -r $CONTAINER_WORKDIR/*/_build/sub/tests/testsuite.* \
+        cp -r $CONTAINER_WORKDIR/tests-stable/* $log_dir || true \
+        && \
+        cp -r $CONTAINER_WORKDIR/*/_build/sub/tests*/testsuite.* \
         $log_dir || true \
         && \
         cp -r $CONTAINER_WORKDIR/tests/system-*-testsuite.* \

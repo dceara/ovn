@@ -101,6 +101,16 @@ function configure_clang()
     COMMON_CFLAGS="${COMMON_CFLAGS} -Wno-error=unused-command-line-argument"
 }
 
+function save_test_results()
+{
+    local base_dir=$1
+    local new_dir=$2
+
+    if [ -d "$base_dir" ]; then
+        cp -r $base_dir $new_dir
+    fi
+}
+
 function run_tests()
 {
     if ! make distcheck CFLAGS="${COMMON_CFLAGS} ${OVN_CFLAGS}" $JOBS \
@@ -126,6 +136,7 @@ function execute_tests()
 
     if ! SKIP_UNSTABLE=yes run_tests; then
         stable_rc=1
+        save_test_results $PWD/*/_build/sub/tests/testsuite.dir $PWD/tests-stable
     fi
 
     if [ "$UNSTABLE" ]; then
@@ -163,6 +174,7 @@ function execute_system_tests()
 
     if ! SKIP_UNSTABLE=yes run_system_tests $@; then
         stable_rc=1
+        save_test_results $PWD/tests/system-testsuite-*.dir $PWD/tests-stable
     fi
 
     if [ "$UNSTABLE" ]; then
