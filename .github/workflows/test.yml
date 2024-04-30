@@ -110,7 +110,7 @@ jobs:
           echo "IMAGE_DISTRO=ubuntu" >> $GITHUB_ENV
 
       - name: Choose image distro
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'push'
         run: |
           echo "IMAGE_DISTRO=fedora" >> $GITHUB_ENV
 
