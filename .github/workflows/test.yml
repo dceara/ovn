@@ -156,24 +156,19 @@ jobs:
         - { compiler: gcc, testsuite: system-test-dpdk, dpdk: dpdk, test_range: "-100" }
 
     steps:
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
     # For weekly runs, don't update submodules
     - name: checkout without submodule
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'push'
       uses: actions/checkout@v4
 
     # Weekly runs test using the tip of the most recent stable OVS branch
     # instead of the submodule.
     - name: checkout OVS
-      if: github.event_name == 'schedule'
+      if: github.event_name == 'push'
       uses: actions/checkout@v4
       with:
-        repository: 'openvswitch/ovs'
+        repository: 'dceara/ovs'
+        ref: 'tmp-bump'
         fetch-depth: 0
         path: 'ovs'
 
