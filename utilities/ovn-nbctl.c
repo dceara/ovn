@@ -2326,7 +2326,8 @@ nbctl_pre_acl_list(struct ctl_context *ctx)
     ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_severity);
     ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_meter);
     ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_label);
-    ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_sample);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_sample_new);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_sample_est);
     ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_options);
 }
 
@@ -2378,7 +2379,8 @@ nbctl_acl_add(struct ctl_context *ctx)
     const char *severity = shash_find_data(&ctx->options, "--severity");
     const char *name = shash_find_data(&ctx->options, "--name");
     const char *meter = shash_find_data(&ctx->options, "--meter");
-    const char *sample = shash_find_data(&ctx->options, "--sample");
+    const char *sample_new = shash_find_data(&ctx->options, "--sample-new");
+    const char *sample_est = shash_find_data(&ctx->options, "--sample-est");
     if (log || severity || name || meter) {
         nbrec_acl_set_log(acl, true);
     }
@@ -2395,17 +2397,33 @@ nbctl_acl_add(struct ctl_context *ctx)
     if (meter) {
         nbrec_acl_set_meter(acl, meter);
     }
-    if (sample) {
+    if (sample_new) {
         const struct nbrec_sample *sample_elem = NULL;
         struct uuid sample_uuid;
 
-        if (uuid_from_string(&sample_uuid, sample)) {
+        if (uuid_from_string(&sample_uuid, sample_new)) {
             sample_elem = nbrec_sample_get_for_uuid(ctx->idl, &sample_uuid);
             if (!sample_elem) {
                 ctl_error(ctx, "sample record not found");
                 return;
             }
-            nbrec_acl_set_sample(acl, sample_elem);
+            nbrec_acl_set_sample_new(acl, sample_elem);
+        } else {
+            ctl_error(ctx, "a valid uuid must be provided");
+            return;
+        }
+    }
+    if (sample_est) {
+        const struct nbrec_sample *sample_elem = NULL;
+        struct uuid sample_uuid;
+
+        if (uuid_from_string(&sample_uuid, sample_est)) {
+            sample_elem = nbrec_sample_get_for_uuid(ctx->idl, &sample_uuid);
+            if (!sample_elem) {
+                ctl_error(ctx, "sample record not found");
+                return;
+            }
+            nbrec_acl_set_sample_est(acl, sample_elem);
         } else {
             ctl_error(ctx, "a valid uuid must be provided");
             return;
@@ -7890,7 +7908,7 @@ static const struct ctl_command_syntax nbctl_commands[] = {
     { "acl-add", 5, 6, "{SWITCH | PORTGROUP} DIRECTION PRIORITY MATCH ACTION",
       nbctl_pre_acl, nbctl_acl_add, NULL,
       "--log,--may-exist,--type=,--name=,--severity=,--meter=,--label=,"
-      "--apply-after-lb,--tier=,--sample", RW },
+      "--apply-after-lb,--tier=,--sample-new=,--sample-est=", RW },
     { "acl-del", 1, 4, "{SWITCH | PORTGROUP} [DIRECTION [PRIORITY MATCH]]",
       nbctl_pre_acl, nbctl_acl_del, NULL, "--type=,--tier=", RW },
     { "acl-list", 1, 1, "{SWITCH | PORTGROUP}",
