@@ -2308,6 +2308,11 @@ nbctl_pre_acl(struct ctl_context *ctx)
     ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_match);
     ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_options);
     ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_tier);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_sample_new);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_acl_col_sample_est);
+
+    ovsdb_idl_add_table(ctx->idl, &nbrec_table_sample_collector);
+    ovsdb_idl_add_table(ctx->idl, &nbrec_table_sample);
 }
 
 static void
