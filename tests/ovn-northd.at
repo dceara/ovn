@@ -4514,7 +4514,7 @@ check_stateful_flows() {
     AT_CHECK([grep "ls_in_stateful" sw0flows | sort | sed 's/table=../table=??/'], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
     AT_CHECK_UNQUOTED([grep "ls_out_pre_lb" sw0flows | sort], [0], [dnl
@@ -4538,7 +4538,7 @@ check_stateful_flows() {
     AT_CHECK([grep "ls_out_stateful" sw0flows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_out_stateful    ), priority=0    , match=(1), action=(next;)
   table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 }
 
@@ -4580,7 +4580,7 @@ AT_CHECK([grep "ls_in_lb " sw0flows | sort | sed 's/table=../table=??/'], [0], [
 AT_CHECK([grep "ls_in_stateful" sw0flows | sort | sed 's/table=../table=??/'], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 AT_CHECK([grep "ls_out_pre_lb" sw0flows | sort], [0], [dnl
@@ -4601,7 +4601,7 @@ AT_CHECK([grep "ls_out_pre_stateful" sw0flows | sort], [0], [dnl
 AT_CHECK([grep "ls_out_stateful" sw0flows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_out_stateful    ), priority=0    , match=(1), action=(next;)
   table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 # LB with event=false and reject=false
@@ -4630,23 +4630,23 @@ ovn-sbctl dump-flows sw0 > sw0flows
 AT_CAPTURE_FILE([sw0flows])
 
 AT_CHECK([grep -w "ls_in_acl_eval" sw0flows | grep 2002 | sort | sed 's/table=./table=?/'], [0], [dnl
-  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
-  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
+  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
+  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
 ])
 AT_CHECK([grep "ls_in_stateful" sw0flows | sort | sed 's/table=../table=??/'], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 AT_CHECK([grep -w "ls_out_acl_eval" sw0flows | grep 2002 | sort], [0], [dnl
-  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
-  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
+  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
+  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
 ])
 AT_CHECK([grep "ls_out_stateful" sw0flows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_out_stateful    ), priority=0    , match=(1), action=(next;)
   table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 # Add new ACL without label
@@ -4657,27 +4657,27 @@ ovn-sbctl dump-flows sw0 > sw0flows
 AT_CAPTURE_FILE([sw0flows])
 
 AT_CHECK([grep -w "ls_in_acl_eval" sw0flows | grep 2002 | sort | sed 's/table=./table=?/'], [0], [dnl
-  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
+  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
   table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[7]] == 1 && (udp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; next;)
-  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
+  table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
   table=? (ls_in_acl_eval     ), priority=2002 , match=(reg0[[8]] == 1 && (udp)), action=(reg8[[16]] = 1; next;)
 ])
 AT_CHECK([grep "ls_in_stateful" sw0flows | sort | sed 's/table=../table=??/'], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 AT_CHECK([grep -w "ls_out_acl_eval" sw0flows | grep 2002 | sort], [0], [dnl
-  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
+  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[7]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
   table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[7]] == 1 && (udp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; next;)
-  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; next;)
+  table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[8]] == 1 && (tcp)), action=(reg8[[16]] = 1; reg0[[1]] = 1; reg0[[13]] = 1; reg3 = 1234; reg9 = 0; next;)
   table=4 (ls_out_acl_eval    ), priority=2002 , match=(reg0[[8]] == 1 && (udp)), action=(reg8[[16]] = 1; next;)
 ])
 AT_CHECK([grep "ls_out_stateful" sw0flows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_out_stateful    ), priority=0    , match=(1), action=(next;)
   table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 # Delete new ACL with label
@@ -4694,7 +4694,7 @@ AT_CHECK([grep -w "ls_in_acl_eval" sw0flows | grep 2002 | sort | sed 's/table=./
 AT_CHECK([grep "ls_in_stateful" sw0flows | sort | sed 's/table=../table=??/'], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 AT_CHECK([grep -w "ls_out_acl_eval" sw0flows | grep 2002 | sort], [0], [dnl
@@ -4704,7 +4704,7 @@ AT_CHECK([grep -w "ls_out_acl_eval" sw0flows | grep 2002 | sort], [0], [dnl
 AT_CHECK([grep "ls_out_stateful" sw0flows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_out_stateful    ), priority=0    , match=(1), action=(next;)
   table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_out_stateful    ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 AT_CLEANUP
 ])
@@ -7443,7 +7443,7 @@ AT_CHECK([grep -e "ls_in_lb " lsflows | sed 's/table=../table=??/' | sort], [0],
 AT_CHECK([grep -e "ls_in_stateful" lsflows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 AS_BOX([Remove and add the ACLs back with the apply-after-lb option])
@@ -7498,7 +7498,7 @@ AT_CHECK([grep -e "ls_in_lb " lsflows | sed 's/table=../table=??/' | sort], [0],
 AT_CHECK([grep -e "ls_in_stateful" lsflows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 AS_BOX([Remove and add the ACLs back with a few ACLs with apply-after-lb option])
@@ -7553,7 +7553,7 @@ AT_CHECK([grep -e "ls_in_lb " lsflows | sed 's/table=../table=??/' | sort], [0],
 AT_CHECK([grep -e "ls_in_stateful" lsflows | sed 's/table=../table=??/' | sort], [0], [dnl
   table=??(ls_in_stateful     ), priority=0    , match=(1), action=(next;)
   table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 0), action=(ct_commit { ct_mark.blocked = 0; }; next;)
-  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.label = reg3; }; next;)
+  table=??(ls_in_stateful     ), priority=100  , match=(reg0[[1]] == 1 && reg0[[13]] == 1), action=(ct_commit { ct_mark.blocked = 0; ct_label.obs_domain_id = reg9; ct_label.obs_point_id = reg3; }; next;)
 ])
 
 AT_CLEANUP

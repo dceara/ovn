@@ -177,8 +177,10 @@ static bool default_acl_drop;
 
 #define REG_ORIG_TP_DPORT_ROUTER   "reg9[16..31]"
 
-/* Register used for setting a label for ACLs in a Logical Switch. */
-#define REG_LABEL "reg3"
+/* Registers used for pasing observability information for switches:
+ * domain and point ID. */
+#define REG_OBS_DOMAIN_ID "reg9"
+#define REG_OBS_POINT_ID "reg3"
 
 /* Register used for temporarily store ECMP eth.src to avoid masked ct_label
  * access. It doesn't really occupy registers because the content of the
@@ -208,7 +210,7 @@ static bool default_acl_drop;
  * +----+----------------------------------------------+ E |                                   |
  * | R2 |         ORIG_TP_DPORT (>= IN_PRE_STATEFUL)   | G |                                   |
  * +----+----------------------------------------------+ 0 |                                   |
- * | R3 |                  ACL LABEL                   |   |                                   |
+ * | R3 |                  UNUSED                      |   |                                   |
  * +----+----------------------------------------------+---+-----------------------------------+
  * | R4 |            REG_LB_AFF_BACKEND_IP4            |   |                                   |
  * +----+----------------------------------------------+ X |                                   |
@@ -6440,6 +6442,182 @@ build_sample_action(struct ds *actions, const struct nbrec_acl *acl,
 }
 
 static void
+build_sample_label_action(struct ds *actions, const struct nbrec_acl *acl,
+                          const struct nbrec_sample *sample)
+{
+    if (!acl->label && !sample) {
+        return;
+    }
+
+    //TODO: hardcoded for now, it should actually be computed by the encoding/
+    // decoding library and should be the application ID.
+    uint32_t domain_id = 0;
+    uint32_t point_id = 0;
+
+    //TODO use sample encoding/decoding library
+    if (acl->label) {
+        domain_id = 0;
+        point_id = (uint32_t) acl->label;
+    } else if (sample) {
+        //TODO: check
+        ovs_assert(sample->metadata);
+
+        domain_id = 42;
+        point_id = (uint32_t) *sample->metadata;
+    }
+
+    ds_put_format(actions, REGBIT_ACL_LABEL" = 1; "
+                           REG_OBS_POINT_ID " = %"PRIu32"; "
+                           REG_OBS_DOMAIN_ID " = %"PRIu32"; ",
+                  point_id, domain_id);
+}
+
+static void
+build_sample_register_match(struct ds *match, const struct nbrec_acl *acl,
+                            const struct nbrec_sample *sample)
+{
+    //TODO: hardcoded for now, it should actually be computed by the encoding/
+    // decoding library and should be the application ID.
+    uint32_t domain_id = 0;
+    uint32_t point_id = 0;
+
+    //TODO: use sample encoding/decoding library
+    if (acl->label) {
+        domain_id = 0;
+        point_id = acl->label;
+    } else if (sample) {
+        //TODO: check
+        ovs_assert(sample->metadata);
+
+        domain_id = 42;
+        point_id = (uint32_t) *sample->metadata;
+    }
+    ds_put_format(match, REG_OBS_DOMAIN_ID " == %"PRIu32" && "
+                         REG_OBS_POINT_ID " == %"PRIu32,
+                  domain_id, point_id);
+}
+
+static void
+build_sample_label_match(struct ds *match, const struct nbrec_acl *acl,
+                         const struct nbrec_sample *sample)
+{
+    //TODO: hardcoded for now, it should actually be computed by the encoding/
+    // decoding library and should be the application ID.
+    uint32_t domain_id = 0;
+    uint32_t point_id = 0;
+
+    if (acl->label) {
+        domain_id = 0;
+        point_id = acl->label;
+    } else if (sample) {
+        //TODO: check
+        ovs_assert(sample->metadata);
+
+        //TODO: use sample encoding/decoding library
+        domain_id = 42;
+        point_id = (uint32_t) *sample->metadata;
+    }
+    //TODO: comment that we match on the whole label!
+    //ds_put_format(match, "ct_label == %"PRIu64, label);
+    ds_put_format(match, "ct_label.obs_domain_id == %"PRIu32" && "
+                         "ct_label.obs_point_id == %"PRIu32" && "
+                         "ct_label.obs_unused == 0",
+                  domain_id, point_id);
+}
+
+static void
+build_acl_sample_flows(const struct ls_stateful_record *ls_stateful_rec,
+                       const struct ovn_datapath *od, struct lflow_table *lflows,
+                       const struct nbrec_acl *acl,
+                       const struct shash *meter_groups,
+                       struct ds *match, struct ds *actions,
+                       struct lflow_ref *lflow_ref)
+{
+    //TODO ugly condition
+    if (!acl->sample_new && !(ls_stateful_rec->has_stateful_acl && !acl->sample_est)) {
+        return;
+    }
+
+    bool ingress = !strcmp(acl->direction, "from-lport") ? true :false;
+    enum ovn_stage stage;
+
+    if (ingress && smap_get_bool(&acl->options, "apply-after-lb", false)) {
+        stage = S_SWITCH_IN_ACL_AFTER_LB_ACTION;
+    } else if (ingress) {
+        stage = S_SWITCH_IN_ACL_ACTION;
+    } else {
+        stage = S_SWITCH_OUT_ACL_ACTION;
+    }
+
+    //TODO: this could be done outside the function, the common actions part.
+    ds_clear(actions);
+    ds_put_cstr(actions, REGBIT_ACL_VERDICT_ALLOW " = 0; "
+                        REGBIT_ACL_VERDICT_DROP " = 0; "
+                        REGBIT_ACL_VERDICT_REJECT " = 0; ");
+    if (ls_stateful_rec->max_acl_tier) {
+        ds_put_cstr(actions, REG_ACL_TIER " = 0; ");
+    }
+
+    // TODO: duplicated from build_acl_action_lflows()
+    const char *reg_verdict = NULL;
+    const char *copp_meter = NULL;
+    if (!strcmp(acl->action, "drop")) {
+        reg_verdict = REGBIT_ACL_VERDICT_DROP;
+        ds_put_cstr(actions, debug_implicit_drop_action());
+    } else if (!strcmp(acl->action, "reject")) {
+        reg_verdict = REGBIT_ACL_VERDICT_REJECT;
+        copp_meter = copp_meter_get(COPP_REJECT, od->nbs->copp, meter_groups);
+        ds_put_format(
+            actions, "reg0 = 0; "
+            "reject { "
+            "/* eth.dst <-> eth.src; ip.dst <-> ip.src; is implicit. */ "
+            "outport <-> inport; next(pipeline=%s,table=%d); };",
+            ingress ? "egress" : "ingress",
+            ingress ? ovn_stage_get_table(S_SWITCH_OUT_QOS_MARK)
+                : ovn_stage_get_table(S_SWITCH_IN_L2_LKUP));
+    } else if (!strcmp(acl->action, "allow") || !strcmp(acl->action, "allow-related")) {
+        reg_verdict = REGBIT_ACL_VERDICT_ALLOW;
+        ds_put_cstr(actions, "next;");
+    } else {
+        /* XXX: ACLs with action "pass" do not support sampling. */
+        return;
+    }
+
+    //TODO: document lflows
+    if (acl->sample_new) {
+        ds_clear(match);
+        ds_put_format(match, "ip && (!ct.trk || ct.new) && %s == 1 && ", reg_verdict);
+        build_sample_register_match(match, acl, acl->sample_new);
+
+        //TODO: optimize strings
+        struct ds new_actions = DS_EMPTY_INITIALIZER;
+        build_sample_action(&new_actions, acl, acl->sample_new);
+        ds_put_format(&new_actions, " %s", ds_cstr(actions));
+
+        ovn_lflow_metered(lflows, od, stage, 1100, ds_cstr(match), ds_cstr(&new_actions),
+                          copp_meter, lflow_ref);
+
+        ds_destroy(&new_actions);
+    }
+
+    if (ls_stateful_rec->has_stateful_acl && acl->sample_est) {
+        ds_clear(match);
+        ds_put_format(match, "ip && ct.trk && (ct.est || ct.rel) && %s == 1 && ", reg_verdict);
+        build_sample_label_match(match, acl, acl->sample_est);
+
+        //TODO: optimize strings
+        struct ds est_actions = DS_EMPTY_INITIALIZER;
+        build_sample_action(&est_actions, acl, acl->sample_est);
+        ds_put_format(&est_actions, " %s", ds_cstr(actions));
+
+        ovn_lflow_metered(lflows, od, stage, 1100, ds_cstr(match), ds_cstr(&est_actions),
+                          copp_meter, lflow_ref);
+
+        ds_destroy(&est_actions);
+    }
+}
+
+static void
 consider_acl(struct lflow_table *lflows, const struct ovn_datapath *od,
              const struct nbrec_acl *acl, bool has_stateful,
              const struct shash *meter_groups, uint64_t max_acl_tier,
@@ -6471,7 +6649,6 @@ consider_acl(struct lflow_table *lflows, const struct ovn_datapath *od,
     ds_clear(actions);
     /* All ACLs will have the same actions as a basis. */
     build_acl_log(actions, acl, meter_groups);
-    build_sample_action(actions, acl, acl->sample_new);
     ds_put_cstr(actions, verdict);
     size_t log_verdict_len = actions->length;
     uint16_t priority = acl->priority + OVN_ACL_PRI_OFFSET;
@@ -6521,10 +6698,7 @@ consider_acl(struct lflow_table *lflows, const struct ovn_datapath *od,
 
         ds_truncate(actions, log_verdict_len);
         ds_put_cstr(actions, REGBIT_CONNTRACK_COMMIT" = 1; ");
-        if (acl->label) {
-            ds_put_format(actions, REGBIT_ACL_LABEL" = 1; "
-                          REG_LABEL" = %"PRId64"; ", acl->label);
-        }
+        build_sample_label_action(actions, acl, acl->sample_new);
         ds_put_cstr(actions, "next;");
         ovn_lflow_add_with_hint(lflows, od, stage, priority,
                                 ds_cstr(match), ds_cstr(actions),
@@ -6544,9 +6718,8 @@ consider_acl(struct lflow_table *lflows, const struct ovn_datapath *od,
                       acl->match);
         if (acl->label) {
             ds_put_cstr(actions, REGBIT_CONNTRACK_COMMIT" = 1; ");
-            ds_put_format(actions, REGBIT_ACL_LABEL" = 1; "
-                          REG_LABEL" = %"PRId64"; ", acl->label);
         }
+        build_sample_label_action(actions, acl, acl->sample_est);
         ds_put_cstr(actions, "next;");
         ovn_lflow_add_with_hint(lflows, od, stage, priority,
                                 ds_cstr(match), ds_cstr(actions),
@@ -6757,12 +6930,6 @@ build_acl_log_related_flows(const struct ovn_datapath *od,
      * the ACL, then we need to ensure that the related and reply
      * traffic is logged, so we install a slightly higher-priority
      * flow that matches the ACL, allows the traffic, and logs it.
-     *
-     * Note: Matching the ct_label.label may prevent OVS flow HW
-     * offloading to work for some NICs because masked-access of
-     * ct_label is not supported on those NICs due to HW
-     * limitations. In such case the user may choose to avoid using the
-     * "log-related" option.
      */
     bool ingress = !strcmp(acl->direction, "from-lport") ? true :false;
     bool log_related = smap_get_bool(&acl->options, "log-related",
@@ -6785,7 +6952,7 @@ build_acl_log_related_flows(const struct ovn_datapath *od,
 
     ds_clear(actions);
     build_acl_log(actions, acl, meter_groups);
-    build_sample_action(actions, acl, acl->sample_est);
+    // build_sample_action(actions, acl, acl->sample_est);
     ds_put_cstr(actions, REGBIT_ACL_VERDICT_ALLOW" = 1; next;");
     /* Related/reply flows need to be set on the opposite pipeline
      * from where the ACL itself is set.
@@ -7011,6 +7178,10 @@ build_acls(const struct ls_stateful_record *ls_stateful_rec,
         consider_acl(lflows, od, acl, has_stateful,
                      meter_groups, ls_stateful_rec->max_acl_tier,
                      &match, &actions, lflow_ref);
+        //TODO: call function to add sample-related flows
+        build_acl_sample_flows(ls_stateful_rec, od, lflows, acl,
+                               meter_groups, &match, &actions,
+                               lflow_ref);
     }
 
     const struct ls_port_group *ls_pg =
@@ -7027,6 +7198,10 @@ build_acls(const struct ls_stateful_record *ls_stateful_rec,
                 consider_acl(lflows, od, acl, has_stateful,
                              meter_groups, ls_stateful_rec->max_acl_tier,
                              &match, &actions, lflow_ref);
+                //TODO: call function to add sample-related flows
+                build_acl_sample_flows(ls_stateful_rec, od, lflows, acl,
+                                       meter_groups, &match, &actions,
+                                       lflow_ref);
             }
         }
     }
@@ -7712,8 +7887,11 @@ build_stateful(struct ovn_datapath *od, struct lflow_table *lflows,
      * We always set ct_mark.blocked to 0 here as
      * any packet that makes it this far is part of a connection we
      * want to allow to continue. */
-    ds_put_cstr(&actions, "ct_commit { ct_mark.blocked = 0; "
-                          "ct_label.label = " REG_LABEL "; }; next;");
+    ds_put_cstr(&actions, "ct_commit { "
+                            "ct_mark.blocked = 0; "
+                            "ct_label.obs_domain_id = " REG_OBS_DOMAIN_ID "; "
+                            "ct_label.obs_point_id = " REG_OBS_POINT_ID "; "
+                          "}; next;");
     ovn_lflow_add(lflows, od, S_SWITCH_IN_STATEFUL, 100,
                   REGBIT_CONNTRACK_COMMIT" == 1 && "
                   REGBIT_ACL_LABEL" == 1",
