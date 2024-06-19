@@ -6409,7 +6409,8 @@ build_acl_log(struct ds *actions, const struct nbrec_acl *acl,
 }
 
 static void
-build_sample_action(struct ds *actions, const struct nbrec_sample *sample)
+build_sample_action(struct ds *actions, const struct nbrec_acl *acl,
+                    const struct nbrec_sample *sample)
 {
     if (!sample) {
         return;
@@ -6418,6 +6419,9 @@ build_sample_action(struct ds *actions, const struct nbrec_sample *sample)
     //TODO: hardcoded for now, it should actually be computed by the encoding/
     // decoding library and should be the application ID.
     uint32_t domain_id = 42;
+    uint32_t obs_point_id = acl->label ? acl->label
+                            : sample->metadata ? *sample->metadata
+                            : 0;
 
     for (size_t i = 0; i < sample->n_collector; i++) {
         ds_put_format(actions, "sample(probability=%"PRIu16","
@@ -6427,9 +6431,8 @@ build_sample_action(struct ds *actions, const struct nbrec_sample *sample)
                                (uint32_t) sample->collector[i]->set_id,
                                domain_id);
 
-        if (sample->metadata) {
-            ds_put_format(actions, "obs_point=%"PRId32");",
-                        (uint32_t) *sample->metadata);
+        if (obs_point_id) {
+            ds_put_format(actions, "obs_point=%"PRIu32");", obs_point_id);
         } else {
             ds_put_cstr(actions, "obs_point=$cookie);");
         }
@@ -6468,7 +6471,7 @@ consider_acl(struct lflow_table *lflows, const struct ovn_datapath *od,
     ds_clear(actions);
     /* All ACLs will have the same actions as a basis. */
     build_acl_log(actions, acl, meter_groups);
-    build_sample_action(actions, acl->sample_new);
+    build_sample_action(actions, acl, acl->sample_new);
     ds_put_cstr(actions, verdict);
     size_t log_verdict_len = actions->length;
     uint16_t priority = acl->priority + OVN_ACL_PRI_OFFSET;
@@ -6782,7 +6785,7 @@ build_acl_log_related_flows(const struct ovn_datapath *od,
 
     ds_clear(actions);
     build_acl_log(actions, acl, meter_groups);
-    build_sample_action(actions, acl->sample_est);
+    build_sample_action(actions, acl, acl->sample_est);
     ds_put_cstr(actions, REGBIT_ACL_VERDICT_ALLOW" = 1; next;");
     /* Related/reply flows need to be set on the opposite pipeline
      * from where the ACL itself is set.
