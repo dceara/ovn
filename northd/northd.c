@@ -6427,7 +6427,7 @@ build_sample_action(struct ds *actions, const struct nbrec_acl *acl,
 
     for (size_t i = 0; i < sample->n_collector; i++) {
         ds_put_format(actions, "sample(probability=%"PRIu16","
-                               "collector_set=%hd,"
+                               "collector_set=%d,"
                                "obs_domain=%"PRIu32",",
                                (uint16_t) sample->collector[i]->probability,
                                (uint32_t) sample->collector[i]->set_id,
