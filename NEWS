@@ -47,6 +47,9 @@ Post v24.03.0
   - Add support for CT zone limit that can be specified per LR
     (options:ct-zone-limit), LS (other_config:ct-zone-limit) or LSP
     (options:ct-zone-limit).
+  - The NB_Global.debug_drop_domain_id configured value is now overridden by
+    the ID associated with the Sampling_App record created for drop sampling
+    (Sampling_App.name configured to be "drop-sampling").
 
 OVN v24.03.0 - 01 Mar 2024
 --------------------------
