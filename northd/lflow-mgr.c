@@ -37,7 +37,7 @@ static void ovn_lflow_init(struct ovn_lflow *, struct ovn_datapath *od,
                            uint16_t priority, char *match,
                            char *actions, char *io_port,
                            char *ctrl_meter, char *stage_hint,
-                           const char *where, struct string_wrapper flow_desc);
+                           const char *where, const char *flow_desc);
 static struct ovn_lflow *ovn_lflow_find(const struct hmap *lflows,
                                         enum ovn_stage stage,
                                         uint16_t priority, const char *match,
@@ -53,7 +53,7 @@ static struct ovn_lflow *do_ovn_lflow_add(
     const char *actions, const char *io_port,
     const char *ctrl_meter,
     const struct ovsdb_idl_row *stage_hint,
-    const char *where, struct string_wrapper flow_desc);
+    const char *where, const char *flow_desc);
 
 
 static struct ovs_mutex *lflow_hash_lock(const struct hmap *lflow_table,
@@ -174,7 +174,7 @@ struct ovn_lflow {
                                   * 'dpg_bitmap'. */
     struct ovn_dp_group *dpg;    /* Link to unique Sb datapath group. */
     const char *where;
-    struct string_wrapper flow_desc;
+    const char *flow_desc;
 
     struct uuid sb_uuid;         /* SB DB row uuid, specified by northd. */
     struct ovs_list referenced_by;  /* List of struct lflow_ref_node. */
@@ -661,7 +661,7 @@ lflow_table_add_lflow(struct lflow_table *lflow_table,
                       const char *match, const char *actions,
                       const char *io_port, const char *ctrl_meter,
                       const struct ovsdb_idl_row *stage_hint,
-                      const char *where, struct string_wrapper flow_desc,
+                      const char *where, const char *flow_desc,
                       struct lflow_ref *lflow_ref)
     OVS_EXCLUDED(fake_hash_mutex)
 {
@@ -735,7 +735,7 @@ lflow_table_add_lflow_default_drop(struct lflow_table *lflow_table,
 {
     lflow_table_add_lflow(lflow_table, od, NULL, 0, stage, 0, "1",
                           debug_drop_action(), NULL, NULL, NULL,
-                          where, EMPTY_STRING_WRAPPER, lflow_ref);
+                          where, NULL, lflow_ref);
 }
 
 struct ovn_dp_group *
@@ -859,7 +859,7 @@ ovn_lflow_init(struct ovn_lflow *lflow, struct ovn_datapath *od,
                size_t dp_bitmap_len, enum ovn_stage stage, uint16_t priority,
                char *match, char *actions, char *io_port, char *ctrl_meter,
                char *stage_hint, const char *where,
-               struct string_wrapper flow_desc)
+               const char *flow_desc)
 {
     lflow->dpg_bitmap = bitmap_allocate(dp_bitmap_len);
     lflow->od = od;
@@ -950,7 +950,6 @@ ovn_lflow_destroy(struct lflow_table *lflow_table, struct ovn_lflow *lflow)
     free(lflow->io_port);
     free(lflow->stage_hint);
     free(lflow->ctrl_meter);
-    string_wrapper_destroy(&lflow->flow_desc);
     ovn_lflow_clear_dp_refcnts_map(lflow);
     struct lflow_ref_node *lrn;
     LIST_FOR_EACH_SAFE (lrn, ref_list_node, &lflow->referenced_by) {
@@ -965,7 +964,7 @@ do_ovn_lflow_add(struct lflow_table *lflow_table, size_t dp_bitmap_len,
                  const char *match, const char *actions,
                  const char *io_port, const char *ctrl_meter,
                  const struct ovsdb_idl_row *stage_hint,
-                 const char *where, struct string_wrapper flow_desc)
+                 const char *where, const char *flow_desc)
     OVS_REQUIRES(fake_hash_mutex)
 {
     struct ovn_lflow *old_lflow;
@@ -1056,9 +1055,7 @@ sync_lflow_to_sb(struct ovn_lflow *lflow,
         sbrec_logical_flow_set_priority(sbflow, lflow->priority);
         sbrec_logical_flow_set_match(sbflow, lflow->match);
         sbrec_logical_flow_set_actions(sbflow, lflow->actions);
-        if (lflow->flow_desc.str) {
-            sbrec_logical_flow_set_flow_desc(sbflow, lflow->flow_desc.str);
-        }
+        sbrec_logical_flow_set_flow_desc(sbflow, lflow->flow_desc);
         if (lflow->io_port) {
             struct smap tags = SMAP_INITIALIZER(&tags);
             smap_add(&tags, "in_out_port", lflow->io_port);
