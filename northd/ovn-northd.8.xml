@@ -2035,7 +2035,7 @@ output;
           Logical Router Port), we redirect the traffic related to protocols
           specified in <code>routing-protocols</code> option. It's acoomplished
           with following priority-100 flows:
-        <p>
+        </p>
         <ul>
           <li>
             Flows that match Logical Router Port's IPs and destination port of

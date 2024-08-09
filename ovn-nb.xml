@@ -3614,7 +3614,7 @@ or
           <li>
             <code>BFD</code> (forwards UDP port 3748)
           </li>
-        <ul>
+        </ul>
       </column>
 
       <column name="options" key="gateway_mtu_bypass">

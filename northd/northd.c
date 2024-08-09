@@ -13936,7 +13936,7 @@ build_arp_resolve_flows_for_lrp(struct ovn_port *op,
 }
 
 static void
-build_r_p_redirect_rule__(
+build_routing_protocols_redirect_rule__(
         const char *s_addr, const char *redirect_port_name, int protocol_port,
         const char *proto, bool is_ipv6, struct ovn_port *ls_peer,
         struct lflow_table *lflows, struct ds *match, struct ds *actions)
@@ -13968,19 +13968,21 @@ build_r_p_redirect_rule__(
 }
 
 static void
-apply_r_p_redirect__(
+apply_routing_protocols_redirect__(
         const char *s_addr, const char *redirect_port_name, int protocol_flags,
         bool is_ipv6, struct ovn_port *ls_peer, struct lflow_table *lflows,
         struct ds *match, struct ds *actions)
 {
     if (protocol_flags & REDIRECT_BGP) {
-        build_r_p_redirect_rule__(s_addr, redirect_port_name, 179, "tcp",
-                                  is_ipv6, ls_peer, lflows, match, actions);
+        build_routing_protocols_redirect_rule__(
+            s_addr, redirect_port_name, 179, "tcp",
+            is_ipv6, ls_peer, lflows, match, actions);
     }
 
     if (protocol_flags & REDIRECT_BFD) {
-        build_r_p_redirect_rule__(s_addr, redirect_port_name, 3784, "udp",
-                                  is_ipv6, ls_peer, lflows, match, actions);
+        build_routing_protocols_redirect_rule__(
+            s_addr, redirect_port_name, 3784, "udp",
+            is_ipv6, ls_peer, lflows, match, actions);
     }
 
     /* Because the redirected port shares IP and MAC addresses with the LRP,
@@ -14009,7 +14011,6 @@ apply_r_p_redirect__(
                       ds_cstr(match),
                       ds_cstr(actions),
                       ls_peer->lflow_ref);
-
     }
 }
 
@@ -14036,6 +14037,7 @@ parse_redirected_routing_protocols(struct ovn_port *lrp) {
             redirected_protocol_flags |= REDIRECT_BFD;
             continue;
         }
+
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
         VLOG_WARN_RL(&rl, "Option 'routing-protocols' encountered unknown "
                           "value %s",
@@ -14054,6 +14056,7 @@ build_lrouter_routing_protocol_redirect(
     if (op->peer == NULL) {
         return;
     }
+
     /* LRP has to have NB record.*/
     if (op->nbrp == NULL) {
         return;
@@ -14077,7 +14080,7 @@ build_lrouter_routing_protocol_redirect(
     }
 
     /* Ensure that LSP, to which the routing protocol traffic is redirected,
-     * exists.*/
+     * exists. */
     struct ovn_port *peer_lsp;
     bool redirect_port_exists = false;
     HMAP_FOR_EACH (peer_lsp, dp_node, &op->peer->od->ports) {
@@ -14099,7 +14102,6 @@ build_lrouter_routing_protocol_redirect(
         return;
     }
 
-
     int redirected_protocols = parse_redirected_routing_protocols(op);
     if (!redirected_protocols) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
@@ -14111,18 +14113,20 @@ build_lrouter_routing_protocol_redirect(
         return;
     }
 
-    /* Redirecte traffic destined for LRP's IPs and the specified routing
+    /* Redirect traffic destined for LRP's IPs and the specified routing
      * protocol ports to the port defined in 'routing-protocol-redirect'
      * option.*/
     for (size_t i = 0; i < op->lrp_networks.n_ipv4_addrs; i++) {
         const char *ip_s = op->lrp_networks.ipv4_addrs[i].addr_s;
-        apply_r_p_redirect__(ip_s, redirect_port, redirected_protocols, false,
-                             op->peer, lflows,match, actions);
+        apply_routing_protocols_redirect__(
+            ip_s, redirect_port, redirected_protocols, false,
+            op->peer, lflows,match, actions);
     }
     for (size_t i = 0; i < op->lrp_networks.n_ipv6_addrs; i++) {
         const char *ip_s = op->lrp_networks.ipv6_addrs[i].addr_s;
-        apply_r_p_redirect__(ip_s, redirect_port, redirected_protocols, true,
-                                  op->peer, lflows,match, actions);
+        apply_routing_protocols_redirect__(
+            ip_s, redirect_port, redirected_protocols, true,
+            op->peer, lflows,match, actions);
     }
 
     /* Drop ARP replies and IPv6 RA/NA packets originating from
