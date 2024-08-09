@@ -758,6 +758,11 @@ void bfd_destroy(struct bfd_data *);
 void bfd_sync_init(struct bfd_sync_data *);
 void bfd_sync_destroy(struct bfd_sync_data *);
 
+void build_ecmp_nexthop_table(
+        struct ovsdb_idl_txn *ovnsb_txn,
+        const struct hmap *lr_ports, const struct hmap *routes,
+        const struct sbrec_ecmp_nexthop_table *sbrec_ecmp_nexthop_table);
+
 struct lflow_table;
 struct lr_stateful_tracked_data;
 struct ls_stateful_tracked_data;
