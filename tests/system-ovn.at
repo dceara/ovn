@@ -13930,20 +13930,23 @@ check ovn-nbctl lsp-set-addresses vm0 "f0:00:0f:01:02:03 10.0.0.3 1000::3"
 check ovn-nbctl lsp-add sw0 vm1
 check ovn-nbctl lsp-set-addresses vm1 "f0:00:0f:01:02:04 10.0.0.4 1000::4"
 
-check ovn-nbctl --wait=hv sync
-
 ADD_NAMESPACES(vm0)
 ADD_VETH(vm0, vm0, br-int, "1000::3/64", "f0:00:0f:01:02:03", "1000::1", "nodad")
 
 ADD_NAMESPACES(vm1)
 ADD_VETH(vm1, vm1, br-int, "1000::4/64", "f0:00:0f:01:02:04", "1000::1", "nodad")
 
+dnl Wait for ovn-controller to catch up.
+wait_for_ports_up
+check ovn-nbctl --wait=hv sync
+
 dnl Checks the datapath flows and makes sure that there are no matches to
 dnl IPv6 src or dst fields.
 check_dp_flows() {
   ipv6_src_dst_match=$1
   dnl Dump the flows. Will be helpful while debugging.
-  ovs-appctl dpctl/dump-flows
+  ovs-appctl dpctl/dump-flows > dp-flows
+  AT_CAPTURE_FILE([dp-flows])
 
   eth_match1="eth(src=f0:00:0f:01:02:03,dst=f0:00:0f:01:02:04)"
   eth_match2="eth(src=f0:00:0f:01:02:04,dst=f0:00:0f:01:02:03)"
