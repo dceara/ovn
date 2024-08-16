@@ -38784,15 +38784,21 @@ sim_add hv
 as hv
 check ovs-vsctl add-br br-phys
 ovn_attach n1 br-phys 192.168.0.1
-check ovs-vsctl add-port br-int vif1 -- set Interface vif1 \
-external-ids:iface-id=vm0 options:tx_pcap=hv/vif1-tx.pcap \
-options:rxq_pcap=hv/vif1-rx.pcap ofport-request=1
-check ovs-vsctl add-port br-int vif2 -- set Interface vif2 \
-external-ids:iface-id=vm1 options:tx_pcap=hv/vif2-tx.pcap \
-options:rxq_pcap=hv/vif2-rx.pcap ofport-request=2
+check ovs-vsctl add-port br-int vif1 -- \
+    set Interface vif1 external-ids:iface-id=vm0 \
+    options:tx_pcap=hv/vif1-tx.pcap \
+    options:rxq_pcap=hv/vif1-rx.pcap \
+    ofport-request=1
+check ovs-vsctl add-port br-int vif2 -- \
+    set Interface vif2  external-ids:iface-id=vm1 \
+    options:tx_pcap=hv/vif2-tx.pcap \
+    options:rxq_pcap=hv/vif2-rx.pcap \
+    ofport-request=2
 
-wait_for_ports_up vm0 vm1
+check ovn-nbctl --wait=sb sync
+wait_for_ports_up
 
+AS_BOX([No port security, to vm1])
 packet=$(fmt_pkt "Ether(dst='f0:00:0f:01:02:04', src='f0:00:0f:01:02:03')/ \
                   IPv6(dst='1000::4', src='1000::3')/ \
                   UDP(sport=53, dport=4369)")
@@ -38803,7 +38809,7 @@ ovs-appctl netdev-dummy/receive vif1 $packet
 
 AT_CAPTURE_FILE([vm0_ip6_ofproto_trace.txt])
 
-AT_CHECK([grep Megaflow  vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [1], [dnl
+AT_CHECK([grep Megaflow vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [1], [dnl
 0
 ])
 
@@ -38811,9 +38817,10 @@ dnl Make sure that the packet was received by vm1.  This ensures that the
 dnl packet was delivered as expected and the megaflow didn't have any matches
 dnl on IPv6 src or dst.
 
-echo $packet > expected
-OVN_CHECK_PACKETS([hv/vif2-tx.pcap], [expected])
+echo $packet >> expected-vif2
+OVN_CHECK_PACKETS([hv/vif2-tx.pcap], [expected-vif2])
 
+AS_BOX([No port security, to vm0])
 packet=$(fmt_pkt "Ether(dst='f0:00:0f:01:02:03', src='f0:00:0f:01:02:04')/ \
                   IPv6(dst='1000::3', src='1000::4')/ \
                   UDP(sport=53, dport=4369)")
@@ -38824,16 +38831,17 @@ ovs-appctl netdev-dummy/receive vif2 $packet
 
 AT_CAPTURE_FILE([vm1_ip6_ofproto_trace.txt])
 
-AT_CHECK([grep Megaflow  vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [1], [dnl
+AT_CHECK([grep Megaflow vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [1], [dnl
 0
 ])
 
 dnl Make sure that the packet was received by vm0.  This ensures that the
 dnl packet was delivered as expected and the megaflow didn't have any matches
 dnl on IPv6 src or dst.
-echo $packet > expected
-OVN_CHECK_PACKETS([hv/vif1-tx.pcap], [expected])
+echo $packet >> expected-vif1
+OVN_CHECK_PACKETS([hv/vif1-tx.pcap], [expected-vif1])
 
+AS_BOX([With port security, to vm1])
 dnl Add port security to vm0.  The megaflow should now match on ipv6 src/dst.
 check ovn-nbctl lsp-set-port-security vm0 "f0:00:0f:01:02:03 10.0.0.3 1000::3"
 check ovn-nbctl --wait=hv sync
@@ -38848,10 +38856,15 @@ ovs-appctl netdev-dummy/receive vif1 $packet
 
 AT_CAPTURE_FILE([vm0_ip6_ofproto_trace.txt])
 
-AT_CHECK([grep Megaflow  vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [0], [dnl
+AT_CHECK([grep Megaflow vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [0], [dnl
 1
 ])
 
+dnl Make sure that the packet was received by vm1.
+echo $packet >> expected-vif2
+OVN_CHECK_PACKETS([hv/vif2-tx.pcap], [expected-vif2])
+
+AS_BOX([Clear port security, to vm1])
 dnl Clear port security.
 check ovn-nbctl lsp-set-port-security vm0 ""
 check ovn-nbctl --wait=hv sync
@@ -38862,10 +38875,15 @@ ovs-appctl netdev-dummy/receive vif1 $packet
 
 AT_CAPTURE_FILE([vm0_ip6_ofproto_trace.txt])
 
-AT_CHECK([grep Megaflow  vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [1], [dnl
+AT_CHECK([grep Megaflow vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [1], [dnl
 0
 ])
 
+dnl Make sure that the packet was received by vm1.
+echo $packet >> expected-vif2
+OVN_CHECK_PACKETS([hv/vif2-tx.pcap], [expected-vif2])
+
+AS_BOX([With proxy arp/nd, to vm1])
 dnl Configure proxy arp/nd on the router port.  The megaflow should now match
 dnl on ipv6 src/dst.
 check ovn-nbctl --wait=hv lsp-set-options sw0-lr0 router-port=lr0-sw0 arp_proxy="2000::1/64"
@@ -38876,10 +38894,15 @@ ovs-appctl netdev-dummy/receive vif1 $packet
 
 AT_CAPTURE_FILE([vm0_ip6_ofproto_trace.txt])
 
-AT_CHECK([grep Megaflow  vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [0], [dnl
+AT_CHECK([grep Megaflow vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [0], [dnl
 1
 ])
 
+dnl Make sure that the packet was received by vm1.
+echo $packet >> expected-vif2
+OVN_CHECK_PACKETS([hv/vif2-tx.pcap], [expected-vif2])
+
+AS_BOX([With proxy arp/nd, to vm0])
 packet=$(fmt_pkt "Ether(dst='f0:00:0f:01:02:03', src='f0:00:0f:01:02:04')/ \
                   IPv6(dst='1000::3', src='1000::4')/ \
                   UDP(sport=53, dport=4369)")
@@ -38890,9 +38913,13 @@ ovs-appctl netdev-dummy/receive vif2 $packet
 
 AT_CAPTURE_FILE([vm1_ip6_ofproto_trace.txt])
 
-AT_CHECK([grep Megaflow  vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [0], [dnl
+AT_CHECK([grep Megaflow vm0_ip6_ofproto_trace.txt | grep -e ipv6_src -e ipv6_dst -c], [0], [dnl
 1
 ])
+
+dnl Make sure that the packet was received by vm0.
+echo $packet >> expected-vif1
+OVN_CHECK_PACKETS([hv/vif1-tx.pcap], [expected-vif1])
 
 AT_CLEANUP
 ])
