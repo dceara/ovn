@@ -12,6 +12,11 @@ Post v24.09.0
      and "routing-protocols" are now also usable on distributed gateway ports.
    - ovn-nb: Changed schema of ovn-nb to make networks optional within Logical
      Router Ports.
+   - Add "arp-max-timeout-sec" config option to vswitchd external-ids to
+     cap the time between when ovn-controller sends ARP/ND packets for
+     ECMP-nexthop.
+     By default ovn-controller continuously sends ARP/ND packets for
+     ECMP-nexthop.
 
 OVN v24.09.0 - 13 Sep 2024
 --------------------------
