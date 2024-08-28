@@ -1981,7 +1981,7 @@ icmp4_error { eth.dst = ff:ff:ff:ff:ff:ff; icmp4.frag_mtu = 1500; output; }; out
     has prereqs ip4
 
 icmp4.frag_mtu = 1500;
-    encodes as note:6f.76.6e.00.00.00.00.00.05.dc
+    encodes as controller(userdata=00.00.00.0d.00.00.00.00.05.dc,pause)
 
 # icmp6
 icmp6 { eth.dst = ff:ff:ff:ff:ff:ff; output; }; output;
@@ -2009,7 +2009,7 @@ icmp6_error { eth.dst = ff:ff:ff:ff:ff:ff; icmp6.frag_mtu = 1500; output; }; out
     has prereqs ip6
 
 icmp6.frag_mtu = 1500;
-    encodes as note:6f.76.6e.00.00.01.00.00.00.00.05.dc
+    encodes as controller(userdata=00.00.00.15.00.00.00.00.00.00.05.dc,pause)
 
 # tcp_reset
 tcp_reset { eth.dst = ff:ff:ff:ff:ff:ff; output; }; output;
