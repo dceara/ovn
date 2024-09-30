@@ -2334,7 +2334,8 @@ ct_zones_runtime_data_handler(struct engine_node *node, void *data)
             updated |= ct_zone_handle_port_update(&ct_zones_data->ctx,
                                                   t_lport->pb,
                                                   port_updated, &scan_start,
-                                                  min_ct_zone, max_ct_zone);
+                                                  min_ct_zone, max_ct_zone,
+                                                  ovs_table);
         }
     }
 
