@@ -3311,8 +3311,9 @@ ovn_port_update_sbrec(struct ovsdb_idl_txn *ovnsb_txn,
             if (router_port || chassis || is_cr_port(op)) {
                 struct smap new;
                 smap_init(&new);
+
                 if (is_cr_port(op)) {
-                    smap_add(&new, "distributed-port", op->nbsp->name);
+                    smap_add(&new, "distributed-port", op->primary_port->key);
                 } else if (router_port) {
                     /* op->peer can be null if the peer is disabed. In this
                      * case we fall back to the router_port string which
