@@ -40,6 +40,12 @@ Post v24.09.0
      a lower priority than static routes.
    - Add the option "dynamic-routing-connected-as-host-routes" to LRPs. If set
      to true then connected routes are announced as individual host routes.
+   - Add the option "active-active-lrp" to LRPs. If set northd will clone this
+     LRP based on its HA_Chassis_Group and the
+     other_config:ovn-active-active-mapping of the defined chassis. In
+     combination with the dynamic routing features this allows operators to
+     integrate OVN into the network fabric in a highly available way without
+     significant (or any) changes to the CMS.
 
 OVN v24.09.0 - 13 Sep 2024
 --------------------------
