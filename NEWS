@@ -61,6 +61,12 @@ Post v24.09.0
      * Add the option "dynamic-routing-ifname" to LRPs. If set only routes
        learned from a linux iterfaces with that name are treated as relevant
        routes for this LRP.
+     * Add 'redistribute-lb-vips' LRP option. If set to true, the LRP can be
+       used to advertise host paths to the Load Balancer VIPs associated with
+       the LR.
+     * Add 'redistribute-nat' LRP option. If set to true, the LRP can be used
+       to advertise external NAT IPs associated with it.
+ 
 
 OVN v24.09.0 - 13 Sep 2024
 --------------------------

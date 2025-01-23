@@ -360,8 +360,20 @@ advertised_route_table_sync(
             continue;
         }
 
+        if (route->source == ROUTE_SOURCE_NAT &&
+                !smap_get_bool(&route->out_port->nbrp->options,
+                               "redistribute-nat", false)) {
+                continue;
+        }
+        if (route->source == ROUTE_SOURCE_LB &&
+                !smap_get_bool(&route->out_port->nbrp->options,
+                               "redistribute-lb-vips", false)) {
+                continue;
+        }
+
         char *ip_prefix = normalize_v46_prefix(&route->prefix,
                                                route->plen);
+
         route_e = ar_alloc_entry(&sync_routes, route->od->sb,
                                  route->out_port->sb, ip_prefix, NULL);
     }
