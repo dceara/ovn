@@ -1,7 +1,7 @@
 ARG OVNKUBE_COMMIT
 ARG GO_VERSION
 
-FROM fedora:37 AS ovnbuilder
+FROM fedora:41 AS ovnbuilder
 
 USER root
 
@@ -63,7 +63,7 @@ COPY --from=ovnbuilder /tmp/ovn/ovn-sb.ovsschema pkg/sbdb/ovn-sb.ovsschema
 RUN go generate ./pkg/nbdb && go generate ./pkg/sbdb && make
 
 # Build the final image
-FROM fedora:37
+FROM fedora:41
 
 # install needed dependencies
 RUN INSTALL_PKGS=" \

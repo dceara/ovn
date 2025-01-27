@@ -8,14 +8,14 @@ on:
 
 env:
   IMAGE_REGISTRY: ghcr.io
-  IMAGE_NAMESPACE: ovn-org
+  IMAGE_NAMESPACE: dceara
   IMAGE_NAME: ovn-tests
   CONTAINERS_PATH: ./utilities/containers
   DEPENDENCIES: podman
 
 jobs:
   container:
-    if: github.repository_owner == 'ovn-org'
+    if: github.repository_owner == 'dceara'
     runs-on: ubuntu-24.04
     strategy:
       matrix:

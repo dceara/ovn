@@ -19,7 +19,7 @@ OVS_PATH=${OVS_PATH:-$OVN_PATH/ovs}
 CONTAINER_CMD=${CONTAINER_CMD:-podman}
 CONTAINER_WORKSPACE="/workspace"
 CONTAINER_WORKDIR="/workspace/ovn-tmp"
-IMAGE_NAME=${IMAGE_NAME:-"ovn-org/ovn-tests"}
+IMAGE_NAME=${IMAGE_NAME:-"dceara/ovn-tests"}
 TIMEOUT=${TIMEOUT:-"0"}
 
 # Test variables
