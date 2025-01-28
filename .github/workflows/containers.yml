@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        distro: [ fedora, ubuntu ]
+        distro: [ fedora ]
     steps:
       - uses: actions/checkout@v4
 
