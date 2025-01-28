@@ -90,6 +90,6 @@ function build_dpdk()
 }
 
 compile_sparse
-compile_openbfdd
-install_python_dep
-build_dpdk
+# compile_openbfdd
+# install_python_dep
+# build_dpdk
