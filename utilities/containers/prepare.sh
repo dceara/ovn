@@ -9,7 +9,7 @@ function compile_sparse()
         /workspace/sparse
 
     pushd sparse
-    make -j4 PREFIX=/usr HAVE_LLVM= HAVE_SQLITE= install
+    make -j4 PREFIX=/usr HAVE_LLVM= HAVE_SQLITE= CFLAGS="-freport-bug" install
     popd
 }
 
