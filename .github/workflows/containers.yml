@@ -16,7 +16,7 @@ env:
 jobs:
   container:
     if: github.repository_owner == 'dceara'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         distro: [ fedora ]
