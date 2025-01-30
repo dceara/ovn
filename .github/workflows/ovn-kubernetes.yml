@@ -34,8 +34,14 @@ jobs:
 
     - name: Check out ovn
       uses: actions/checkout@v4
+
+    - name: checkout OVS
+      uses: actions/checkout@v4
       with:
-        submodules: recursive
+        repository: 'dceara/ovs'
+        ref: 'tmp-ovs-bgp-patches'
+        fetch-depth: 0
+        path: 'ovs'
 
     - name: Check out ovn-kubernetes
       uses: actions/checkout@v4
