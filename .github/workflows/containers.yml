@@ -32,16 +32,19 @@ jobs:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
 
-      - name: Build container images
-        id: build-image
-        uses: redhat-actions/buildah-build@v2
-        with:
-          image: ${{ env.IMAGE_NAME }}
-          archs: amd64
-          tags: ${{ matrix.distro }}
-          build-args: CONTAINERS_PATH=${{ env.CONTAINERS_PATH }}
-          extra-args: --isolation rootless
-          dockerfiles: ${{ env.CONTAINERS_PATH }}/${{ matrix.distro }}/Dockerfile
+      - name: Hack
+        run: sudo buildah bud --arch amd64 -f ${{ env.CONTAINERS_PATH }}/${{ matrix.distro }}/Dockerfile --build-arg CONTAINERS_PATH=./utilities/containers --format docker --tls-verify=true -t ovn-tests:ubuntu /home/runner/work/ovn/ovn
+
+      # - name: Build container images
+      #   id: build-image
+      #   uses: redhat-actions/buildah-build@v2
+      #   with:
+      #     image: ${{ env.IMAGE_NAME }}
+      #     archs: amd64
+      #     tags: ${{ matrix.distro }}
+      #     build-args: CONTAINERS_PATH=${{ env.CONTAINERS_PATH }}
+      #     extra-args: --isolation rootless
+      #     dockerfiles: ${{ env.CONTAINERS_PATH }}/${{ matrix.distro }}/Dockerfile
 
       - name: Push to ghcr.io
         id: push-to-registry
