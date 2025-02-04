@@ -1352,6 +1352,12 @@ ovn_port_find(const struct hmap *ports, const char *name)
     return ovn_port_find__(ports, name, false);
 }
 
+static struct ovn_port *
+ovn_port_find_bound(const struct hmap *ports, const char *name)
+{
+    return ovn_port_find__(ports, name, true);
+}
+
 static bool
 lsp_is_clone_to_unknown(const struct nbrec_logical_switch_port *nbsp)
 {
@@ -1364,12 +1370,6 @@ lsp_is_clone_to_unknown(const struct nbrec_logical_switch_port *nbsp)
         }
     }
     return false;
-}
-
-static struct ovn_port *
-ovn_port_find_bound(const struct hmap *ports, const char *name)
-{
-    return ovn_port_find__(ports, name, true);
 }
 
 /* Returns true only if the logical switch port 'up' column is set to true.
