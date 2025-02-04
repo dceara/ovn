@@ -41,6 +41,10 @@ Post v24.09.0
    - Add concept of Transit Routers, users are now allowed to specify
      options:requested-chassis for router ports; if the chassis is remote
      then the router port will behave as a remote port.
+   - Dynamic Routing:
+     * Add the option "dynamic-routing" to Logical Routers. If set to true all
+       static and connected routes attached to the router are shared to the
+       southbound "Route" table for sharing outside of OVN.
 
 OVN v24.09.0 - 13 Sep 2024
 --------------------------
