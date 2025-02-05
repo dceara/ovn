@@ -71,6 +71,11 @@ Post v24.09.0
        learned from a linux interfaces that is locally bound to the referenced
        LSP will be learned. Additionally support local overwrites for arbitrary
        interface names.
+     * Add 'dynamic-routing-lb-vips' LRP option. If set to true, the LRP can be
+       used to advertise host paths to the Load Balancer VIPs associated with the
+       LR.
+     * Add 'dynamic-routing-nat' LRP option. If set to true, the LRP can be used
+       to advertise external NAT IPs associated with it.
 
 OVN v24.09.0 - 13 Sep 2024
 --------------------------
