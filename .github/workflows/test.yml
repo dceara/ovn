@@ -114,25 +114,18 @@ jobs:
         sudo apt update
         sudo apt -y install linux-modules-extra-$(uname -r)
 
-    - name: checkout
-      if: github.event_name == 'push' || github.event_name == 'pull_request'
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
-
     # For weekly runs, don't update submodules
     - name: checkout without submodule
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v4
 
     # Weekly runs test using the tip of the most recent stable OVS branch
     # instead of the submodule.
     - name: checkout OVS
-      if: github.event_name == 'schedule'
       uses: actions/checkout@v4
       with:
         repository: 'openvswitch/ovs'
         fetch-depth: 0
+        ref: '57c3cc37c8a3c08426a29486df7a03da84907fa2'
         path: 'ovs'
 
     - name: checkout OVS most recent stable branch.
