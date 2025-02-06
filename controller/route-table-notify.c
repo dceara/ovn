@@ -40,14 +40,57 @@ struct route_table_watch_request {
 struct route_table_watch_entry {
     struct hmap_node node;
     uint32_t table_id;
-    struct nln *nln;
-    struct nln_notifier *route_notifier;
-    struct nln_notifier *route6_notifier;
 };
 
 static struct hmap watches = HMAP_INITIALIZER(&watches);
 static bool any_route_table_changed;
 static struct route_table_msg rtmsg;
+
+static struct nln *nl_route_handle;
+static struct nln_notifier *nl_route_notifier_v4;
+static struct nln_notifier *nl_route_notifier_v6;
+
+static void route_table_change(const void *change_, void *aux);
+
+static void
+route_table_register_notifiers(void)
+{
+    VLOG_INFO("Adding route table watchers.");
+    ovs_assert(!nl_route_handle);
+
+    nl_route_handle = nln_create(NETLINK_ROUTE, route_table_parse, &rtmsg);
+    ovs_assert(nl_route_handle);
+
+    nl_route_notifier_v4 =
+        nln_notifier_create(nl_route_handle, RTNLGRP_IPV4_ROUTE,
+                            route_table_change, NULL);
+    if (!nl_route_notifier_v4) {
+        static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
+        VLOG_WARN_RL(&rl, "Failed to create ipv4 route table watcher.");
+    }
+
+    nl_route_notifier_v6 =
+        nln_notifier_create(nl_route_handle, RTNLGRP_IPV6_ROUTE,
+                            route_table_change, NULL);
+    if (!nl_route_notifier_v6) {
+        static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
+        VLOG_WARN_RL(&rl, "Failed to create ipv6 route table watcher.");
+    }
+}
+
+static void
+route_table_deregister_notifiers(void)
+{
+    VLOG_INFO("Removing route table watchers.");
+    ovs_assert(nl_route_handle);
+
+    nln_notifier_destroy(nl_route_notifier_v4);
+    nln_notifier_destroy(nl_route_notifier_v6);
+    nln_destroy(nl_route_handle);
+    nl_route_notifier_v4 = NULL;
+    nl_route_notifier_v6 = NULL;
+    nl_route_handle = NULL;
+}
 
 static uint32_t
 route_table_notify_hash_watch(uint32_t table_id)
@@ -101,65 +144,48 @@ route_table_change(const void *change_, void *aux OVS_UNUSED)
 static void
 add_watch_entry(uint32_t table_id)
 {
+    VLOG_INFO("Registering new route table watcher for table %d.",
+             table_id);
+
     struct route_table_watch_entry *we;
     uint32_t hash = route_table_notify_hash_watch(table_id);
     we = xzalloc(sizeof *we);
     we->table_id = table_id;
-    VLOG_INFO("Registering new route table watcher for table %d.",
-             table_id);
-    we->nln = nln_create(NETLINK_ROUTE, route_table_parse, &rtmsg);
-
-    we->route_notifier =
-        nln_notifier_create(we->nln, RTNLGRP_IPV4_ROUTE,
-                            route_table_change, NULL);
-    if (!we->route_notifier) {
-        static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
-        VLOG_WARN_RL(&rl, "Failed to create ipv4 route table watcher for "
-                  "table %d. We will miss routing table updates.", table_id);
-    }
-
-    we->route6_notifier =
-        nln_notifier_create(we->nln, RTNLGRP_IPV6_ROUTE,
-                            route_table_change, NULL);
-    if (!we->route6_notifier) {
-        static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
-        VLOG_WARN_RL(&rl, "Failed to create ipv6 route table watcher for "
-                  "table %d. We will miss routing table updates.", table_id);
-    }
-
     hmap_insert(&watches, &we->node, hash);
+
+    if (!nl_route_handle) {
+        route_table_register_notifiers();
+    }
 }
 
 static void
 remove_watch_entry(struct route_table_watch_entry *we)
 {
-    hmap_remove(&watches, &we->node);
     VLOG_INFO("Removing route table watcher for table %d.", we->table_id);
-    nln_notifier_destroy(we->route_notifier);
-    nln_notifier_destroy(we->route6_notifier);
-    nln_destroy(we->nln);
+
+    hmap_remove(&watches, &we->node);
     free(we);
+
+    if (hmap_is_empty(&watches)) {
+        route_table_deregister_notifiers();
+    }
 }
 
 bool
 route_table_notify_run(void)
 {
     any_route_table_changed = false;
-
-    struct route_table_watch_entry *we;
-    HMAP_FOR_EACH (we, node, &watches) {
-        nln_run(we->nln);
+    if (nl_route_handle) {
+        nln_run(nl_route_handle);
     }
-
     return any_route_table_changed;
 }
 
 void
 route_table_notify_wait(void)
 {
-    struct route_table_watch_entry *we;
-    HMAP_FOR_EACH (we, node, &watches) {
-        nln_wait(we->nln);
+    if (nl_route_handle) {
+        nln_wait(nl_route_handle);
     }
 }
 
