@@ -25,6 +25,7 @@
 #include "openvswitch/hmap.h"
 #include "ovn-util.h"
 
+
 static void
 advertised_route_table_sync(
     struct ovsdb_idl_txn *ovnsb_txn,
@@ -158,6 +159,76 @@ en_advertised_route_sync_run(struct engine_node *node, void *data OVS_UNUSED)
     stopwatch_stop(ADVERTISED_ROUTE_SYNC_RUN_STOPWATCH_NAME, time_msec());
     engine_set_node_state(node, EN_UPDATED);
 }
+
+void
+*en_dynamic_routes_init(struct engine_node *node OVS_UNUSED,
+                               struct engine_arg *arg OVS_UNUSED)
+{
+    struct hmap *data = xzalloc(sizeof *data);
+
+    hmap_init(data);
+    return data;
+}
+
+void
+en_dynamic_routes_cleanup(void *data OVS_UNUSED)
+{
+    hmap_destroy(data);
+}
+
+void
+en_dynamic_routes_run(struct engine_node *node, void *data)
+{
+    struct hmap *parsed_routes = data;
+    struct northd_data *northd_data = engine_get_input_data("northd", node);
+    struct ed_type_lr_stateful *lr_stateful_data =
+        engine_get_input_data("lr_stateful", node);
+
+    const struct lr_stateful_record *lr_stateful_rec;
+    HMAP_FOR_EACH (lr_stateful_rec, key_node,
+                   &lr_stateful_data->table.entries) {
+        const struct ovn_datapath *od =
+            ovn_datapaths_find_by_index(&northd_data->lr_datapaths,
+                                        lr_stateful_rec->lr_index);
+        if (!od->dynamic_routing) {
+            continue;
+        }
+        build_lb_nat_parsed_routes(od, lr_stateful_rec->lrnat_rec, parsed_routes);
+
+    }
+    const struct engine_context *eng_ctx = engine_get_context();
+    const struct sbrec_advertised_route_table *sbrec_advertised_route_table =
+        EN_OVSDB_GET(engine_get_input("SB_advertised_route", node));
+
+    stopwatch_start(DYNAMIC_ROUTES_RUN_STOPWATCH_NAME, time_msec());
+
+    /* XXX: The last NULL arg feels bit sketchy. advertised_route_table_sync
+     * is using it only it when creating connected host routes. Should I
+     * create function similar to advertised_route_table_sync that would
+     * handle only nat/lb routes, or would a null-check be enough?*/
+    advertised_route_table_sync(eng_ctx->ovnsb_idl_txn,
+                                sbrec_advertised_route_table,
+                                &lr_stateful_data->table,
+                                parsed_routes,
+                                NULL);
+    stopwatch_stop(DYNAMIC_ROUTES_RUN_STOPWATCH_NAME, time_msec());
+    engine_set_node_state(node, EN_UPDATED);
+
+}
+
+bool
+dynamic_routes_change_handler(struct engine_node *node OVS_UNUSED,
+                              void *data OVS_UNUSED)
+{
+   /* XXX: It was suggested to iterate through data in lr_stateful node
+    * (ed_type_lr_stateful). However the trk_data is only populated when NAT/LB
+    * changes. While this works for us when NAT/LB is is changed, we also need
+    * this handler to trigger when dynamic routing options are changed.
+    * I didn't find a node that would give us only the LR on which options
+    * changed, so for now I set it to recompute every time. */
+    return false;
+}
+
 
 struct ar_entry {
     struct hmap_node hmap_node;
@@ -381,6 +452,9 @@ advertised_route_table_sync(
         if (route->source == ROUTE_SOURCE_STATIC && (drr & DRRM_STATIC) == 0) {
             continue;
         }
+        if (route->source == ROUTE_SOURCE_NAT && (drr & DRRM_NAT) == 0) {
+            continue;
+        }
 
         char *ip_prefix = normalize_v46_prefix(&route->prefix, route->plen);
         route_e = ar_add_entry(&sync_routes, route->od->sb,
@@ -388,6 +462,16 @@ advertised_route_table_sync(
     }
     uuidset_destroy(&host_route_lrps);
 
+    /* XXX: This cleanup loop proved to be problematic after splitting
+     * pipelines for connected and NAT/LB routes. The "parsed_routes" argument
+     * of this function needs to contain complete set of routes, because rest
+     * of them get cleaned up.
+     * My first idea was to turn "route_source enum" into bitmask and add
+     * another argument to this function that would specify which
+     * route_source(s) are being updated. However, since records in the
+     * Advertised_Route SB table don't carry information about their
+     * route source, this approach wouldn't work.
+     * I think this is currently my biggest blocker.*/
     SBREC_ADVERTISED_ROUTE_TABLE_FOR_EACH_SAFE (sb_route,
                                                 sbrec_advertised_route_table) {
         route_e = ar_find(&sync_routes, sb_route->datapath,
