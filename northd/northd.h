@@ -186,9 +186,13 @@ struct route_policy {
 };
 
 struct routes_data {
-    struct hmap parsed_routes;
+    struct hmap parsed_routes; /* Stores struct parsed_route. */
     struct simap route_tables;
     struct hmap bfd_active_connections;
+};
+
+struct dynamic_routes_data {
+    struct hmap parsed_routes; /* Stores struct parsed_route. */
 };
 
 struct route_policies_data {

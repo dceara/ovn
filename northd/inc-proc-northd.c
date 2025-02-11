@@ -288,18 +288,18 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_ecmp_nexthop, &en_sb_mac_binding,
                      ecmp_nexthop_mac_binding_handler);
 
+    engine_add_input(&en_dynamic_routes, &en_lr_stateful,
+                     dynamic_routes_change_handler);
+    engine_add_input(&en_dynamic_routes, &en_northd, engine_noop_handler);
+
     engine_add_input(&en_advertised_route_sync, &en_routes, NULL);
+    engine_add_input(&en_advertised_route_sync, &en_dynamic_routes, NULL);
     engine_add_input(&en_advertised_route_sync, &en_sb_advertised_route,
                      NULL);
     engine_add_input(&en_advertised_route_sync, &en_lr_stateful,
                      advertised_route_sync_lr_stateful_change_handler);
     engine_add_input(&en_advertised_route_sync, &en_northd,
                      advertised_route_sync_northd_change_handler);
-
-    engine_add_input(&en_dynamic_routes, &en_lr_stateful, dynamic_routes_change_handler);
-    engine_add_input(&en_dynamic_routes, &en_sb_advertised_route,
-                     NULL);
-    engine_add_input(&en_dynamic_routes, &en_northd, engine_noop_handler);
 
     engine_add_input(&en_learned_route_sync, &en_routes, NULL);
     engine_add_input(&en_learned_route_sync, &en_sb_learned_route, NULL);

@@ -31,7 +31,8 @@ advertised_route_table_sync(
     struct ovsdb_idl_txn *ovnsb_txn,
     const struct sbrec_advertised_route_table *sbrec_advertised_route_table,
     const struct lr_stateful_table *lr_stateful_table,
-    const struct hmap *parsed_routes,
+    const struct hmap *routes,
+    const struct hmap *dynamic_routes,
     struct advertised_route_sync_data *data);
 
 bool
@@ -142,6 +143,8 @@ en_advertised_route_sync_run(struct engine_node *node, void *data OVS_UNUSED)
     struct advertised_route_sync_data *routes_sync_data = data;
     struct routes_data *routes_data
         = engine_get_input_data("routes", node);
+    struct dynamic_routes_data *dynamic_routes_data
+        = engine_get_input_data("dynamic_routes", node);
     const struct engine_context *eng_ctx = engine_get_context();
     const struct sbrec_advertised_route_table *sbrec_advertised_route_table =
         EN_OVSDB_GET(engine_get_input("SB_advertised_route", node));
@@ -154,6 +157,7 @@ en_advertised_route_sync_run(struct engine_node *node, void *data OVS_UNUSED)
                                 sbrec_advertised_route_table,
                                 &lr_stateful_data->table,
                                 &routes_data->parsed_routes,
+                                &dynamic_routes_data->parsed_routes,
                                 routes_sync_data);
 
     stopwatch_stop(ADVERTISED_ROUTE_SYNC_RUN_STOPWATCH_NAME, time_msec());
@@ -164,22 +168,30 @@ void
 *en_dynamic_routes_init(struct engine_node *node OVS_UNUSED,
                                struct engine_arg *arg OVS_UNUSED)
 {
-    struct hmap *data = xzalloc(sizeof *data);
+    struct dynamic_routes_data *data = xmalloc(sizeof *data);
+    *data = (struct dynamic_routes_data) {
+        .parsed_routes = HMAP_INITIALIZER(&data->parsed_routes),
+    };
 
-    hmap_init(data);
     return data;
 }
 
 void
-en_dynamic_routes_cleanup(void *data OVS_UNUSED)
+en_dynamic_routes_cleanup(void *data_)
 {
-    hmap_destroy(data);
+    struct dynamic_routes_data *data = data_;
+
+    struct parsed_route *r;
+    HMAP_FOR_EACH_POP (r, key_node, &data->parsed_routes) {
+        parsed_route_free(r);
+    }
+    hmap_destroy(&data->parsed_routes);
 }
 
 void
 en_dynamic_routes_run(struct engine_node *node, void *data)
 {
-    struct hmap *parsed_routes = data;
+    struct dynamic_routes_data *dynamic_routes_data = data;
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct ed_type_lr_stateful *lr_stateful_data =
         engine_get_input_data("lr_stateful", node);
@@ -193,27 +205,11 @@ en_dynamic_routes_run(struct engine_node *node, void *data)
         if (!od->dynamic_routing) {
             continue;
         }
-        build_lb_nat_parsed_routes(od, lr_stateful_rec->lrnat_rec, parsed_routes);
+        build_lb_nat_parsed_routes(od, lr_stateful_rec->lrnat_rec,
+                                   &dynamic_routes_data->parsed_routes);
 
     }
-    const struct engine_context *eng_ctx = engine_get_context();
-    const struct sbrec_advertised_route_table *sbrec_advertised_route_table =
-        EN_OVSDB_GET(engine_get_input("SB_advertised_route", node));
-
-    stopwatch_start(DYNAMIC_ROUTES_RUN_STOPWATCH_NAME, time_msec());
-
-    /* XXX: The last NULL arg feels bit sketchy. advertised_route_table_sync
-     * is using it only it when creating connected host routes. Should I
-     * create function similar to advertised_route_table_sync that would
-     * handle only nat/lb routes, or would a null-check be enough?*/
-    advertised_route_table_sync(eng_ctx->ovnsb_idl_txn,
-                                sbrec_advertised_route_table,
-                                &lr_stateful_data->table,
-                                parsed_routes,
-                                NULL);
-    stopwatch_stop(DYNAMIC_ROUTES_RUN_STOPWATCH_NAME, time_msec());
     engine_set_node_state(node, EN_UPDATED);
-
 }
 
 bool
@@ -407,11 +403,58 @@ publish_host_routes(struct hmap *sync_routes,
 }
 
 static void
+advertised_route_table_sync_route_add(
+    const struct lr_stateful_table *lr_stateful_table,
+    struct advertised_route_sync_data *data,
+    struct uuidset *host_route_lrps,
+    struct hmap *sync_routes,
+    const struct parsed_route *route)
+{
+    if (route->is_discard_route) {
+        return;
+    }
+    if (prefix_is_link_local(&route->prefix, route->plen)) {
+        return;
+    }
+    if (!route->od->dynamic_routing) {
+        return;
+    }
+
+    enum dynamic_routing_redistribute_mode drr =
+        route->out_port->dynamic_routing_redistribute;
+    if (route->source == ROUTE_SOURCE_CONNECTED) {
+        if ((drr & DRRM_CONNECTED) == 0) {
+            return;
+        }
+        /* If we advertise host routes, we only need to do so once per
+         * LRP. */
+        const struct uuid *lrp_uuid = &route->out_port->nbrp->header_.uuid;
+        if (drr & DRRM_CONNECTED_AS_HOST &&
+            !uuidset_contains(host_route_lrps, lrp_uuid)) {
+            uuidset_insert(host_route_lrps, lrp_uuid);
+            publish_host_routes(sync_routes, lr_stateful_table, route, data);
+            return;
+        }
+    }
+    if (route->source == ROUTE_SOURCE_STATIC && (drr & DRRM_STATIC) == 0) {
+        return;
+    }
+    if (route->source == ROUTE_SOURCE_NAT && (drr & DRRM_NAT) == 0) {
+        return;
+    }
+
+    char *ip_prefix = normalize_v46_prefix(&route->prefix, route->plen);
+    ar_add_entry(sync_routes, route->od->sb, route->out_port->sb,
+                 ip_prefix, NULL);
+}
+
+static void
 advertised_route_table_sync(
     struct ovsdb_idl_txn *ovnsb_txn,
     const struct sbrec_advertised_route_table *sbrec_advertised_route_table,
     const struct lr_stateful_table *lr_stateful_table,
-    const struct hmap *parsed_routes,
+    const struct hmap *routes,
+    const struct hmap *dynamic_routes,
     struct advertised_route_sync_data *data)
 {
     struct hmap sync_routes = HMAP_INITIALIZER(&sync_routes);
@@ -419,59 +462,25 @@ advertised_route_table_sync(
     const struct parsed_route *route;
 
     struct ar_entry *route_e;
-    const struct sbrec_advertised_route *sb_route;
-    HMAP_FOR_EACH (route, key_node, parsed_routes) {
-        if (route->is_discard_route) {
-            continue;
-        }
-        if (prefix_is_link_local(&route->prefix, route->plen)) {
-            continue;
-        }
-        if (!route->od->dynamic_routing) {
-            continue;
-        }
 
-        enum dynamic_routing_redistribute_mode drr =
-            route->out_port->dynamic_routing_redistribute;
-        if (route->source == ROUTE_SOURCE_CONNECTED) {
-            if ((drr & DRRM_CONNECTED) == 0) {
-                continue;
-            }
-            /* If we advertise host routes, we only need to do so once per
-             * LRP. */
-            const struct uuid *lrp_uuid =
-                &route->out_port->nbrp->header_.uuid;
-            if (drr & DRRM_CONNECTED_AS_HOST &&
-                !uuidset_contains(&host_route_lrps, lrp_uuid)) {
-                uuidset_insert(&host_route_lrps, lrp_uuid);
-                publish_host_routes(&sync_routes, lr_stateful_table,
-                                    route, data);
-                continue;
-            }
-        }
-        if (route->source == ROUTE_SOURCE_STATIC && (drr & DRRM_STATIC) == 0) {
-            continue;
-        }
-        if (route->source == ROUTE_SOURCE_NAT && (drr & DRRM_NAT) == 0) {
-            continue;
-        }
+    /* First build the set of non-dynamic routes that need sync-ing. */
+    HMAP_FOR_EACH (route, key_node, routes) {
+        advertised_route_table_sync_route_add(lr_stateful_table,
+                                              data, &host_route_lrps,
+                                              &sync_routes,
+                                              route);
+    }
 
-        char *ip_prefix = normalize_v46_prefix(&route->prefix, route->plen);
-        route_e = ar_add_entry(&sync_routes, route->od->sb,
-                               route->out_port->sb, ip_prefix, NULL);
+    /* First add the set of dynamic routes that need sync-ing. */
+    HMAP_FOR_EACH (route, key_node, dynamic_routes) {
+        advertised_route_table_sync_route_add(lr_stateful_table,
+                                              data, &host_route_lrps,
+                                              &sync_routes,
+                                              route);
     }
     uuidset_destroy(&host_route_lrps);
 
-    /* XXX: This cleanup loop proved to be problematic after splitting
-     * pipelines for connected and NAT/LB routes. The "parsed_routes" argument
-     * of this function needs to contain complete set of routes, because rest
-     * of them get cleaned up.
-     * My first idea was to turn "route_source enum" into bitmask and add
-     * another argument to this function that would specify which
-     * route_source(s) are being updated. However, since records in the
-     * Advertised_Route SB table don't carry information about their
-     * route source, this approach wouldn't work.
-     * I think this is currently my biggest blocker.*/
+    const struct sbrec_advertised_route *sb_route;
     SBREC_ADVERTISED_ROUTE_TABLE_FOR_EACH_SAFE (sb_route,
                                                 sbrec_advertised_route_table) {
         route_e = ar_find(&sync_routes, sb_route->datapath,
