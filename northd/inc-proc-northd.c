@@ -291,6 +291,10 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
                      ecmp_nexthop_mac_binding_handler);
 
     engine_add_input(&en_dynamic_routes, &en_lr_stateful, NULL);
+    /* No need for an explicit handler for northd changes.  Stateful
+     * configuration changes are passed through the en_lr_stateful input
+     * dependency.  We do need to access en_northd (input) data, i.e., to
+     * lookup OVN ports. */
     engine_add_input(&en_dynamic_routes, &en_northd, engine_noop_handler);
 
     engine_add_input(&en_advertised_route_sync, &en_routes, NULL);

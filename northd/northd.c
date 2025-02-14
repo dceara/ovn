@@ -11320,12 +11320,16 @@ build_nat_parsed_route_for_port(const struct ovn_port *advertising_op,
 
     for (size_t i = 0; i < lr_nat->n_nat_entries; i++) {
         const struct ovn_nat *nat = &lr_nat->nat_entries[i];
+        if (!nat->is_valid) {
+            continue;
+        }
+
         int plen = nat_entry_is_v6(nat) ? 128 : 32;
         struct in6_addr prefix;
         ip46_parse(nat->nb->external_ip, &prefix);
 
         const struct ovn_port *tracked_port =
-            nat->is_distributed && nat->is_valid
+            nat->is_distributed
             ? ovn_port_find(ls_ports, nat->nb->logical_port)
             : nat->l3dgw_port;
         parsed_route_add(advertising_od, NULL, &prefix, plen, false,
@@ -11376,9 +11380,7 @@ build_nat_connected_parsed_routes(
         }
 
         struct ovn_datapath *peer_od = op->peer->od;
-        if (!peer_od->nbs && !peer_od->nbr) {
-            continue;
-        }
+        ovs_assert(peer_od->nbs || peer_od->nbr);
 
         const struct ovn_port *peer_port = NULL;
         /* This is a directly connected LR peer. */
@@ -11471,9 +11473,7 @@ build_lb_connected_parsed_routes(
         }
 
         struct ovn_datapath *peer_od = op->peer->od;
-        if (!peer_od->nbs && !peer_od->nbr) {
-            continue;
-        }
+        ovs_assert(peer_od->nbs || peer_od->nbr);
 
         const struct lr_stateful_record *lr_stateful_rec;
         const struct ovn_port *peer_port = NULL;

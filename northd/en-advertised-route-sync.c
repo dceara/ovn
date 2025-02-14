@@ -163,9 +163,9 @@ en_advertised_route_sync_run(struct engine_node *node, void *data OVS_UNUSED)
     engine_set_node_state(node, EN_UPDATED);
 }
 
-void
-*en_dynamic_routes_init(struct engine_node *node OVS_UNUSED,
-                               struct engine_arg *arg OVS_UNUSED)
+void *
+en_dynamic_routes_init(struct engine_node *node OVS_UNUSED,
+                       struct engine_arg *arg OVS_UNUSED)
 {
     struct dynamic_routes_data *data = xmalloc(sizeof *data);
     *data = (struct dynamic_routes_data) {
@@ -176,7 +176,7 @@ void
 }
 
 static void
-en_dynamic_routes_clean(struct dynamic_routes_data *data)
+en_dynamic_routes_clear(struct dynamic_routes_data *data)
 {
     struct parsed_route *r;
     HMAP_FOR_EACH_POP (r, key_node, &data->parsed_routes) {
@@ -188,7 +188,7 @@ en_dynamic_routes_cleanup(void *data_)
 {
     struct dynamic_routes_data *data = data_;
 
-    en_dynamic_routes_clean(data);
+    en_dynamic_routes_clear(data);
     hmap_destroy(&data->parsed_routes);
 }
 
@@ -200,7 +200,9 @@ en_dynamic_routes_run(struct engine_node *node, void *data)
     struct ed_type_lr_stateful *lr_stateful_data =
         engine_get_input_data("lr_stateful", node);
 
-    en_dynamic_routes_clean(data);
+    en_dynamic_routes_clear(data);
+
+    stopwatch_start(DYNAMIC_ROUTES_RUN_STOPWATCH_NAME, time_msec());
     const struct lr_stateful_record *lr_stateful_rec;
     HMAP_FOR_EACH (lr_stateful_rec, key_node,
                    &lr_stateful_data->table.entries) {
@@ -222,6 +224,7 @@ en_dynamic_routes_run(struct engine_node *node, void *data)
         build_lb_connected_parsed_routes(od, &lr_stateful_data->table,
                                          &dynamic_routes_data->parsed_routes);
     }
+    stopwatch_stop(DYNAMIC_ROUTES_RUN_STOPWATCH_NAME, time_msec());
     engine_set_node_state(node, EN_UPDATED);
 }
 
