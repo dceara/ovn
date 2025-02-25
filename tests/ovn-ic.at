@@ -174,9 +174,9 @@ for i in 1 2; do
     az=az$i
     ovn_as $az
     OVN_CLEANUP_SBOX(gw-$az)
-    OVN_CLEANUP_AZ([$az])
 done
-OVN_CLEANUP_IC
+
+OVN_CLEANUP_IC([az1], [az2])
 AT_CLEANUP
 ])
 
@@ -248,9 +248,9 @@ for i in 1 2; do
     az=az$i
     ovn_as $az
     OVN_CLEANUP_SBOX(gw-$az)
-    OVN_CLEANUP_AZ([$az])
 done
-OVN_CLEANUP_IC
+
+OVN_CLEANUP_IC([az1], [az2])
 AT_CLEANUP
 ])
 
@@ -307,10 +307,9 @@ for i in 1 2; do
     az=az$i
     ovn_as $az
     OVN_CLEANUP_SBOX(gw-$az)
-    OVN_CLEANUP_AZ([$az])
 done
 
-OVN_CLEANUP_IC
+OVN_CLEANUP_IC([az1], [az2])
 AT_CLEANUP
 ])
 
@@ -368,10 +367,9 @@ for i in 1 2; do
     az=az$i
     ovn_as $az
     OVN_CLEANUP_SBOX(gw-$az)
-    OVN_CLEANUP_AZ([$az])
 done
 
-OVN_CLEANUP_IC
+OVN_CLEANUP_IC([az1], [az2])
 AT_CLEANUP
 ])
 
@@ -1724,11 +1722,9 @@ OVS_WAIT_UNTIL([check_packets], [$at_diff -F'^---' expected received])
 for az in `seq 1 $n_az`; do
     OVN_CLEANUP_SBOX([hv$az])
     OVN_CLEANUP_SBOX([gw$az])
-    OVN_CLEANUP_AZ([az$az])
 done
 
-OVN_CLEANUP_IC
-
+OVN_CLEANUP_IC([az1], [az2], [az3])
 AT_CLEANUP
 ])
 
