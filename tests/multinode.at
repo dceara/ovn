@@ -3036,16 +3036,20 @@ check_fake_multinode_setup
 cleanup_multinode_resources
 
 check m_as ovn-gw-3 ovs-vsctl del-port br-ex eth2
+on_exit 'm_as ovn-gw-3 ovs-vsctl add-port br-ex eth2'
 
 check m_as ovn-gw-2 sed -i 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
 check m_as ovn-gw-2 sed -i 's/StartLimitBurst=.*/StartLimitBurst=100/g' /usr/lib/systemd/system/frr.service
 check m_as ovn-gw-2 systemctl daemon-reload
 check m_as ovn-gw-2 systemctl stop frr
+on_exit 'm_as ovn-gw-2 systemctl stop frr'
 
-check m_as ovn-gw-3 sed -i 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
-check m_as ovn-gw-3 sed -i 's/StartLimitBurst=.*/StartLimitBurst=100/g' /usr/lib/systemd/system/frr.service
-check m_as ovn-gw-3 systemctl daemon-reload
-check m_as ovn-gw-3 systemctl restart frr
+sed -i 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
+sed -i 's/StartLimitBurst=.*/StartLimitBurst=100/g' /usr/lib/systemd/system/frr.service
+
+systemctl daemon-reload
+systemctl restart frr
+on_exit 'systemctl stop frr'
 
 check m_as ovn-gw-2 systemctl start frr
 
@@ -3054,18 +3058,18 @@ echo "configure
 ip prefix-list accept-all seq 5 permit any
 !
 router bgp 4200000100
-neighbor eth2 interface remote-as external
+neighbor ovnfake-ext1 interface remote-as external
 !
 address-family ipv4 unicast
-  neighbor eth2 soft-reconfiguration inbound
-  neighbor eth2 prefix-list accept-all in
+  neighbor ovnfake-ext1 soft-reconfiguration inbound
+  neighbor ovnfake-ext1 prefix-list accept-all in
 exit-address-family
 !
 address-family ipv6 unicast
-  neighbor eth2 soft-reconfiguration inbound
-  neighbor eth2 activate
+  neighbor ovnfake-ext1 soft-reconfiguration inbound
+  neighbor ovnfake-ext1 activate
 exit-address-family
-!" | podman exec -i ovn-gw-3 vtysh
+!" | ip netns exec ovnfake-ext1 vtysh
 
 check m_as ovn-gw-2 ovs-vsctl set Open_vSwitch . external-ids:ovn-bridge-mappings="physnet_ovn-gw-2_eth2:br-ex"
 
@@ -3100,6 +3104,7 @@ check multinode_nbctl set Logical_Router_Port lrp-ovn-gw-2-eth2 ipv6_ra_configs:
 check multinode_nbctl set Logical_Router_Port lrp-ovn-gw-2-eth2 ipv6_ra_configs:min_interval=1
 
 check m_as ovn-gw-2 ovs-vsctl add-port br-int eth2-bgp -- set Interface eth2-bgp type=internal mac=\"02:fb:d6:66:99:1c\" external-ids:iface-id=lsp-ovn-gw-2-eth2-bgp
+on_exit 'm_as ovn-gw-2 ovs-vsctl del-port br-int eth2-bgp'
 check m_as ovn-gw-2 ip link set dev eth2-bgp master ovnvrf10
 check m_as ovn-gw-2 ip link set dev eth2-bgp up
 
@@ -3125,8 +3130,6 @@ neighbor eth2-bgp activate
 exit-address-family
 do copy running-config startup-config" | podman exec -i ovn-gw-2 vtysh
 
-# OVS_WAIT_UNTIL([m_as ovn-gw-2 vtysh -c 'show bgp vrf ovnvrf10 neighbors' | grep 'Connections established' | sed 's/Connections established \([0-9]\+\); dropped \([0-9]\+\)/\1-\2/' | bc | grep -q '1'])
-# OVS_WAIT_UNTIL([m_as ovn-gw-2 vtysh -c 'show bgp vrf ovnvrf10 neighbors' | grep -qE 'Connections established \[1-9\]\[0-9\]*'])
 OVS_WAIT_UNTIL([m_as ovn-gw-2 vtysh -c 'show bgp vrf ovnvrf10 neighbors' | grep -qE 'Connections established 1'])
 
 gw_lr="lr-ovn-gw-2-eth2"
@@ -3158,24 +3161,14 @@ check multinode_nbctl lr-nat-add $gw_lr dnat_and_snat 172.16.10.2 192.168.10.10
 
 OVS_WAIT_UNTIL([m_as ovn-central-az1-1 ovn-sbctl list Advertised_Route | grep -q 172.16.10.2])
 
-OVS_WAIT_UNTIL([m_as ovn-gw-3 ip route | grep -q 'eth2'])
-OVS_WAIT_UNTIL([m_as ovn-gw-3 ping -W 1 -c 1 172.16.10.2])
+AS_BOX([DEBUG ROUTES ON HOST])
+sleep 5
+ip netns exec ovnfake-ext1 ip route | grep bgp
+ip netns exec ovnfake-ext1 vtysh -c 'show ip bgp'
 
-check m_as ovn-chassis-2 ip addr add 10.42.0.10/24 dev eth1
-check m_as ovn-gw-3 ip addr add 10.42.0.1/24 dev eth1
-check m_as ovn-chassis-2 ip route del default
-check m_as ovn-chassis-2 ip route add default via 10.42.0.1
+OVS_WAIT_UNTIL([ip netns exec ovnfake-ext1 ip route | grep -q 'ovnfake-ext1'])
+OVS_WAIT_UNTIL([ip netns exec ovnfake-ext1 ping -W 1 -c 1 172.16.10.2])
 
 OVS_WAIT_UNTIL([m_as ovn-chassis-2 ping -W 1 -c 1 172.16.10.2])
-
-check m_as ovn-chassis-2 ip route del default
-check m_as ovn-chassis-2 ip route add default via 10.88.0.1 dev eth0 proto static metric 100
-check m_as ovn-chassis-2 ip addr del 10.42.0.10/24 dev eth1
-check m_as ovn-gw-3 ip addr del 10.42.0.1/24 dev eth1
-
-check m_as ovn-gw-3 systemctl stop frr
-check m_as ovn-gw-2 systemctl stop frr
-check m_as ovn-gw-3 ovs-vsctl add-port br-ex eth2
-check m_as ovn-gw-2 ovs-vsctl del-port br-int eth2-bgp
 
 AT_CLEANUP
