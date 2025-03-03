@@ -789,9 +789,6 @@ OVNACTS
     /* activation_strategy_rarp() */                                          \
     ACTION_OPCODE(ACTIVATION_STRATEGY_RARP)                                   \
                                                                               \
-    /* multicast group split buffer action. */                                \
-    ACTION_OPCODE(MG_SPLIT_BUF)                                               \
-                                                                              \
     /* "dhcp_relay_req_chk(relay_ip, server_ip)".
      *
      * Arguments follow the action_header, in this format:
