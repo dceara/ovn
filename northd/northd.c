@@ -15004,7 +15004,7 @@ build_lrouter_network_id_flows(
             ds_clear(match);
             ds_clear(actions);
 
-            ds_put_format(match, "outport == %s && "
+            ds_put_format(match, "outport == %s && ip && "
                           REG_NEXT_HOP_IPV4 " == %s/%d", op->json_key,
                           op->lrp_networks.ipv4_addrs[i].addr_s,
                           op->lrp_networks.ipv4_addrs[i].plen);
@@ -15041,7 +15041,7 @@ build_lrouter_network_id_flows(
             ds_clear(match);
             ds_clear(actions);
 
-            ds_put_format(match, "outport == %s && "
+            ds_put_format(match, "outport == %s && ip6 && "
                           REG_NEXT_HOP_IPV6 " == %s/%d", op->json_key,
                           op->lrp_networks.ipv6_addrs[i].addr_s,
                           op->lrp_networks.ipv6_addrs[i].plen);
