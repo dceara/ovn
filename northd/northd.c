@@ -13086,6 +13086,7 @@ build_lrouter_force_snat_flows_op(struct ovn_port *op,
         ovn_lflow_add(lflows, op->od, S_ROUTER_OUT_SNAT, 105,
                       ds_cstr(match), ds_cstr(actions), lflow_ref);
     }
+
     /* op->lrp_networks.ipv6_addrs will always have LLA, so only add flow if
      * there is more than 1. */
     if (op->lrp_networks.n_ipv6_addrs > 1) {
@@ -14977,8 +14978,8 @@ build_arp_request_flows_for_lrouter(
 
 static void
 build_lrouter_network_id_flows(
-            struct ovn_datapath *od, struct lflow_table *lflows,
-            struct ds *match, struct ds *actions, struct lflow_ref *lflow_ref)
+        struct ovn_datapath *od, struct lflow_table *lflows,
+        struct ds *match, struct ds *actions, struct lflow_ref *lflow_ref)
 {
     const struct ovn_port *op;
     size_t network_id;
@@ -17455,7 +17456,7 @@ build_lswitch_and_lrouter_iterate_by_lr(struct ovn_datapath *od,
                                         lsi->meter_groups,
                                         NULL);
     build_lrouter_network_id_flows(od, lsi->lflows, &lsi->match,
-                                         &lsi->actions, NULL);
+                                   &lsi->actions, NULL);
     build_misc_local_traffic_drop_flows_for_lrouter(od, lsi->lflows, NULL);
 
     build_lr_nat_defrag_and_lb_default_flows(od, lsi->lflows, NULL);

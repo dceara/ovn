@@ -16764,6 +16764,7 @@ check grep -q "Bad configuration: The peer of the switch port 'ls-lrp1' (LRP pee
 AT_CLEANUP
 ])
 
+OVN_FOR_EACH_NORTHD_NO_HV([
 AT_SETUP([lb_force_snat_ip=router_ip generate flags.network_id flows])
 ovn_start
 
@@ -16788,11 +16789,11 @@ check ovn-nbctl lsp-add ls-client client
 check ovn-nbctl lsp-add ls-server server
 check ovn-nbctl lsp-set-addresses client "02:00:00:00:00:01 1.1.1.10"
 check ovn-nbctl lsp-set-addresses server "02:00:00:00:00:04 2.2.2.10"
-Andover, Massachusettscheck ovn-nbctl lsp-set-addresses lsp-client-router router
+check ovn-nbctl lsp-set-addresses lsp-client-router router
 check ovn-nbctl lsp-set-addresses lsp-server-router router
 check ovn-nbctl lb-add lb 42.42.42.42:80 2.2.2.10:80 udp
 check ovn-nbctl lr-lb-add lr lb
-check ovn-nbctl --wait=hv sync
+check ovn-nbctl --wait=sb sync
 
 ovn-sbctl dump-flows lr > lrflows
 AT_CAPTURE_FILE([lrflows])
@@ -16844,7 +16845,9 @@ AT_CHECK([grep -E flags.network_id lrflows | ovn_strip_lflows], [0], [dnl
   table=??(lr_out_snat        ), priority=110  , match=(flags.force_snat_for_lb == 1 && flags.network_id == 9 && ip4 && outport == "lrp-server"), action=(ct_snat(6.5.1.1);)
 ])
 AT_CLEANUP
+])
 
+OVN_FOR_EACH_NORTHD_NO_HV([
 AT_SETUP([lb_force_snat_ip=router_ip one IPv6 address])
 ovn_start
 
@@ -16857,10 +16860,19 @@ check ovn-nbctl lsp-add sw0 lrp0-attachment
 check ovn-nbctl lsp-set-type lrp0-attachment router
 check ovn-nbctl lsp-set-addresses lrp0-attachment 02:00:00:00:00:01
 check ovn-nbctl lsp-set-options lrp0-attachment router-port=lrp0
-check ovn-nbctl --wait=hv sync
+check ovn-nbctl --wait=sb sync
 
 ovn-sbctl dump-flows lr0 > lrflows
 AT_CAPTURE_FILE([lrflows])
-AT_CHECK([grep -E "flags.force_snat_for_lb == 1" lrflows | grep priority=105 | ovn_strip_lflows], [0], [dnl
+AT_CHECK([! ovn_strip_lflows < lrflows | grep priority=105 | grep -q "flags.force_snat_for_lb == 1"])
+
+check ovn-nbctl lrp-del lrp0 -- lrp-add lr0 lrp0 02:00:00:00:00:01 4242::4242/64
+check ovn-nbctl --wait=sb sync
+ovn-sbctl dump-flows lr0 > lrflows
+AT_CAPTURE_FILE([lrflows])
+AT_CHECK([ovn_strip_lflows < lrflows | grep priority=105 | grep -c "flags.force_snat_for_lb == 1"], [0], [dnl
+1
 ])
+
 AT_CLEANUP
+])
