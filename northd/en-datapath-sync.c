@@ -271,7 +271,9 @@ en_datapath_sync_run(struct engine_node *node , void *data)
      * maps from the datapath-specific nodes.
      */
     size_t n_input_maps = node->n_inputs - 2;
-    const struct ovn_unsynced_datapath_map *input_maps[n_input_maps];
+    const struct ovn_unsynced_datapath_map **input_maps
+        = xmalloc(n_input_maps * sizeof *input_maps);
+
     struct ovn_synced_datapaths *synced_datapaths = data;
 
     for (size_t i = 0; i < n_input_maps; i++) {
@@ -299,8 +301,10 @@ en_datapath_sync_run(struct engine_node *node , void *data)
     allocate_tunnel_keys(&candidate_sdps, &dp_tnlids,
                          global_config->max_dp_tunnel_id, synced_datapaths);
     delete_candidates_with_no_tunnel_key(&candidate_sdps);
+    ovn_destroy_tnlids(&dp_tnlids);
 
     engine_set_node_state(node, EN_UPDATED);
+    free(input_maps);
 }
 
 void en_datapath_sync_cleanup(void *data)

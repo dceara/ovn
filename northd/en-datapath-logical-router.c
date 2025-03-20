@@ -124,6 +124,10 @@ static void
 synced_logical_router_map_destroy(
     struct ovn_synced_logical_router_map *router_map)
 {
+    struct ovn_synced_logical_router *lr;
+    HMAP_FOR_EACH_POP (lr, hmap_node, &router_map->synced_routers) {
+        free(lr);
+    }
     hmap_destroy(&router_map->synced_routers);
 }
 

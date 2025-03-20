@@ -125,6 +125,10 @@ static void
 synced_logical_switch_map_destroy(
     struct ovn_synced_logical_switch_map *switch_map)
 {
+    struct ovn_synced_logical_switch *lsw;
+    HMAP_FOR_EACH_POP (lsw, hmap_node, &switch_map->synced_switches) {
+        free(lsw);
+    }
     hmap_destroy(&switch_map->synced_switches);
 }
 

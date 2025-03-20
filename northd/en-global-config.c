@@ -50,7 +50,7 @@ static bool check_nb_options_out_of_sync(
 static void update_sb_config_options_to_sbrec(struct ed_type_global_config *,
                                               const struct sbrec_sb_global *);
 static bool is_vxlan_mode(const struct smap *nb_options,
-              const struct sbrec_chassis_table *sbrec_chassis_table);
+                          const struct sbrec_chassis_table *);
 
 void *
 en_global_config_init(struct engine_node *node OVS_UNUSED,
