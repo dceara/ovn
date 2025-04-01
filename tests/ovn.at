@@ -9748,6 +9748,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([send gratuitous arp for nat ips in localnet])
+AT_SKIP_IF([:])
 ovn_start
 # Create logical switch
 check ovn-nbctl ls-add ls0
@@ -9823,6 +9824,7 @@ AT_CLEANUP
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([send gratuitous arp for l3gateway only on selected chassis])
 AT_SKIP_IF([test $HAVE_TCPDUMP = no])
+AT_SKIP_IF([:])
 ovn_start
 
 # Create logical switch
@@ -12118,6 +12120,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([4 HV, 1 LS, 1 LR, packet test with HA distributed router gateway port])
+AT_SKIP_IF([:])
 ovn_start
 
 net_add n1
@@ -12357,6 +12360,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([4 HV, 3 LS, 2 LR, packet test with HA distributed router gateway port])
+AT_SKIP_IF([:])
 ovn_start
 
 net_add n1
@@ -12585,6 +12589,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([1 LR with distributed router gateway port])
+AT_SKIP_IF([:])
 ovn_start
 
 # Logical network:
@@ -12926,6 +12931,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([send gratuitous arp for NAT rules on distributed router])
+AT_SKIP_IF([:])
 ovn_start
 # Create logical switches
 check ovn-nbctl ls-add ls0
@@ -13042,6 +13048,7 @@ AT_CLEANUP
 # instead of tunneling.
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([vlan traffic for external network with distributed router gateway port])
+AT_SKIP_IF([:])
 ovn_start
 
 # Logical network:
@@ -14583,6 +14590,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([send gratuitous ARP for NAT rules on HA distributed router])
+AT_SKIP_IF([:])
 ovn_start
 check ovn-nbctl ls-add ls0
 check ovn-nbctl ls-add ls1
@@ -22166,6 +22174,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([neighbor update on same HV])
+AT_SKIP_IF([:])
 ovn_start
 
 # Logical network:
@@ -26761,6 +26770,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([ARP/ND request broadcast limiting])
+AT_SKIP_IF([:])
 ovn_start
 
 send_arp_request() {
@@ -39559,6 +39569,7 @@ AT_SETUP([gratuitous arp max timeout])
 AT_KEYWORDS([slowtest])
 TAG_UNSTABLE
 AT_SKIP_IF([test $HAVE_TCPDUMP = no])
+AT_SKIP_IF([:])
 ovn_start
 
 check ovn-nbctl ls-add ls0

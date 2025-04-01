@@ -8718,45 +8718,25 @@ build_lswitch_rport_arp_req_flow(
     /* Send a the packet to the router pipeline.  If the switch has non-router
      * ports then flood it there as well.
      */
-    if (od->n_router_ports != od->nbs->n_ports) {
-        ds_put_format(&actions, "clone {outport = %s; output; }; "
-                                "outport = \""MC_FLOOD_L2"\"; output;",
-                      patch_op->json_key);
-        ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
-                                priority, ds_cstr(&match),
-                                ds_cstr(&actions), stage_hint,
-                                lflow_ref);
-    } else {
-        ds_put_format(&actions, "outport = %s; output;", patch_op->json_key);
-        ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
-                                priority, ds_cstr(&match),
-                                ds_cstr(&actions),
-                                stage_hint,
-                                lflow_ref);
-    }
+    ds_put_format(&actions, "outport = %s; output;",
+                  patch_op->json_key);
+    ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
+                            priority, ds_cstr(&match),
+                            ds_cstr(&actions), stage_hint,
+                            lflow_ref);
 
     if (has_cr_port) {
         ds_clear(&match);
         ds_put_format(&match, "%s && !is_chassis_resident(%s)", ds_cstr(&m),
                       patch_op->cr_port->json_key);
+
         ds_clear(&actions);
-        if (od->n_router_ports != od->nbs->n_ports) {
-            ds_put_format(&actions, "clone {outport = %s; output; }; "
-                                    "outport = \""MC_FLOOD_L2"\"; output;",
-                          patch_op->cr_port->json_key);
-            ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
-                                    priority, ds_cstr(&match),
-                                    ds_cstr(&actions), stage_hint,
-                                    lflow_ref);
-        } else {
-            ds_put_format(&actions, "outport = %s; output;",
-                          patch_op->cr_port->json_key);
-            ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
-                                    priority, ds_cstr(&match),
-                                    ds_cstr(&actions),
-                                    stage_hint,
-                                    lflow_ref);
-        }
+        ds_put_format(&actions, "outport = %s; output;",
+                      patch_op->cr_port->json_key);
+        ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
+                                priority, ds_cstr(&match),
+                                ds_cstr(&actions), stage_hint,
+                                lflow_ref);
     }
 
     ds_destroy(&m);

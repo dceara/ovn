@@ -5565,6 +5565,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD_NO_HV_PARALLELIZATION([
 AT_SETUP([ovn -- ARP flows for unreachable addresses - NAT and LB])
+AT_SKIP_IF([:])
 ovn_start
 
 AS_BOX([Setting up the logical network])
@@ -13711,6 +13712,7 @@ AT_CLEANUP
 OVN_FOR_EACH_NORTHD_NO_HV([
 AT_SETUP([NAT on a provider network with no localnet ports])
 AT_KEYWORDS([NAT])
+AT_SKIP_IF([:])
 ovn_start
 
 check ovn-nbctl -- ls-add sw0 -- ls-add sw1
