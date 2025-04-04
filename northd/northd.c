@@ -12162,8 +12162,8 @@ build_gateway_mtu_flow(struct lflow_table *lflows, struct ovn_port *op,
     ds_clear(actions);
     if (gw_mtu > 0) {
         int l2_hdr_size = build_gateway_get_l2_hdr_size(op);
-        ds_put_format(actions, REGBIT_PKT_LARGER" = check_pkt_larger(%d); ",
-                      gw_mtu + l2_hdr_size);
+        ds_put_format(actions, REGBIT_PKT_LARGER" = check_pkt_larger(%d); next(pipeline=ingress, table=%d);",
+                      gw_mtu + l2_hdr_size, ovn_stage_get_table(S_ROUTER_IN_SAVE_CT_STATE));
     }
 
     ds_put_format_valist(actions, extra_actions_fmt, extra_actions_args);
@@ -13233,11 +13233,13 @@ build_icmperr_pkt_big_flows(struct ovn_port *op, int mtu,
 
         create_icmp_need_frag_lflow(op, mtu, actions, match, ipv4_meter,
                                     lflows, lflow_ref, stage, 160, false,
-                                    "ct.trk && ct.rpl && ct.dnat",
+                                    "reg4[5] && reg4[3] && reg4[7]",
+                                    // "ct.trk && ct.rpl && ct.dnat",
                                     "flags.icmp_snat = 1; ");
         create_icmp_need_frag_lflow(op, mtu, actions, match, ipv6_meter,
                                     lflows, lflow_ref, stage, 160, true,
-                                    "ct.trk && ct.rpl && ct.dnat",
+                                    "reg4[5] && reg4[3] && reg4[7]",
+                                    // "ct.trk && ct.rpl && ct.dnat",
                                     "flags.icmp_snat = 1; ");
     }
 
@@ -13322,6 +13324,11 @@ build_check_pkt_len_flows_for_lrouter(
                   "next;", lflow_ref);
     ovn_lflow_add(lflows, od, S_ROUTER_IN_LARGER_PKTS, 0, "1",
                   "next;", lflow_ref);
+
+    ovn_lflow_add(lflows, od, S_ROUTER_IN_SAVE_CT_STATE, 65000,
+                  "!ct.trk", "reg4 = 0;", lflow_ref);
+    ovn_lflow_add(lflows, od, S_ROUTER_IN_SAVE_CT_STATE, 64000,
+                  "1", "reg4 = ct_state;", lflow_ref);
 
     for (size_t i = 0; i < od->nbr->n_ports; i++) {
         struct ovn_port *rp = ovn_port_find(lr_ports,

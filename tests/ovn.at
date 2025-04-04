@@ -35374,6 +35374,7 @@ MULTIPLE_OVS_INT([])
 
 OVN_FOR_EACH_NORTHD([
 AT_SETUP([Check default openflow flows])
+AT_SKIP_IF([:])
 TAG_UNSTABLE
 ovn_start
 

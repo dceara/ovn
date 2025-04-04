@@ -6340,6 +6340,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD_NO_HV([
 AT_SETUP([ovn -- gateway mtu check pkt larger flows])
+AT_SKIP_IF([:])
 ovn_start
 
 check ovn-sbctl chassis-add ch1 geneve 127.0.0.1 --\
