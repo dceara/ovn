@@ -14754,9 +14754,12 @@ build_check_pkt_len_flows_for_lrp(struct ovn_port *op,
 
     ds_clear(match);
     ds_put_format(match, "outport == %s", op->json_key);
+    const char *mtu_flow_action = features->ct_state_save
+                                  ? REG_CT_STATE " = ct_state_save(); next;"
+                                  : "next;";
     build_gateway_mtu_flow(lflows, op, S_ROUTER_IN_CHK_PKT_LEN, 50, 55,
                            match, actions, &op->nbrp->header_, lflow_ref,
-                           REG_CT_STATE " = ct_state_save(); next;");
+                           "%s", mtu_flow_action);
 
     /* ingress traffic */
     build_icmperr_pkt_big_flows(op, gw_mtu, lflows, meter_groups,
@@ -14764,12 +14767,14 @@ build_check_pkt_len_flows_for_lrp(struct ovn_port *op,
                                 NULL, NULL, lflow_ref);
 
     /* Additional match at egress on tracked and reply and dnat-ed traffic. */
-    char *ct_match = op->od->nbr->n_ports > 1
-                     ? xasprintf("%s && %s && %s",
-                                 reg_ct_state[CS_TRACKED],
-                                 reg_ct_state[CS_REPLY_DIR],
-                                 reg_ct_state[CS_DST_NAT])
-                     : NULL;
+    char *ct_match = features->ct_state_save
+                     ? op->od->nbr->n_ports > 1
+                       ? xasprintf("%s && %s && %s",
+                                   reg_ct_state[CS_TRACKED],
+                                   reg_ct_state[CS_REPLY_DIR],
+                                   reg_ct_state[CS_DST_NAT])
+                       : NULL
+                     : xstrdup("ct.trk && ct.rpl && ct.dnat");
     for (size_t i = 0; i < op->od->nbr->n_ports; i++) {
         struct ovn_port *rp = ovn_port_find(lr_ports,
                                             op->od->nbr->ports[i]->name);
