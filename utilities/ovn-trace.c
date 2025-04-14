@@ -3126,13 +3126,15 @@ execute_ct_save_state(const struct ovnact_result *dl, struct flow *uflow,
                       struct ovs_list *super)
 {
     struct mf_subfield sf = expr_resolve_field(&dl->dst);
-    union mf_subvalue sv = { .u8_val = uflow->ct_state };
+    union mf_subvalue sv = {
+        .u8_val = uflow->ct_state & CS_TRACKED ? uflow->ct_state : 0,
+    };
     mf_write_subfield_flow(&sf, &sv, uflow);
 
     struct ds s = DS_EMPTY_INITIALIZER;
     expr_field_format(&dl->dst, &s);
     ovntrace_node_append(super, OVNTRACE_NODE_MODIFY,
-                         "%s = %"PRIu8, ds_cstr(&s), uflow->ct_state);
+                         "%s = %"PRIu8, ds_cstr(&s), sv.u8_val);
     ds_destroy(&s);
 }
 
