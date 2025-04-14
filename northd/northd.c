@@ -14768,12 +14768,10 @@ build_check_pkt_len_flows_for_lrp(struct ovn_port *op,
 
     /* Additional match at egress on tracked and reply and dnat-ed traffic. */
     char *ct_match = features->ct_state_save
-                     ? op->od->nbr->n_ports > 1
-                       ? xasprintf("%s && %s && %s",
-                                   reg_ct_state[CS_TRACKED],
-                                   reg_ct_state[CS_REPLY_DIR],
-                                   reg_ct_state[CS_DST_NAT])
-                       : NULL
+                     ? xasprintf("%s && %s && %s",
+                                 reg_ct_state[CS_TRACKED],
+                                 reg_ct_state[CS_REPLY_DIR],
+                                 reg_ct_state[CS_DST_NAT])
                      : xstrdup("ct.trk && ct.rpl && ct.dnat");
     for (size_t i = 0; i < op->od->nbr->n_ports; i++) {
         struct ovn_port *rp = ovn_port_find(lr_ports,
