@@ -342,4 +342,11 @@ m_kill() {
     done
 }
 
+# m_is_fedora
+#
+# Checks if the ovn-fake-multinode deployment is running fedora-based images.
+m_is_fedora() {
+    m_central_as grep -qi fedora /etc/os-release
+}
+
 OVS_END_SHELL_HELPERS
