@@ -1,10 +1,10 @@
 #!/bin/bash
 set -ex
 
-image=ovn-evpn-test:dev
+image=ovn-bgp-test:dev
 net=evpn-l2-net
 
-podman build -t $image -f Dockerfile .
+podman build -t $image -f Dockerfile ../../../
 
 h1=evpn-host1
 h2=evpn-host2
