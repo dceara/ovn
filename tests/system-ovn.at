@@ -17652,7 +17652,6 @@ check ovn-nbctl lsp-add ls lsp1 \
 -- lsp-set-addresses lsp1 "f0:00:00:00:00:01 192.168.1.1"
 check ovn-nbctl lsp-add ls lsp2 \
 -- lsp-set-addresses lsp2 "f0:00:00:00:00:02 192.168.1.2"
-check ovn --wait=hv sync
 
 ADD_NAMESPACES(lsp1)
 ADD_VETH(lsp1, lsp1, br-int, "192.168.1.1/24", "f0:00:00:00:00:01", \
