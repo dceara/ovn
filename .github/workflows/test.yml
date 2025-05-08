@@ -1,7 +1,6 @@
 name: Build and Test
 
 on:
-  push:
   pull_request:
   schedule:
     # Run Sunday at midnight
