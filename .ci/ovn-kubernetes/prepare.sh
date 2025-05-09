@@ -12,13 +12,19 @@ function extract_ci_var() {
     grep "$name:" .github/workflows/test.yml | awk '{print $2}' | tr -d '"'
 }
 
+function extract_makefile_var() {
+    local name=$1
+
+    grep "$name ?=" go-controller/Makefile | awk '{print $3}' | tr -d '"'
+}
+
 pushd ${ovnk8s_path}
 
 # Add here any custom operations that need to performed on the
 # ovn-kubernetes cloned repo, e.g., custom patches.
 
 # Set up the right GO_VERSION and K8S_VERSION.
-echo "GO_VERSION=$(extract_ci_var GO_VERSION)" >> $env_path
+echo "GO_VERSION=$(extract_makefile_var GO_VERSION)" >> $env_path
 echo "K8S_VERSION=$(extract_ci_var K8S_VERSION)" >> $env_path
 
 # git apply --allow-empty is too new so not all git versions from major
