@@ -194,6 +194,9 @@ function execute_system_tests()
     fi
 
     if [[ $stable_rc -ne 0 ]] || [[ $unstable_rc -ne 0 ]]; then
+        echo DCEARA
+        cat /etc/hosts
+        echo DCEARA
         exit 1
     fi
 }

@@ -47,13 +47,7 @@ jobs:
         run: |
           echo "IMAGE_DISTRO=fedora" >> $GITHUB_ENV
 
-      - name: Build container
-        if: github.ref_name != 'main'
-        run: make ${{ env.IMAGE_DISTRO }}
-        working-directory: utilities/containers
-
       - name: Download container
-        if: github.ref_name == 'main'
         run: podman pull ghcr.io/ovn-org/ovn-tests:${{ env.IMAGE_DISTRO }}
 
       - name: Tag image
