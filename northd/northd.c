@@ -6184,7 +6184,7 @@ skip_port_from_conntrack(const struct ovn_datapath *od, struct ovn_port *op,
 
     const char *ingress_action = "next;";
     const char *egress_action = has_stateful_acl
-                                ? "next;"
+                                ? "ct_clear; next;"
                                 : "ct_clear; next;";
 
     char *ingress_match = xasprintf("ip && inport == %s", op->json_key);
