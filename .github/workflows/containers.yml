@@ -15,7 +15,6 @@ env:
 
 jobs:
   container:
-    if: github.repository_owner == 'ovn-org'
     runs-on: ubuntu-24.04
     strategy:
       matrix:
@@ -47,15 +46,3 @@ jobs:
           build-args: CONTAINERS_PATH=${{ env.CONTAINERS_PATH }}
           dockerfiles: ${{ env.CONTAINERS_PATH }}/${{ matrix.distro }}/Dockerfile
 
-      - name: Push to ghcr.io
-        id: push-to-registry
-        uses: redhat-actions/push-to-registry@v2
-        with:
-          image: ${{ steps.build-image.outputs.image }}
-          tags: ${{ steps.build-image.outputs.tags }}
-          registry: ${{ env.IMAGE_REGISTRY }}/${{ env.IMAGE_NAMESPACE }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Print image url
-        run: echo "Image pushed to ${{ steps.push-to-registry.outputs.registry-paths }}"
