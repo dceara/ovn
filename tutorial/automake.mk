@@ -5,6 +5,7 @@ EXTRA_DIST += \
 	tutorial/ovn-lb-benchmark.py \
 	tutorial/evpn/Dockerfile \
 	tutorial/evpn/setup-l2.sh \
+	tutorial/evpn/setup-l2-ovn.sh \
 	tutorial/evpn/setup-l3.sh \
 	tutorial/evpn/setup-unicast.sh
 sandbox: all
