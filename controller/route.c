@@ -263,10 +263,14 @@ route_run(struct route_ctx_in *r_ctx_in,
                 sset_add(r_ctx_out->tracked_ports_local,
                          route->tracked_port->logical_port);
             } else {
+                //TODO: make this configurable
+                continue;
                 sset_add(r_ctx_out->tracked_ports_remote,
                          route->tracked_port->logical_port);
             }
         }
+        //TODO:
+        priority = PRIORITY_LOCAL_BOUND;
 
         struct advertise_route_entry *ar = xmalloc(sizeof(*ar));
         ar->addr = prefix;
