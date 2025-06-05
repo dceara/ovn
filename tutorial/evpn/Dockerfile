@@ -10,6 +10,7 @@ file \
 fping \
 frr \
 gcc \
+gdb \
 gettext-devel \
 git \
 glibc-langpack-en \
@@ -49,7 +50,7 @@ systemd
 
 ARG OVN_PATH
 
-RUN git clone https://github.com/ovn-org/ovn --single-branch --revision v25.03.0 --depth 1
+RUN git clone https://github.com/dceara/ovn --single-branch --revision bgp-evpn-hacking --depth 1
 
 WORKDIR /ovn
 RUN git submodule update --init --depth 1
@@ -60,8 +61,6 @@ RUN dnf builddep -y /tmp/ovs.spec
 RUN ./boot.sh
 RUN ./configure -v
 RUN make rpm-fedora
-RUN rm rpm/rpmbuild/RPMS/x86_64/*debug*
-RUN rm rpm/rpmbuild/RPMS/x86_64/*devel*
 
 WORKDIR /ovn
 RUN sed -e 's/@VERSION@/0.0.1/' rhel/ovn-fedora.spec.in > /tmp/ovn.spec
