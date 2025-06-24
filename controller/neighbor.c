@@ -18,8 +18,30 @@
 #include "lib/hash.h"
 #include "lib/packets.h"
 #include "lib/sset.h"
+#include "openvswitch/vlog.h"
+#include "unixctl.h"
 
 #include "neighbor.h"
+
+VLOG_DEFINE_THIS_MODULE(neighbor);
+
+/* XXX: just for testing: */
+static char *test_ifname;
+
+static void
+debug_set_test_ifname(struct unixctl_conn *conn, int argc OVS_UNUSED,
+                       const char *argv[], void *arg OVS_UNUSED)
+{
+    free(test_ifname);
+    test_ifname = xstrdup(argv[1]);
+    VLOG_INFO("DEBUG setting test_ifname to %s", test_ifname);
+    unixctl_command_reply(conn, NULL);
+}
+
+OVS_CONSTRUCTOR(neighbor_constructor) {
+    unixctl_command_register("debug/set_test_ifname", "", 1, 1,
+                             debug_set_test_ifname, NULL);
+}
 
 static void neighbor_interface_monitor_destroy(
     struct neighbor_interface_monitor *);
@@ -45,6 +67,62 @@ neighbor_run(struct neighbor_ctx_in *n_ctx_in OVS_UNUSED,
      *
      * And populate that in n_ctx_out.
      */
+
+    // TODO: just for testing; this should actually build the map
+    // of neighbor entries to advertise and interface names to monitor
+    // from SB contents.
+    if (test_ifname) {
+        /* Inject an IPv4 neighbor on test_ifname. */
+        struct neighbor_interface_monitor *nim_v4 = xmalloc(sizeof *nim_v4);
+        *nim_v4 = (struct neighbor_interface_monitor) {
+            .family = NEIGH_AF_INET,
+            .announced_neighbors =
+                HMAP_INITIALIZER(&nim_v4->announced_neighbors),
+        };
+        ovs_strzcpy(nim_v4->if_name, test_ifname, IFNAMSIZ + 1);
+
+        struct advertise_neighbor_entry *n1 = xzalloc(sizeof *n1);
+        n1->lladdr = (struct eth_addr) ETH_ADDR_C(00, 00, 42, 43, 44, 45);
+        in6_addr_set_mapped_ipv4(&n1->addr, htonl(0x2a2a2a2a));
+        hmap_insert(&nim_v4->announced_neighbors, &n1->node,
+                    advertise_neigh_hash(&n1->lladdr, &n1->addr));
+
+        vector_push(n_ctx_out->monitored_interfaces, &nim_v4);
+
+        /* Inject an IPv6 neighbor on test_ifname. */
+        struct neighbor_interface_monitor *nim_v6 = xmalloc(sizeof *nim_v6);
+        *nim_v6 = (struct neighbor_interface_monitor) {
+            .family = NEIGH_AF_INET6,
+            .announced_neighbors =
+                HMAP_INITIALIZER(&nim_v6->announced_neighbors),
+        };
+        ovs_strzcpy(nim_v6->if_name, test_ifname, IFNAMSIZ + 1);
+
+        n1 = xzalloc(sizeof *n1);
+        n1->lladdr = (struct eth_addr) ETH_ADDR_C(00, 00, 42, 43, 44, 55);
+        ipv6_parse("4242::4242", &n1->addr);
+        hmap_insert(&nim_v6->announced_neighbors, &n1->node,
+                    advertise_neigh_hash(&n1->lladdr, &n1->addr));
+
+        vector_push(n_ctx_out->monitored_interfaces, &nim_v6);
+
+        /* Inject a bridge FDB entry on test_ifname. */
+        struct neighbor_interface_monitor *nim_bridge =
+            xmalloc(sizeof *nim_bridge);
+        *nim_bridge = (struct neighbor_interface_monitor) {
+            .family = NEIGH_AF_BRIDGE,
+            .announced_neighbors =
+                HMAP_INITIALIZER(&nim_bridge->announced_neighbors),
+        };
+        ovs_strzcpy(nim_bridge->if_name, test_ifname, IFNAMSIZ + 1);
+
+        n1 = xzalloc(sizeof *n1);
+        n1->lladdr = (struct eth_addr) ETH_ADDR_C(00, 00, 42, 43, 44, 66);
+        hmap_insert(&nim_bridge->announced_neighbors, &n1->node,
+                    advertise_neigh_hash(&n1->lladdr, &n1->addr));
+
+        vector_push(n_ctx_out->monitored_interfaces, &nim_bridge);
+    }
 }
 
 void
