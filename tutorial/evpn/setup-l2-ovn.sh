@@ -174,6 +174,11 @@ echo "configure
 
 echo Creating VTEPs...
 
+podman exec $h1 ovs-vsctl add-port br-int vxlan-ovs \
+    -- set interface vxlan-ovs type=vxlan \
+        options:local_ip=flow options:remote_ip=flow options:key=flow \
+        options:dst_port=4789
+
 # - host1
 for vni in 10 20; do
     # Setup a VRF to interact with OVN:
@@ -186,7 +191,11 @@ for vni in 10 20; do
     podman exec $h1 ip link set dev br-$vni up
 
     # Add VXLAN VTEP for the VNI.
-    podman exec $h1 ip link add vxlan-$vni type vxlan id $vni dstport 4789 local 20.0.0.1 nolearning
+    # Use a dstport different than the one used by OVS.
+    # This is fine because we don't actually want traffic to pass through vxlan-$vni.
+    # FRR should read the dstport from the linked vxlan_sys_4789 device.
+    dstport=$((60000 + $vni))
+    podman exec $h1 ip link add vxlan-$vni type vxlan dev vxlan_sys_4789 id $vni dstport $dstport local 20.0.0.1 nolearning
     podman exec $h1 ip link set dev vxlan-$vni up
     podman exec $h1 ip link set vxlan-$vni master br-$vni
 
