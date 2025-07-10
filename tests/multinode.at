@@ -3324,6 +3324,8 @@ check_fake_multinode_setup
 # Delete the multinode NB and OVS resources before starting the test.
 cleanup_multinode_resources
 
+CHECK_VRF()
+
 setup_frr() {
     node=$1
     bgp_as=$2
