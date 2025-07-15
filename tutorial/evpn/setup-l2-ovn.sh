@@ -79,6 +79,8 @@ podman exec $h1 ovs-vsctl set open . external-ids:ovn-bridge-mappings=phys:br-ex
 podman exec $h1 ovs-vsctl add-port br-ex $eth
 podman exec $h1 ip addr add 20.0.0.1/8 dev br-ex
 podman exec $h1 ip link set up br-ex
+podman exec $h1 ovs-vsctl set open . external_ids:ovn-evpn-local-ip="20.0.0.1"
+podman exec $h1 ovs-vsctl set open . external_ids:ovn-evpn-vxlan-ports=4789
 
 # Add internal switch.
 podman exec $h1 ovn-nbctl ls-add ls-int
@@ -100,6 +102,8 @@ podman exec $h1 ip netns exec workload ip a a dev workload 42.42.1.15/16
 podman exec $h1 ip netns exec workload ip link set dev workload up
 podman exec $h1 ovn-nbctl lsp-add ls-ext workload \
   -- lsp-set-addresses workload "00:00:00:00:01:42 42.42.1.15/16"
+podman exec $h1 ovn-nbctl set logical-switch ls-ext other_config:dynamic-routing-vni=10
+podman exec $h1 ovn-nbctl set logical-switch ls-ext other_config:dynamic-routing-redistribute=fdb
 
 echo Sleeping for a bit...
 sleep 5
@@ -173,11 +177,6 @@ echo "configure
   do copy running-config startup-config" | podman exec -i $h3 vtysh
 
 echo Creating VTEPs...
-
-podman exec $h1 ovs-vsctl add-port br-int vxlan-ovs \
-    -- set interface vxlan-ovs type=vxlan \
-        options:local_ip=flow options:remote_ip=flow options:key=flow \
-        options:dst_port=4789
 
 # - host1
 for vni in 10 20; do
@@ -316,6 +315,16 @@ for vni in 10 20; do
     podman exec $h ip neigh | grep br-$vni | grep 02:42:42 || true
     echo
 done
+
+podman exec $h2 ip netns add workload
+podman exec $h2 ip link add workload-pair type veth peer workload
+podman exec $h2 ip link set netns workload dev workload
+podman exec $h2 ip link set workload-pair up
+podman exec $h2 ip link set workload-pair master br-10
+podman exec $h2 ip netns exec workload ip link set addr 00:00:42:42:02:50 dev workload
+podman exec $h2 ip netns exec workload ip addr add 42.42.2.50/16 dev workload
+podman exec $h2 ip netns exec workload ip link set workload up
+podman exec $h2 bridge fdb add 00:00:42:42:02:50 dev lo-10 master static || true
 
 sleep infinity
 
