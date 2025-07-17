@@ -3646,7 +3646,7 @@ check multinode_nbctl ls-add ls                        \
 check multinode_nbctl lsp-add ls w1                       \
     -- lsp-set-addresses w1 "00:00:00:00:00:01 10.0.0.11"
 check multinode_nbctl lsp-add ls w2                       \
-    -- lsp-set-addresses w1 "00:00:00:00:00:02 10.0.0.12"
+    -- lsp-set-addresses w2 "00:00:00:00:00:02 10.0.0.12"
 
 check m_as ovn-gw-1 /data/create_fake_vm.sh w1 w1 00:00:00:00:00:01 1500 10.0.0.11 24 10.0.0.1 1000::11/64 1000::1
 check m_as ovn-gw-2 /data/create_fake_vm.sh w2 w2 00:00:00:00:00:02 1500 10.0.0.12 24 10.0.0.1 1000::12/64 1000::1
@@ -3659,19 +3659,19 @@ check multinode_nbctl set logical_switch ls       \
     other_config:dynamic-routing-redistribute=fdb
 check multinode_nbctl --wait=hv sync
 
-# TODO (GLUE): this should be automatic once the feature is enabled.
-# Simulate an OVN workload.
-m_as ovn-gw-1 bridge fdb add 00:00:00:00:00:01 dev lo-10 master static
-m_as ovn-gw-2 bridge fdb add 00:00:00:00:00:02 dev lo-10 master static
+OVS_WAIT_UNTIL([m_as ovn-gw-1 bridge fdb | grep vxlan-10 | grep -q "00:00:00:00:00:00"])
+OVS_WAIT_UNTIL([m_as ovn-gw-2 bridge fdb | grep vxlan-10 | grep -q "00:00:00:00:00:00"])
+m_as ovn-gw-1 ovn-appctl recompute
+m_as ovn-gw-2 ovn-appctl recompute
+check multinode_nbctl --wait=hv sync
 
 AS_BOX([Checking Remote VTEPs learned in OVN])
-# TODO (GLUE): this should be uncommented once OVN remote vtep learning is implemented.
-# OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ovn-appctl evpn-remote-vtep-list | sort], [0], [dnl
-# IP: $ext_bgp_ip_gw1, port = 4789, vni = 10
-# ])
-# OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-2 ovn-appctl evpn-remote-vtep-list | sort], [0], [dnl
-# IP: $ext_bgp_ip_gw2, port = 4789, vni = 10
-# ])
+OVS_WAIT_FOR_OUTPUT_UNQUOTED([m_as ovn-gw-1 ovn-appctl evpn/remote-vtep-list | sort], [0], [dnl
+IP: $ext_bgp_ip_gw1, port: 4789, vni: 10
+])
+OVS_WAIT_FOR_OUTPUT_UNQUOTED([m_as ovn-gw-2 ovn-appctl evpn/remote-vtep-list | sort], [0], [dnl
+IP: $ext_bgp_ip_gw2, port: 4789, vni: 10
+])
 
 AS_BOX([Checking EVPN MACs on External BGP host])
 OVS_WAIT_FOR_OUTPUT([m_as ovn-gw-1 ip netns exec frr-ns vtysh --vty_socket /run/frr/frr-ns -c 'show evpn mac vni all'], [0], [dnl
@@ -3712,8 +3712,7 @@ check m_as ovn-gw-2 ip addr add dev evpn_host 10.0.0.42/24
 check m_as ovn-gw-2 ip link set evpn_host up
 
 AS_BOX([Check traffic to "fabric" hosts - ping from fabric])
-# TODO (GLUE): uncomment this when remote vtep learning is implemented.
-# OVS_WAIT_UNTIL([m_as ovn-gw-1 ping -W 1 -c 1 10.0.0.11])
-# OVS_WAIT_UNTIL([m_as ovn-gw-2 ping -W 1 -c 1 10.0.0.12])
+OVS_WAIT_UNTIL([m_as ovn-gw-1 ping -W 1 -c 1 10.0.0.11])
+OVS_WAIT_UNTIL([m_as ovn-gw-2 ping -W 1 -c 1 10.0.0.12])
 
 AT_CLEANUP
