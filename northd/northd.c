@@ -10755,6 +10755,235 @@ lrp_find_member_ip(const struct ovn_port *op, const char *ip_s)
     return find_lport_address(&op->lrp_networks, ip_s);
 }
 
+/*
+ * Check if the port has the given IPv6 link-local address.
+ *
+ * Parameters:
+ *   op: The ovn_port to check
+ *   lla_address: The IPv6 link-local address to check for
+ *
+ * Returns:
+ *   true if the port has the given IPv6 link-local address, false otherwise
+*/
+static bool lrp_has_ipv6_lla(const struct ovn_port *op, const char *lla_address)
+{
+    struct in6_addr lla_addr;
+    if (!ipv6_parse(lla_address, &lla_addr) || !in6_is_lla(&lla_addr)) {
+        return false;
+    }
+
+    /* Check for exact LLA match in this port's addresses */
+    for (size_t j = 0; j < op->lrp_networks.n_ipv6_addrs; j++) {
+        struct ipv6_netaddr *addr = &op->lrp_networks.ipv6_addrs[j];
+        if (ipv6_addr_equals(&addr->addr, &lla_addr)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Generic helper function to find router port that can reach IPv6 link-local address.
+ *
+ * IPv6 Link-Local Addresses (LLAs) are interface-scoped and require exact
+ * address matching per RFC 4291, not subnet matching like regular IPv6.
+ *
+ * This function searches for the exact LLA in the following order:
+ * 1. Local router ports on the same router
+ * 2. Directly peered router ports (peer= connections)
+ * 3. Router ports reachable via logical switch connections
+ * 4. Router ports reachable via localnet (same physical network)
+ *
+ * Parameters:
+ *   od: The router datapath to search from
+ *   lr_ports: Map of all logical router ports
+ *   lla_address: The IPv6 link-local address string to resolve
+ *
+ * Returns:
+ *   The ovn_port that can reach the target LLA, or NULL if not found.
+ *
+ * Note: This function is designed to be reusable for both routing policies
+ *       and static routes. The caller determines how to use the returned port.
+ */
+static struct ovn_port *
+find_lrp_for_ipv6_lla(struct ovn_datapath *od,
+                       const struct hmap *lr_ports,
+                       const char *lla_address)
+{
+    struct in6_addr lla_addr;
+    if (!ipv6_parse(lla_address, &lla_addr) ||
+        !in6_is_lla(&lla_addr)) {
+        return NULL;
+    }
+
+    /* First, check if any of this router's ports has the exact LLA */
+    for (int i = 0; i < od->nbr->n_ports; i++) {
+        struct nbrec_logical_router_port *lrp = od->nbr->ports[i];
+        struct ovn_port *out_port = ovn_port_find(lr_ports, lrp->name);
+        if (!out_port) {
+            continue;
+        }
+
+        if (lrp_has_ipv6_lla(out_port, lla_address)) {
+            return out_port;
+        }
+    }
+
+    /* Second, check if the LLA is on a directly peered router port.
+     * LRPs can be directly connected to other LRPs via the peer column. */
+    for (int i = 0; i < od->nbr->n_ports; i++) {
+        struct nbrec_logical_router_port *lrp = od->nbr->ports[i];
+        struct ovn_port *out_port = ovn_port_find(lr_ports, lrp->name);
+        if (!out_port || !lrp->peer) {
+            continue;
+        }
+
+        /* Find the peer LRP */
+        struct ovn_port *peer_lrp = ovn_port_find(lr_ports, lrp->peer);
+        if (!peer_lrp || !peer_lrp->nbrp) {
+            continue;
+        }
+
+        /* Check if the peer LRP has the target LLA */
+        if (lrp_has_ipv6_lla(peer_lrp, lla_address)) {
+            return out_port;
+        }
+    }
+
+    /* Third, check if the LLA is reachable through logical switch connections.
+     * We need to find router ports that connect to logical switches which
+     * might have the target LLA as a connected router port. */
+    for (int i = 0; i < od->nbr->n_ports; i++) {
+        struct nbrec_logical_router_port *lrp = od->nbr->ports[i];
+        struct ovn_port *out_port = ovn_port_find(lr_ports, lrp->name);
+        if (!out_port || !out_port->peer) {
+            continue;
+        }
+
+        /* This router port connects to a logical switch */
+        struct ovn_datapath *peer_ls = out_port->peer->od;
+        if (!peer_ls || !peer_ls->nbs) {
+            continue;
+        }
+
+        /* Check all router ports connected to this logical switch */
+        struct ovn_port *op;
+        VECTOR_FOR_EACH (&peer_ls->router_ports, op) {
+            if (!op->peer) {
+                continue;
+            }
+
+            /* Get the actual router port (not the switch-side port) */
+            struct ovn_port *remote_lrp = op->peer;
+            if (!remote_lrp || !remote_lrp->nbrp) {
+                continue;
+            }
+
+            /* Check if this remote router port has the target LLA */
+            if (lrp_has_ipv6_lla(remote_lrp, lla_address)) {
+                return out_port;
+            }
+        }
+    }
+
+    /* Fourth, complex topologies with localnet connections.
+     * TODO: For complex topologies, we could search through multiple logical
+     * switch hops connected via localnet ports on the same physical network.
+     * This would handle cases like: Router1 -> LS1(localnet) <-> LS2(localnet) -> Router2
+     * However, since LLAs are typically link-scoped, we leave this for future
+     * enhancement and focus on the common direct connection cases above.
+     */
+
+    return NULL;
+}
+
+/* Wrapper function for IPv6 LLA nexthop resolution.
+ *
+ * Determines if the given nexthop is an IPv6 LLA and resolves it using exact
+ * address matching. For non-LLA addresses, returns NULL so caller can use
+ * regular subnet-based matching.
+ *
+ * This wrapper is designed for easy integration into both routing policies
+ * and static routes without duplicating the LLA detection logic.
+ *
+ * Returns:
+ *   - Non-NULL: LRP that can reach the IPv6 LLA nexthop
+ *   - NULL: Not an LLA or LLA not found (use regular resolution)
+ */
+static struct ovn_port *
+resolve_ipv6_lla_nexthop(struct ovn_datapath *od,
+                          const struct hmap *lr_ports,
+                          const char *nexthop)
+{
+    if (!nexthop) {
+        return NULL;
+    }
+
+    struct in6_addr nexthop_addr;
+    if (ipv6_parse(nexthop, &nexthop_addr) && in6_is_lla(&nexthop_addr)) {
+        return find_lrp_for_ipv6_lla(od, lr_ports, nexthop);
+    }
+
+    return NULL; /* Not an IPv6 LLA, use regular resolution */
+}
+
+/* Generic function to find the outport for a given nexthop address.
+ *
+ * This function handles all possible OVN topology scenarios for nexthop resolution:
+ * 1. IPv6 Link-Local Addresses (LLAs) - Uses exact address matching per RFC 4291
+ * 2. Regular IPv4/IPv6 addresses - Uses subnet-based matching
+ * 3. Router-to-router peer connections via peer column
+ * 4. Router connections through logical switches
+ * 5. Complex topologies with localnet connections
+ *
+ * Parameters:
+ *   od: The source router datapath
+ *   lr_ports: Map of all logical router ports
+ *   nexthop: The nexthop IP address string to resolve
+ *
+ * Returns:
+ *   The ovn_port that can reach the nexthop, or NULL if not found.
+ *
+ * Note: This function is designed to be reusable across OVN components
+ *       (routing policies, static routes, etc.) without duplicating topology logic.
+ */
+static struct ovn_port *
+get_outport_for_nexthop(struct ovn_datapath *od,
+                        const struct hmap *lr_ports,
+                        const char *nexthop)
+{
+    if (!nexthop) {
+        return NULL;
+    }
+
+    /* Special handling for IPv6 link-local addresses.
+     * LLAs require exact address matching, not subnet matching. */
+    struct ovn_port *lla_port = resolve_ipv6_lla_nexthop(od, lr_ports, nexthop);
+    if (lla_port) {
+        return lla_port;
+    }
+
+    /* Check if this was an LLA that we couldn't resolve.
+     * For LLAs, we don't fall back to subnet matching as it would be incorrect. */
+    struct in6_addr nexthop_addr;
+    if (ipv6_parse(nexthop, &nexthop_addr) && in6_is_lla(&nexthop_addr)) {
+        /* LLA nexthop not found - return NULL and let caller handle logging */
+        return NULL;
+    }
+
+    /* For non-LLA addresses (IPv4 and regular IPv6), use subnet-based matching.
+     * This searches through all router ports to find one whose network contains the nexthop. */
+    for (int i = 0; i < od->nbr->n_ports; i++) {
+        struct nbrec_logical_router_port *lrp = od->nbr->ports[i];
+        struct ovn_port *out_port = ovn_port_find(lr_ports, lrp->name);
+
+        if (out_port && lrp_find_member_ip(out_port, nexthop)) {
+            return out_port;
+        }
+    }
+
+    return NULL;
+}
+
 static struct ovn_port*
 get_outport_for_routing_policy_nexthop(struct ovn_datapath *od,
                                        const struct hmap *lr_ports,
@@ -10764,19 +10993,27 @@ get_outport_for_routing_policy_nexthop(struct ovn_datapath *od,
         return NULL;
     }
 
-    /* Find the router port matching the next hop. */
-    for (int i = 0; i < od->nbr->n_ports; i++) {
-       struct nbrec_logical_router_port *lrp = od->nbr->ports[i];
-
-       struct ovn_port *out_port = ovn_port_find(lr_ports, lrp->name);
-       if (out_port && lrp_find_member_ip(out_port, nexthop)) {
-           return out_port;
-       }
+    /* Use the generic nexthop resolution function */
+    struct ovn_port *out_port = get_outport_for_nexthop(od, lr_ports, nexthop);
+    if (out_port) {
+        return out_port;
     }
 
+    /* Handle logging for unresolved nexthops with routing policy context */
+    struct in6_addr nexthop_addr;
+    bool is_ipv6_lla = (ipv6_parse(nexthop, &nexthop_addr) &&
+                        in6_is_lla(&nexthop_addr));
+
     static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
-    VLOG_WARN_RL(&rl, "No path for routing policy priority %d on router %s; "
-                 "next hop %s", priority, od->nbr->name, nexthop);
+    if (is_ipv6_lla) {
+        VLOG_WARN_RL(&rl, "IPv6 link-local nexthop %s not found on router %s "
+                     "or reachable logical switches; LLAs require exact address matching",
+                     nexthop, od->nbr->name);
+    } else {
+        VLOG_WARN_RL(&rl, "No path for routing policy priority %d on router %s; "
+                     "next hop %s", priority, od->nbr->name, nexthop);
+    }
+
     return NULL;
 }
 
