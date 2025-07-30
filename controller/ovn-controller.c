@@ -7609,6 +7609,7 @@ main(int argc, char *argv[])
 
             binding_wait();
             route_table_notify_wait();
+            neighbor_table_notify_wait();
             host_if_monitor_wait();
         }
 
