@@ -118,8 +118,9 @@ ne_nl_sync_neigh(uint8_t family, int32_t if_index,
                                   0);               /* vlan */
         if (err) {
             char addr_s[INET6_ADDRSTRLEN + 1];
-            VLOG_WARN_RL(&rl, "Add neigh ifindex=%"PRId32" eth=" ETH_ADDR_FMT
-                              " dst=%s: %s",
+            VLOG_WARN_RL(&rl, "Add neigh ifindex=%"PRId32
+                              " eth=" ETH_ADDR_FMT " dst=%s"
+                              " failed: %s",
                          if_index, ETH_ADDR_ARGS(an->lladdr),
                          ipv6_string_mapped(
                              addr_s, &an->addr) ? addr_s : "(invalid)",
@@ -290,6 +291,11 @@ handle_ne_msg(const struct ne_table_msg *msg, void *data)
     struct ne_msg_handle_data *handle_data = data;
     const struct ne_nl_received_neigh *nd = &msg->nd;
 
+    /* OVN only manages VLAN 0 entries. */
+    if (nd->vlan) {
+        return;
+    }
+
     if (!ne_is_ovn_owned(nd)) {
         if (!handle_data->learned_neighbors) {
             return;
@@ -304,27 +310,27 @@ handle_ne_msg(const struct ne_table_msg *msg, void *data)
     }
 
     /* This neighbor was presumably added by OVN, see if it's still valid.
-     * OVN only adds neighbors with vlan and port set to 0, all others
-     * can be removed. */
-    if (!nd->vlan && !nd->port && handle_data->neighbors_to_advertise) {
-        uint32_t hash = advertise_neigh_hash(&nd->lladdr, &nd->addr);
-        struct advertise_neighbor_entry *an;
-        HMAP_FOR_EACH_WITH_HASH (an, node, hash, handle_data->neighbors) {
-            if (eth_addr_equals(an->lladdr, nd->lladdr)
-                && ipv6_addr_equals(&an->addr, &nd->addr)) {
-                hmapx_find_and_delete(handle_data->neighbors_to_advertise, an);
-                return;
-            }
+     * OVN only adds neighbors with port set to 0, all others can be
+     * removed. */
+    if (!nd->port && handle_data->neighbors_to_advertise) {
+        struct advertise_neighbor_entry *an =
+            advertise_neigh_find(handle_data->neighbors, nd->lladdr,
+                                 &nd->addr);
+        if (an) {
+            hmapx_find_and_delete(handle_data->neighbors_to_advertise, an);
+            return;
         }
     }
+
     int err = ne_nl_del_neigh(nd->if_index, nd->family,
                               &nd->lladdr, &nd->addr,
                               nd->port, nd->vlan);
     if (err) {
         char addr_s[INET6_ADDRSTRLEN + 1];
-        VLOG_WARN_RL(&rl, "Delete neigh ifindex=%"PRId32" eth=" ETH_ADDR_FMT
-                           " dst=%s port=%"PRIu16" failed: %s",
-                           nd->if_index, ETH_ADDR_ARGS(nd->lladdr),
+        VLOG_WARN_RL(&rl, "Delete neigh ifindex=%"PRId32" vlan=%"PRIu16
+                           " eth=" ETH_ADDR_FMT " dst=%s port=%"PRIu16
+                           " failed: %s",
+                           nd->if_index, nd->vlan, ETH_ADDR_ARGS(nd->lladdr),
                            ipv6_string_mapped(addr_s, &nd->addr)
                                               ? addr_s : "(invalid)",
                            nd->port,
@@ -344,7 +350,8 @@ ne_nl_add_neigh(int32_t if_index, uint8_t family,
                 const struct in6_addr *addr,
                 uint16_t port, uint16_t vlan)
 {
-    uint32_t nl_flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL;
+    uint32_t nl_flags = NLM_F_REQUEST | NLM_F_ACK |
+                        NLM_F_CREATE | NLM_F_REPLACE;
     bool dst_set = !ipv6_is_zero(addr);
     bool is_ipv4 = IN6_IS_ADDR_V4MAPPED(addr);
     struct ofpbuf request;
@@ -440,9 +447,10 @@ ne_nl_del_neigh(int32_t if_index, uint8_t family,
                             port, vlan);
         if (dst_set) {
             if (is_ipv4) {
-                ds_put_format(&msg, IP_FMT,
+                ds_put_format(&msg, " " IP_FMT,
                               IP_ARGS(in6_addr_get_mapped_ipv4(addr)));
             } else {
+                ds_put_char(&msg, ' ');
                 ipv6_format_addr(addr, &msg);
             }
         }
