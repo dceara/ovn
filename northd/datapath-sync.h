@@ -128,9 +128,9 @@ struct ovn_synced_datapaths {
  * provides the pointer. So long as the outer ovn_datapath_binding is
  * what is cached, it is perfectly safe.
  */
-struct ovn_datapath_binding {
-    const struct sbrec_datapath_binding *sb_dp;
-};
+// struct ovn_datapath_binding {
+//     const struct sbrec_datapath_binding *sb_dp;
+// };
 
 struct ovn_unsynced_datapath *ovn_unsynced_datapath_alloc(
     const char *name, enum ovn_datapath_type type,

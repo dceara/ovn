@@ -268,9 +268,7 @@ synced_logical_router_alloc(const struct ovn_synced_datapath *sdp)
     *lr = (struct ovn_synced_logical_router) {
         .nb = CONTAINER_OF(sdp->nb_row, struct nbrec_logical_router,
                            header_),
-        .dp = {
-            .sb_dp = sdp->sb_dp,
-        },
+        .sb = sdp->sb_dp,
     };
     return lr;
 }
@@ -366,7 +364,7 @@ en_datapath_synced_logical_router_datapath_sync_handler(
         }
         lr->nb = CONTAINER_OF(sdp->nb_row, struct nbrec_logical_router,
                               header_);
-        lr->dp.sb_dp = sdp->sb_dp;
+        lr->sb = sdp->sb_dp;
         hmapx_add(&router_map->updated, lr);
     }
     HMAPX_FOR_EACH (hmapx_node, &dps->new_sb) {
@@ -378,7 +376,7 @@ en_datapath_synced_logical_router_datapath_sync_handler(
         if (!lr) {
             return EN_UNHANDLED;
         }
-        lr->dp.sb_dp = sdp->sb_dp;
+        lr->sb = sdp->sb_dp;
         /* Don't add lr to router_map->updated in this case. The SB datapath pointer
          * has changed, but the contents have not. Updating the pointer here updates
          * the pointer for any engine node that has cached &lr->dp.

@@ -33,7 +33,7 @@ void en_datapath_logical_router_cleanup(void *data);
 struct ovn_synced_logical_router {
     struct hmap_node hmap_node;
     const struct nbrec_logical_router *nb;
-    struct ovn_datapath_binding dp;
+    const struct sbrec_datapath_binding *sb; // TODO: stale pointers need to be updated
 };
 
 struct ovn_synced_logical_router_map {
