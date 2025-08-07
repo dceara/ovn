@@ -35,7 +35,7 @@ void en_datapath_logical_switch_clear_tracked_data(void *data);
 struct ovn_synced_logical_switch {
     struct hmap_node hmap_node;
     const struct nbrec_logical_switch *nb;
-    struct ovn_datapath_binding dp;
+    const struct ovn_synced_datapath *sdp;
 };
 
 struct ovn_synced_logical_switch_map {
