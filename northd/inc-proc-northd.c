@@ -239,6 +239,12 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_lb_data, &en_datapath_synced_logical_router,
                      lb_data_synced_logical_router_handler);
 
+    //TODO
+    engine_add_input(&en_northd, &en_datapath_synced_logical_switch,
+                     northd_nb_logical_switch_handler);
+    engine_add_input(&en_northd, &en_datapath_synced_logical_router,
+                     northd_nb_logical_router_handler);
+
     engine_add_input(&en_northd, &en_nb_mirror, NULL);
     engine_add_input(&en_northd, &en_nb_mirror_rule, NULL);
     engine_add_input(&en_northd, &en_nb_static_mac_binding, NULL);
@@ -270,10 +276,6 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
 
     engine_add_input(&en_northd, &en_sb_port_binding,
                      northd_sb_port_binding_handler);
-    engine_add_input(&en_northd, &en_datapath_synced_logical_switch,
-                     northd_nb_logical_switch_handler);
-    engine_add_input(&en_northd, &en_datapath_synced_logical_router,
-                     northd_nb_logical_router_handler);
     engine_add_input(&en_northd, &en_lb_data, northd_lb_data_handler);
     engine_add_input(&en_northd, &en_nb_port_group,
                      northd_nb_port_group_handler);

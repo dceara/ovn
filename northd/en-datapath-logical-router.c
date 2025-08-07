@@ -381,6 +381,8 @@ en_datapath_synced_logical_router_datapath_sync_handler(
          * has changed, but the contents have not. Updating the pointer here updates
          * the pointer for any engine node that has cached &lr->dp.
          */
+        //TODO: the comment above is wrong, en_northd->lr_datapaths->od has a stale pointer otherwise
+        hmapx_add(&router_map->updated, lr);
     }
 
     if (hmapx_is_empty(&router_map->new) &&

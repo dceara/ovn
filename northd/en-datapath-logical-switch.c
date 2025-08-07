@@ -380,6 +380,8 @@ en_datapath_synced_logical_switch_datapath_sync_handler(
          * has changed, but the contents have not. Updating the pointer here updates
          * the pointer for any engine node that has cached &lsw->dp.
          */
+        //TODO: the comment above is wrong, en_northd->lr_datapaths->od has a stale pointer otherwise
+        hmapx_add(&switch_map->updated, lsw);
     }
 
     if (hmapx_is_empty(&switch_map->new) &&

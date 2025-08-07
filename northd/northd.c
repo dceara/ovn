@@ -4451,6 +4451,9 @@ northd_handle_ls_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
             goto fail;
         }
 
+        // Update potentially stale od datapath pointer:
+        od->sb = synced->sb;
+
         /* Check if the ls changes can be handled or not. */
         if (!ls_changes_can_be_handled(changed_ls)) {
             goto fail;
@@ -4692,19 +4695,21 @@ northd_handle_lr_changes(const struct northd_input *ni,
             goto fail;
         }
 
+        struct ovn_datapath *od = ovn_datapath_find_(
+                                &nd->lr_datapaths.datapaths,
+                                &changed_lr->header_.uuid);
+        if (!od) {
+            static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+            VLOG_WARN_RL(&rl, "Internal error: a tracked updated LR "
+                        "doesn't exist in lr_datapaths: "UUID_FMT,
+                        UUID_ARGS(&changed_lr->header_.uuid));
+            goto fail;
+        }
+
+        // Update potentially stale od datapath pointer:
+        od->sb = synced->sb;
+
         if (is_lr_nats_changed(changed_lr)) {
-            struct ovn_datapath *od = ovn_datapath_find_(
-                                    &nd->lr_datapaths.datapaths,
-                                    &changed_lr->header_.uuid);
-
-            if (!od) {
-                static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
-                VLOG_WARN_RL(&rl, "Internal error: a tracked updated LR "
-                            "doesn't exist in lr_datapaths: "UUID_FMT,
-                            UUID_ARGS(&changed_lr->header_.uuid));
-                goto fail;
-            }
-
             hmapx_add(&nd->trk_data.trk_nat_lrs, od);
         }
     }
