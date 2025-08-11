@@ -83,6 +83,14 @@ host_if_monitor_update_watches(const struct sset *if_names)
     if (!sset_equals(&monitor.watched_interfaces, if_names)) {
         sset_destroy(&monitor.watched_interfaces);
         sset_clone(&monitor.watched_interfaces, if_names);
+
+        /* Remove mappings for if_names that are not tracked anymore. */
+        struct simap_node *sn;
+        SIMAP_FOR_EACH_SAFE (sn, &monitor.ifname_to_ifindex) {
+            if (!sset_contains(&monitor.watched_interfaces, sn->name)) {
+                simap_delete(&monitor.ifname_to_ifindex, sn);
+            }
+        }
     }
 
     if (!sset_is_empty(&monitor.watched_interfaces)) {
