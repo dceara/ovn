@@ -48,7 +48,7 @@ static struct ne_table_msg nln_nmsg_change;
 static struct nln *nl_neighbor_handle;
 static struct nln_notifier *nl_neighbor_notifier;
 
-static void fdb_table_change(const void *change_, void *aux);
+static void neighbor_table_change(const void *change_, void *aux);
 
 static void
 neighbor_table_register_notifiers(void)
@@ -62,7 +62,7 @@ neighbor_table_register_notifiers(void)
 
     nl_neighbor_notifier =
         nln_notifier_create(nl_neighbor_handle, RTNLGRP_NEIGH,
-                            fdb_table_change, NULL);
+                            neighbor_table_change, NULL);
     if (!nl_neighbor_notifier) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
         VLOG_WARN_RL(&rl, "Failed to create neighbor table watcher.");
@@ -225,7 +225,7 @@ neighbor_table_notify_destroy(void)
 }
 
 static void
-fdb_table_change(const void *change_, void *aux OVS_UNUSED)
+neighbor_table_change(const void *change_, void *aux OVS_UNUSED)
 {
     /* We currently track whether at least one recent neighbor table change
      * was detected.  If that's the case already there's no need to
