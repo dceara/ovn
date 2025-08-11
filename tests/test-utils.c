@@ -15,6 +15,7 @@
 
 #include <config.h>
 
+#include "packets.h"
 #include "test-utils.h"
 
 #include "util.h"
@@ -73,6 +74,43 @@ test_read_ullong_value(struct ovs_cmdl_context *ctx, unsigned int index,
 
     const char *arg = ctx->argv[index];
     if (!str_to_ullong(arg, 10, result)) {
+        fprintf(stderr, "Invalid %s: %s\n", descr, arg);
+        return false;
+    }
+    return true;
+}
+
+bool
+test_read_eth_addr_value(struct ovs_cmdl_context *ctx, unsigned int index,
+                         const char *descr, struct eth_addr *result)
+{
+    if (index >= ctx->argc) {
+        fprintf(stderr, "Missing %s argument\n", descr);
+        return false;
+    }
+
+    const char *arg = ctx->argv[index];
+    if (!eth_addr_from_string(arg, result)) {
+        fprintf(stderr, "Invalid %s: %s\n", descr, arg);
+        return false;
+    }
+    return true;
+}
+
+bool
+test_read_ipv6_mapped_value(struct ovs_cmdl_context *ctx, unsigned int index,
+                           const char *descr, struct in6_addr *result)
+{
+    if (index >= ctx->argc) {
+        fprintf(stderr, "Missing %s argument\n", descr);
+        return false;
+    }
+
+    const char *arg = ctx->argv[index];
+    ovs_be32 ip4;
+    if (ip_parse(arg, &ip4)) {
+        *result = in6_addr_mapped_ipv4(ip4);
+    } else if (!ipv6_parse(arg, result)) {
         fprintf(stderr, "Invalid %s: %s\n", descr, arg);
         return false;
     }

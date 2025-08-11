@@ -100,8 +100,8 @@ ne_nl_sync_neigh(uint8_t family, int32_t if_index,
     ne_table_dump_one_ifindex(family, if_index, handle_ne_msg, &data);
     ret = data.ret;
 
-    /* Add any remaining routes in the routes_to_advertise hmapx to the
-     * system routing table. */
+    /* Add any remaining neighbors in the neighbors_to_advertise hmapx to the
+     * system table. */
     struct hmapx_node *hn;
     HMAPX_FOR_EACH (hn, &neighbors_to_advertise) {
         an = hn->data;
@@ -266,7 +266,7 @@ ne_table_parse__(struct ofpbuf *buf, size_t ofs, const struct nlmsghdr *nlmsg,
         }
 
         if (attrs[NDA_PORT]) {
-            change->nd.port = nl_attr_get_u16(attrs[NDA_PORT]);
+            change->nd.port = ntohs(nl_attr_get_be16(attrs[NDA_PORT]));
         }
 
         if (attrs[NDA_VLAN]) {
@@ -287,6 +287,11 @@ handle_ne_msg(const struct ne_table_msg *msg, void *data)
     struct ne_msg_handle_data *handle_data = data;
     const struct ne_nl_received_neigh *nd = &msg->nd;
 
+    /* OVN only manages VLAN 0 entries. */
+    if (nd->vlan) {
+        return;
+    }
+
     if (!ne_is_ovn_owned(nd)) {
         if (!handle_data->learned_neighbors) {
             return;
@@ -298,17 +303,15 @@ handle_ne_msg(const struct ne_table_msg *msg, void *data)
     }
 
     /* This neighbor was presumably added by OVN, see if it's still valid.
-     * OVN only adds neighbors with vlan and port set to 0, all others
-     * can be removed. */
-    if (!nd->vlan && !nd->port && handle_data->neighbors_to_advertise) {
-        uint32_t hash = advertise_neigh_hash(&nd->lladdr, &nd->addr);
-        struct advertise_neighbor_entry *an;
-        HMAP_FOR_EACH_WITH_HASH (an, node, hash, handle_data->neighbors) {
-            if (eth_addr_equals(an->lladdr, nd->lladdr)
-                && ipv6_addr_equals(&an->addr, &nd->addr)) {
-                hmapx_find_and_delete(handle_data->neighbors_to_advertise, an);
-                return;
-            }
+     * OVN only adds neighbors with port set to 0, all others can be
+     * removed. */
+    if (!nd->port && handle_data->neighbors_to_advertise) {
+        struct advertise_neighbor_entry *an =
+            advertise_neigh_find(handle_data->neighbors, nd->lladdr,
+                                 &nd->addr);
+        if (an) {
+            hmapx_find_and_delete(handle_data->neighbors_to_advertise, an);
+            return;
         }
     }
 
@@ -341,7 +344,7 @@ ne_nl_add_neigh(int32_t if_index, uint8_t family,
                 uint16_t port, uint16_t vlan)
 {
     uint32_t nl_flags = NLM_F_REQUEST | NLM_F_ACK |
-                        NLM_F_CREATE | NLM_F_EXCL;
+                        NLM_F_CREATE | NLM_F_REPLACE;
     bool dst_set = !ipv6_is_zero(addr);
     struct ofpbuf request;
     uint8_t request_stub[NETNL_REQ_BUFFER_SIZE];
