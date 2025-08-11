@@ -266,7 +266,7 @@ synced_logical_switch_alloc(const struct ovn_synced_datapath *sdp)
     *lsw = (struct ovn_synced_logical_switch) {
         .nb = CONTAINER_OF(sdp->nb_row, struct nbrec_logical_switch,
                            header_),
-        .sb = sdp->sb_dp,
+        .sdp = sdp,
     };
     return lsw;
 }
@@ -363,7 +363,7 @@ en_datapath_synced_logical_switch_datapath_sync_handler(
         }
         lsw->nb = CONTAINER_OF(sdp->nb_row, struct nbrec_logical_switch,
                                header_);
-        lsw->sb = sdp->sb_dp;
+        lsw->sdp = sdp;
         hmapx_add(&switch_map->updated, lsw);
     }
     HMAPX_FOR_EACH (hmapx_node, &dps->new_sb) {
@@ -375,7 +375,7 @@ en_datapath_synced_logical_switch_datapath_sync_handler(
         if (!lsw) {
             return EN_UNHANDLED;
         }
-        lsw->sb = sdp->sb_dp;
+        lsw->sdp = sdp;
         /* Don't add lsw to switch_map->updated in this case. The SB datapath pointer
          * has changed, but the contents have not. Updating the pointer here updates
          * the pointer for any engine node that has cached &lsw->dp.
