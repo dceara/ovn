@@ -573,11 +573,7 @@ en_datapath_sync_run(struct engine_node *node , void *data)
     delete_unassigned_candidates(&candidate_sdps);
     vector_destroy(&candidate_sdps);
 
-    if (hmap_count(&synced_datapaths->synced_dps)) {
-        return EN_UPDATED;
-    } else {
-        return EN_UNCHANGED;
-    }
+    return EN_UPDATED;
 }
 
 void en_datapath_sync_cleanup(void *data)
