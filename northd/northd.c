@@ -925,12 +925,13 @@ join_datapaths(const struct nbrec_logical_switch_table *nbrec_ls_table,
             VLOG_INFO_RL(
                 &rl, "deleting Datapath_Binding "UUID_FMT" with "
                 "duplicate nb_uuid "UUID_FMT,
-                UUID_ARGS(&sb->header_.uuid), UUID_ARGS(sb->nb_uuid));
+                UUID_ARGS(&sb->header_.uuid), UUID_ARGS(&sb->header_.uuid));
             sbrec_datapath_binding_delete(sb);
             continue;
         }
 
-        struct ovn_datapath *od = ovn_datapath_create(datapaths, sb->nb_uuid,
+        struct ovn_datapath *od = ovn_datapath_create(datapaths,
+                                                      &sb->header_.uuid,
                                                       NULL, NULL, sb);
         ovs_list_push_back(sb_only, &od->list);
     }
@@ -1136,15 +1137,14 @@ build_datapaths(struct ovsdb_idl_txn *ovnsb_txn,
             sbrec_datapath_binding_set_tunnel_key(od->sb, od->tunnel_key);
         }
         ovn_datapath_update_external_ids(od);
-        sbrec_datapath_binding_set_nb_uuid(od->sb, &od->key, 1);
         sbrec_datapath_binding_set_type(od->sb, od->nbs ? "logical-switch" :
                                         "logical-router");
     }
     LIST_FOR_EACH (od, list, &nb_only) {
-        od->sb = sbrec_datapath_binding_insert(ovnsb_txn);
+        od->sb = sbrec_datapath_binding_insert_persist_uuid(ovnsb_txn,
+                                                            &od->key);
         ovn_datapath_update_external_ids(od);
         sbrec_datapath_binding_set_tunnel_key(od->sb, od->tunnel_key);
-        sbrec_datapath_binding_set_nb_uuid(od->sb, &od->key, 1);
         sbrec_datapath_binding_set_type(od->sb, od->nbs ? "logical-switch" :
                                         "logical-router");
     }
