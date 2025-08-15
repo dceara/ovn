@@ -138,13 +138,22 @@ lr_stateful_northd_handler(struct engine_node *node, void *data_ )
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
         return EN_UNHANDLED;
     }
+
+    // TODO: It's possible datapath indices changed in the en_northd() run.
+    // Update them.
+    struct lr_stateful_input input_data = lr_stateful_get_input_data(node);
+    const struct ovn_datapaths *lr_datapaths = input_data.lr_datapaths;
+    struct ed_type_lr_stateful *data = data_;
+    struct lr_stateful_table  *table = &data->table;
+    const struct ovn_datapath *od;
+    HMAP_FOR_EACH (od, key_node, &northd_data->lr_datapaths.datapaths) {
+        struct lr_stateful_record *lr_stateful_rec =
+            lr_stateful_table_find_(table, od->nbr);
+        ovs_assert(lr_stateful_rec);
+        lr_stateful_rec->lr_index = od->index;
+    }
+
     if (northd_has_lr_new_in_tracked_data(&northd_data->trk_data)) {
-        struct lr_stateful_input input_data = lr_stateful_get_input_data(node);
-        struct ed_type_lr_stateful *data = data_;
-
-        struct lr_stateful_table  *table = &data->table;
-        const struct ovn_datapaths *lr_datapaths = input_data.lr_datapaths;
-
         table->array = xrealloc(table->array,
                             ods_size(lr_datapaths) * sizeof *table->array);
 
