@@ -97,6 +97,8 @@ struct ls_stateful_table {
 struct ls_stateful_tracked_data {
     /* Created or updated logical switch with LB and ACL data. */
     struct hmapx crupdated; /* Stores 'struct ls_stateful_record'. */
+    /* Deleted logical switch with LB and ACL data. */
+    struct hmapx deleted; /* Stores 'struct ls_stateful_record'. */
 };
 
 struct ed_type_ls_stateful {
@@ -121,7 +123,7 @@ const struct ls_stateful_record *ls_stateful_table_find(
 
 static inline bool
 ls_stateful_has_tracked_data(struct ls_stateful_tracked_data *trk_data) {
-    return !hmapx_is_empty(&trk_data->crupdated);
+    return !hmapx_is_empty(&trk_data->crupdated) || !hmapx_is_empty(&trk_data->deleted);
 }
 
 #endif /* EN_LS_STATEFUL_H */

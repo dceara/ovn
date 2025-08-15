@@ -557,13 +557,12 @@ destroy_ports_for_datapath(struct ovn_datapath *od)
 }
 
 static void
-ovn_datapath_destroy(struct hmap *datapaths, struct ovn_datapath *od)
+ovn_datapath_destroy(struct ovn_datapath *od)
 {
     if (od) {
         /* Don't remove od->list.  It is used within build_datapaths() as a
          * private list and once we've exited that function it is not safe to
          * use it. */
-        hmap_remove(datapaths, &od->key_node);
         ovn_destroy_tnlids(&od->port_tnlids);
         destroy_ipam_info(&od->ipam_info);
         vector_destroy(&od->router_ports);
@@ -3941,7 +3940,7 @@ destroy_tracked_dps(struct tracked_dps *trk_dps)
 
     struct hmapx_node *n;
     HMAPX_FOR_EACH (n, &trk_dps->deleted) {
-        free(n->data);
+        ovn_datapath_destroy(n->data);
     }
     hmapx_clear(&trk_dps->deleted);
 }
@@ -4670,6 +4669,14 @@ northd_handle_ls_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
     if (!hmapx_is_empty(&trk_data->ls_with_changed_acls)) {
         trk_data->type |= NORTHD_TRACKED_LS_ACLS;
+    }
+
+    //TODO: update remaining indices
+    struct ovn_datapath *od;
+    size_t index = 0;
+    VECTOR_FOR_EACH (&nd->ls_datapaths.dps, od) {
+        od->index = index++;
+        ovs_assert(ovn_datapaths_find_by_index(&nd->ls_datapaths, od->index) == od);
     }
 
     return true;
@@ -18950,8 +18957,8 @@ static void
 ovn_datapaths_destroy(struct ovn_datapaths *datapaths)
 {
     struct ovn_datapath *dp;
-    HMAP_FOR_EACH_SAFE (dp, key_node, &datapaths->datapaths) {
-        ovn_datapath_destroy(&datapaths->datapaths, dp);
+    HMAP_FOR_EACH_POP (dp, key_node, &datapaths->datapaths) {
+        ovn_datapath_destroy(dp);
     }
     hmap_destroy(&datapaths->datapaths);
 

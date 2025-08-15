@@ -204,6 +204,11 @@ lflow_ls_stateful_handler(struct engine_node *node, void *data)
         return EN_UNHANDLED;
     }
 
+    // TODO: we don't support incremental deletion processing.
+    if (!hmapx_is_empty(&ls_sful_data->trk_data.deleted)) {
+        return EN_UNHANDLED;
+    }
+
     const struct engine_context *eng_ctx = engine_get_context();
     struct lflow_data *lflow_data = data;
     struct lflow_input lflow_input;
