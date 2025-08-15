@@ -230,7 +230,13 @@ ls_stateful_port_group_handler(struct engine_node *node, void *data_)
         const struct nbrec_logical_switch *nbs = hmap_node->data;
         struct ls_stateful_record *ls_stateful_rec =
             ls_stateful_table_find_(&data->table, nbs);
-        ovs_assert(ls_stateful_rec);
+        if (!ls_stateful_rec) {
+            /* It's possible the switch has been deleted in this iteration,
+             * nothing to do then, it's handled by
+             * ls_stateful_northd_handler().*/
+            continue;
+        }
+
         /* Ensure that only one handler per engine run calls
          * ls_stateful_record_set_acls on the same ls_stateful_rec by
          * calling it only when the ls_stateful_rec is added to the hmapx.*/
