@@ -88,6 +88,7 @@ en_ls_stateful_init(struct engine_node *node OVS_UNUSED,
     struct ed_type_ls_stateful *data = xzalloc(sizeof *data);
     ls_stateful_table_init(&data->table);
     hmapx_init(&data->trk_data.crupdated);
+    hmapx_init(&data->trk_data.deleted);
     return data;
 }
 
@@ -97,6 +98,7 @@ en_ls_stateful_cleanup(void *data_)
     struct ed_type_ls_stateful *data = data_;
     ls_stateful_table_destroy(&data->table);
     hmapx_destroy(&data->trk_data.crupdated);
+    hmapx_destroy(&data->trk_data.deleted);
 }
 
 void
@@ -104,6 +106,14 @@ en_ls_stateful_clear_tracked_data(void *data_)
 {
     struct ed_type_ls_stateful *data = data_;
     hmapx_clear(&data->trk_data.crupdated);
+
+    struct hmapx_node *node;
+    HMAPX_FOR_EACH (node, &data->trk_data.deleted) {
+        struct ls_stateful_record *ls_stateful_rec = node->data;
+
+        ls_stateful_record_destroy(ls_stateful_rec);
+    }
+    hmapx_clear(&data->trk_data.deleted);
 }
 
 enum engine_node_state
@@ -188,8 +198,17 @@ ls_stateful_northd_handler(struct engine_node *node, void *data_)
                                &od->nbs->header_.uuid)) {
             hmap_remove(&data->table.entries, &ls_stateful_rec->key_node);
             /* Add the ls_stateful_rec to the tracking data. */
-            hmapx_add(&data->trk_data.crupdated, ls_stateful_rec);
+            hmapx_add(&data->trk_data.deleted, ls_stateful_rec);
         }
+    }
+
+    // TODO: make sure we update indices for ALL datapaths.
+    const struct ovn_datapath *od;
+    HMAP_FOR_EACH (od, key_node, &northd_data->ls_datapaths.datapaths) {
+        struct ls_stateful_record *ls_stateful_rec =
+            ls_stateful_table_find_(&data->table, od->nbs);
+        ovs_assert(ls_stateful_rec);
+        ls_stateful_rec->ls_index = od->index;
     }
 
     if (ls_stateful_has_tracked_data(&data->trk_data)) {
