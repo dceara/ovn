@@ -827,20 +827,41 @@ parse_dynamic_routing_redistribute(
 static void
 ods_build_array_index(struct ovn_datapaths *datapaths)
 {
+    datapaths->dps = VECTOR_CAPACITY_INITIALIZER(struct ovn_datapath *,
+                                                 ods_size(datapaths));
+    datapaths->dps_index_map.map = bitmap_allocate(ods_size(datapaths));
+    datapaths->dps_index_map.capacity = ods_size(datapaths);
+
     /* Assign unique sequential indexes to all datapaths.  These are not
      * visible outside of the northd loop, so, unlike the tunnel keys, it
      * doesn't matter if they are different on every iteration. */
-    size_t index = 0;
-
-    datapaths->array = xrealloc(datapaths->array,
-                            ods_size(datapaths) * sizeof *datapaths->array);
-
     struct ovn_datapath *od;
     HMAP_FOR_EACH (od, key_node, &datapaths->datapaths) {
+        size_t index = bitmap_scan(datapaths->dps_index_map.map, 0, 0,
+                                   datapaths->dps_index_map.capacity);
+        bitmap_set1(datapaths->dps_index_map.map, index);
+        datapaths->dps_index_map.n_elems++;
         od->index = index;
-        datapaths->array[index++] = od;
+        vector_push(&datapaths->dps, &od);
         od->datapaths = datapaths;
     }
+}
+
+static void
+ods_assign_array_index(struct ovn_datapaths *datapaths,
+                       struct ovn_datapath *od)
+{
+    ovs_assert(ods_size(datapaths) == (vector_len(&datapaths->dps) + 1));
+
+    dynamic_bitmap_realloc(&datapaths->dps_index_map,
+                           vector_len(&datapaths->dps) + 1);
+    size_t index = bitmap_scan(datapaths->dps_index_map.map, 0, 0,
+                               datapaths->dps_index_map.capacity);
+    vector_insert(&datapaths->dps, index, &od);
+    bitmap_set1(datapaths->dps_index_map.map, index);
+    datapaths->dps_index_map.n_elems++;
+    od->datapaths = datapaths;
+    od->index = index;
 }
 
 /* Initializes 'ls_datapaths' to contain a "struct ovn_datapath" for every
@@ -3334,7 +3355,8 @@ build_lswitch_lbs_from_lrouter(struct ovn_datapaths *lr_datapaths,
     HMAP_FOR_EACH (lb_dps, hmap_node, lb_dps_map) {
         BITMAP_FOR_EACH_1 (index, ods_size(lr_datapaths),
                            lb_dps->nb_lr_map.map) {
-            struct ovn_datapath *od = lr_datapaths->array[index];
+            struct ovn_datapath *od = vector_get(&lr_datapaths->dps, index,
+                                                 struct ovn_datapath *);
             ovn_lb_datapaths_add_ls(lb_dps, vector_len(&od->ls_peers),
                                     vector_get_array(&od->ls_peers),
                                     ods_size(ls_datapaths));
@@ -3907,6 +3929,18 @@ build_ports(struct ovsdb_idl_txn *ovnsb_txn,
 }
 
 static void
+destroy_tracked_dps(struct tracked_dps *trk_dps)
+{
+    hmapx_clear(&trk_dps->crupdated);
+
+    struct hmapx_node *n;
+    HMAPX_FOR_EACH (n, &trk_dps->deleted) {
+        free(n->data);
+    }
+    hmapx_clear(&trk_dps->deleted);
+}
+
+static void
 destroy_tracked_ovn_ports(struct tracked_ovn_ports *trk_ovn_ports)
 {
     struct hmapx_node *hmapx_node;
@@ -3944,6 +3978,7 @@ destroy_northd_data_tracked_changes(struct northd_data *nd)
     struct northd_tracked_data *trk_changes = &nd->trk_data;
     destroy_tracked_ovn_ports(&trk_changes->trk_lsps);
     destroy_tracked_lbs(&trk_changes->trk_lbs);
+    destroy_tracked_dps(&trk_changes->trk_switches);
     hmapx_clear(&trk_changes->trk_nat_lrs);
     hmapx_clear(&trk_changes->ls_with_changed_lbs);
     hmapx_clear(&trk_changes->ls_with_changed_acls);
@@ -3956,6 +3991,8 @@ init_northd_tracked_data(struct northd_data *nd)
 {
     struct northd_tracked_data *trk_data = &nd->trk_data;
     trk_data->type = NORTHD_TRACKED_NONE;
+    hmapx_init(&trk_data->trk_switches.crupdated);
+    hmapx_init(&trk_data->trk_switches.deleted);
     hmapx_init(&trk_data->trk_lsps.created);
     hmapx_init(&trk_data->trk_lsps.updated);
     hmapx_init(&trk_data->trk_lsps.deleted);
@@ -3972,7 +4009,12 @@ destroy_northd_tracked_data(struct northd_data *nd)
 {
     struct northd_tracked_data *trk_data = &nd->trk_data;
     trk_data->type = NORTHD_TRACKED_NONE;
+    hmapx_destroy(&trk_data->trk_switches.crupdated);
     hmapx_destroy(&trk_data->trk_lsps.created);
+    struct hmapx_node *n;
+    HMAPX_FOR_EACH (n, &trk_data->trk_switches.deleted) {
+        free(n->data);
+    }
     hmapx_destroy(&trk_data->trk_lsps.updated);
     hmapx_destroy(&trk_data->trk_lsps.deleted);
     hmapx_destroy(&trk_data->trk_lbs.crupdated);
@@ -4268,13 +4310,15 @@ ls_handle_lsp_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
                       struct ovn_datapath *od,
                       struct tracked_ovn_ports *trk_lsps)
 {
-    bool ls_ports_changed = false;
+    bool ls_deleted = nbrec_logical_switch_is_deleted(changed_ls);
+    bool ls_ports_changed = ls_deleted;
     if (!nbrec_logical_switch_is_updated(changed_ls,
                                          NBREC_LOGICAL_SWITCH_COL_PORTS)) {
 
         for (size_t i = 0; i < changed_ls->n_ports; i++) {
             if (nbrec_logical_switch_port_row_get_seqno(
-                changed_ls->ports[i], OVSDB_IDL_CHANGE_MODIFY) > 0) {
+                changed_ls->ports[i], OVSDB_IDL_CHANGE_MODIFY) > 0 ||
+                !ovn_port_find_in_datapath(od, changed_ls->ports[i])) {
                 ls_ports_changed = true;
                 break;
             }
@@ -4366,7 +4410,7 @@ ls_handle_lsp_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
         } else if (!strcmp(op->nbsp->type, "virtual")) {
             ovs_list_push_back(&existing_virtual_ports, &op->list);
         }
-        op->visited = true;
+        op->visited = !ls_deleted;
     }
 
     /* Check for deleted ports */
@@ -4488,19 +4532,47 @@ northd_handle_ls_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
                          const struct northd_input *ni,
                          struct northd_data *nd)
 {
-    const struct nbrec_logical_switch *changed_ls;
     struct northd_tracked_data *trk_data = &nd->trk_data;
+    struct hmapx_node *node;
+    HMAPX_FOR_EACH (node, &ni->synced_lses->new) {
+        const struct ovn_synced_logical_switch *synced = node->data;
+        const struct nbrec_logical_switch *new_ls = synced->nb;
 
-    if (!hmapx_is_empty(&ni->synced_lses->new) ||
-        !hmapx_is_empty(&ni->synced_lses->deleted) ||
-        hmapx_is_empty(&ni->synced_lses->updated)) {
-        goto fail;
+        /* If a logical switch is created with the below columns set,
+         * then we can't handle this yet. Goto fail. */
+        if (new_ls->copp || new_ls->n_dns_records ||
+            new_ls->n_forwarding_groups || new_ls->n_qos_rules) {
+                goto fail;
+            }
+
+        struct ovn_datapath *od = ovn_datapath_create(
+            &nd->ls_datapaths.datapaths, &new_ls->header_.uuid, new_ls,
+            NULL, synced->sdp);
+
+        ods_assign_array_index(&nd->ls_datapaths, od);
+        init_ipam_info_for_datapath(od);
+        init_mcast_info_for_datapath(od);
+
+        /* Create SB:IP_Multicast for the logical switch. */
+        const struct sbrec_ip_multicast *ip_mcast =
+            sbrec_ip_multicast_insert(ovnsb_idl_txn);
+        store_mcast_info_for_switch_datapath(ip_mcast, od);
+
+        if (!ls_handle_lsp_changes(ovnsb_idl_txn, new_ls,
+                                   ni, nd, od, &trk_data->trk_lsps)) {
+                goto fail;
+            }
+
+        if (new_ls->n_acls) {
+                hmapx_add(&trk_data->ls_with_changed_acls, od);
+            }
+        hmapx_add(&trk_data->trk_switches.crupdated, od);
     }
 
-    struct hmapx_node *node;
     HMAPX_FOR_EACH (node, &ni->synced_lses->updated) {
         const struct ovn_synced_logical_switch *synced = node->data;
-        changed_ls = synced->nb;
+        const struct nbrec_logical_switch *changed_ls = synced->nb;
+
         struct ovn_datapath *od = ovn_datapath_find_(
                                     &nd->ls_datapaths.datapaths,
                                     &changed_ls->header_.uuid);
@@ -4532,6 +4604,54 @@ northd_handle_ls_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
         if (ls_has_ipam) {
             hmapx_add(&trk_data->ls_with_changed_ipam, od);
         }
+    }
+
+    HMAPX_FOR_EACH (node, &ni->synced_lses->deleted) {
+        const struct ovn_synced_logical_switch *synced = node->data;
+        const struct nbrec_logical_switch *deleted_ls = synced->nb;
+
+        struct ovn_datapath *od = ovn_datapath_find_(
+                                    &nd->ls_datapaths.datapaths,
+                                    &deleted_ls->header_.uuid);
+        if (!od) {
+            static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+            VLOG_WARN_RL(&rl, "Internal error: a tracked updated LS doesn't "
+                         "exist in ls_datapaths: "UUID_FMT,
+                         UUID_ARGS(&deleted_ls->header_.uuid));
+            goto fail;
+        }
+
+        if (deleted_ls->copp || deleted_ls->n_dns_records ||
+            deleted_ls->n_forwarding_groups || deleted_ls->n_qos_rules ||
+            deleted_ls->n_load_balancer || deleted_ls->n_load_balancer_group) {
+            goto fail;
+        }
+
+        if (!ls_handle_lsp_changes(ovnsb_idl_txn, deleted_ls,
+                                   ni, nd, od, &trk_data->trk_lsps)) {
+            goto fail;
+        }
+
+        hmap_remove(&nd->ls_datapaths.datapaths, &od->key_node);
+        vector_remove(&nd->ls_datapaths.dps, od->index, NULL);
+        bitmap_set0(nd->ls_datapaths.dps_index_map.map, od->index);
+        nd->ls_datapaths.dps_index_map.n_elems--;
+
+        const struct sbrec_ip_multicast *ip_mcast =
+            ip_mcast_lookup(ni->sbrec_ip_mcast_by_dp, od->sdp->sb_dp);
+        if (ip_mcast) {
+            sbrec_ip_multicast_delete(ip_mcast);
+        }
+
+        if (is_ls_acls_changed(deleted_ls)) {
+            hmapx_add(&trk_data->ls_with_changed_acls, od);
+        }
+        hmapx_add(&trk_data->trk_switches.deleted, od);
+    }
+
+    if (!hmapx_is_empty(&trk_data->trk_switches.crupdated) ||
+        !hmapx_is_empty(&trk_data->trk_switches.deleted)) {
+        trk_data->type |= NORTHD_TRACKED_SWITCHES;
     }
 
     if (!hmapx_is_empty(&trk_data->trk_lsps.created)
@@ -4935,7 +5055,7 @@ northd_handle_lb_data_changes(struct tracked_lb_data *trk_lb_data,
         size_t index;
         BITMAP_FOR_EACH_1 (index, ods_size(ls_datapaths),
                            lb_dps->nb_ls_map.map) {
-            od = ls_datapaths->array[index];
+            od = vector_get(&ls_datapaths->dps, index, struct ovn_datapath *);
 
             /* Add the ls datapath to the northd tracked data. */
             hmapx_add(&nd_changes->ls_with_changed_lbs, od);
@@ -5071,7 +5191,7 @@ northd_handle_lb_data_changes(struct tracked_lb_data *trk_lb_data,
         size_t index;
         BITMAP_FOR_EACH_1 (index, ods_size(ls_datapaths),
                            lb_dps->nb_ls_map.map) {
-            od = ls_datapaths->array[index];
+            od = vector_get(&ls_datapaths->dps, index, struct ovn_datapath *);
 
             /* Add the ls datapath to the northd tracked data. */
             hmapx_add(&nd_changes->ls_with_changed_lbs, od);
@@ -8015,7 +8135,8 @@ build_lb_rules(struct lflow_table *lflows, struct ovn_lb_datapaths *lb_dps,
                                         ods_size(ls_datapaths));
             BITMAP_FOR_EACH_1 (index, ods_size(ls_datapaths),
                                lb_dps->nb_ls_map.map) {
-                struct ovn_datapath *od = ls_datapaths->array[index];
+                struct ovn_datapath *od = vector_get(&ls_datapaths->dps, index,
+                                                     struct ovn_datapath *);
 
                 meter = copp_meter_get(COPP_REJECT, od->nbs->copp,
                                        meter_groups);
@@ -11943,7 +12064,8 @@ build_gw_lrouter_nat_flows_for_lb(struct lrouter_nat_lb_flows_ctx *ctx,
     if (ctx->reject) {
         dp_non_meter = bitmap_clone(dp_bitmap, bitmap_len);
         BITMAP_FOR_EACH_1 (index, bitmap_len, dp_bitmap) {
-            struct ovn_datapath *od = lr_datapaths->array[index];
+            struct ovn_datapath *od = vector_get(&lr_datapaths->dps, index,
+                                                 struct ovn_datapath *);
             const char *meter;
 
             meter = copp_meter_get(COPP_REJECT, od->nbr->copp,
@@ -12078,7 +12200,8 @@ build_lrouter_nat_flows_for_lb(
     bool use_stateless_nat = smap_get_bool(&lb->nlb->options,
                                            "use_stateless_nat", false);
     BITMAP_FOR_EACH_1 (index, bitmap_len, lb_dps->nb_lr_map.map) {
-        struct ovn_datapath *od = lr_datapaths->array[index];
+        struct ovn_datapath *od = vector_get(&lr_datapaths->dps, index,
+                                             struct ovn_datapath *);
         enum lrouter_nat_lb_flow_type type;
 
         const struct lr_stateful_record *lr_stateful_rec =
@@ -12178,7 +12301,8 @@ build_lswitch_flows_for_lb(struct ovn_lb_datapaths *lb_dps,
         size_t index;
         BITMAP_FOR_EACH_1 (index, ods_size(ls_datapaths),
                            lb_dps->nb_ls_map.map) {
-            struct ovn_datapath *od = ls_datapaths->array[index];
+            struct ovn_datapath *od = vector_get(&ls_datapaths->dps, index,
+                                                 struct ovn_datapath *);
 
             ovn_lflow_add_with_hint__(lflows, od,
                                       S_SWITCH_IN_PRE_LB, 130, ds_cstr(match),
@@ -12256,7 +12380,8 @@ build_lrouter_allow_vip_traffic_template(struct lflow_table *lflows,
 
     size_t index;
     BITMAP_FOR_EACH_1 (index, ods_size(lr_dps), lb_dps->nb_lr_map.map) {
-        struct ovn_datapath *od = lr_dps->array[index];
+        struct ovn_datapath *od = vector_get(&lr_dps->dps, index,
+                                             struct ovn_datapath *);
         /* Do not drop ip traffic with destination the template VIP. */
         ds_clear(&match);
         ds_put_format(&match, "ip%d.dst == %s",
@@ -12303,7 +12428,8 @@ build_lrouter_flows_for_lb(struct ovn_lb_datapaths *lb_dps,
 
         BITMAP_FOR_EACH_1 (index, ods_size(lr_datapaths),
                            lb_dps->nb_lr_map.map) {
-            struct ovn_datapath *od = lr_datapaths->array[index];
+            struct ovn_datapath *od = vector_get(&lr_datapaths->dps, index,
+                                                 struct ovn_datapath *);
 
             ovn_lflow_add_with_hint__(lflows, od, S_ROUTER_IN_DNAT,
                                       130, ds_cstr(match), ds_cstr(action),
@@ -12318,7 +12444,8 @@ build_lrouter_flows_for_lb(struct ovn_lb_datapaths *lb_dps,
     if (lb->skip_snat) {
         BITMAP_FOR_EACH_1 (index, ods_size(lr_datapaths),
                            lb_dps->nb_lr_map.map) {
-            struct ovn_datapath *od = lr_datapaths->array[index];
+            struct ovn_datapath *od = vector_get(&lr_datapaths->dps, index,
+                                                 struct ovn_datapath *);
 
             ovn_lflow_add(lflows, od, S_ROUTER_OUT_SNAT, 120,
                           "flags.skip_snat_for_lb == 1 && ip", "next;",
@@ -18739,7 +18866,6 @@ static void
 ovn_datapaths_init(struct ovn_datapaths *datapaths)
 {
     hmap_init(&datapaths->datapaths);
-    datapaths->array = NULL;
 }
 
 static void
@@ -18751,8 +18877,8 @@ ovn_datapaths_destroy(struct ovn_datapaths *datapaths)
     }
     hmap_destroy(&datapaths->datapaths);
 
-    free(datapaths->array);
-    datapaths->array = NULL;
+    bitmap_free(datapaths->dps_index_map.map);
+    vector_destroy(&datapaths->dps);
 }
 
 static void
