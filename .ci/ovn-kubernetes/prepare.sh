@@ -7,7 +7,7 @@ env_path=$2
 topdir=$PWD
 
 function extract_go_version() {
-    grep -E '^go [0-9]\.[0-9\.]*$' go-controller/go.mod | awk '{print $2}'
+    go mod edit -json go-controller/go.mod | jq -r .Go
 }
 
 function extract_k8s_version() {
