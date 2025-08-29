@@ -23,6 +23,8 @@ ovn-nbctl lsp-set-type lrp1-attachment router
 ovn-nbctl lsp-set-addresses lrp1-attachment 00:00:00:00:ff:02
 ovn-nbctl lsp-set-options lrp1-attachment router-port=lrp1
 
+ovn-nbctl static-mac-binding-add lrp1 11.0.0.42 00:00:22:33:44:55
+
 ovs-vsctl add-port br-int p1 -- \
     set Interface p1 external_ids:iface-id=sw0-port1
 ovs-vsctl add-port br-int p2 -- \
