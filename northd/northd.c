@@ -1254,7 +1254,7 @@ ovn_port_get_peer(const struct hmap *lr_ports, struct ovn_port *op)
         return NULL;
     }
 
-    return ovn_port_find(lr_ports, peer_name);
+    return ovn_port_find_bound(lr_ports, peer_name);
 }
 
 
