@@ -171,6 +171,10 @@ OVN To-do List
     allow for the eventual removal of the ovn\_datapath structure from the
     codebase.
 
+  * Remove datapath_get_nb_uuid_and_type_legacy() after the next LTS
+    (likely in 26.09) as all deployments should be using the new
+    SB.Datapath_Binding.type column at that point.
+
 * CI
 
   * ovn-kubernetes: Only a subset of the ovn-kubernetes features is currently
