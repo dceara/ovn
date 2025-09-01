@@ -609,7 +609,7 @@ ovn_igmp_group_get_ports(const struct sbrec_igmp_group *sb_igmp_group,
     *n_ports = 0;
     for (size_t i = 0; i < sb_igmp_group->n_ports; i++) {
         struct ovn_port *port =
-            ovn_port_find_bound(ls_ports, sb_igmp_group->ports[i]->logical_port);
+            ovn_port_find(ls_ports, sb_igmp_group->ports[i]->logical_port);
 
         if (!port || !port->nbsp) {
             continue;

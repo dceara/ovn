@@ -1095,7 +1095,7 @@ ovn_port_destroy(struct hmap *ports, struct ovn_port *port)
  * same name, gives precendence to ports bound to an ovn_datapath.
  */
 struct ovn_port *
-ovn_port_find_bound(const struct hmap *ports, const char *name)
+ovn_port_find(const struct hmap *ports, const char *name)
 {
     struct ovn_port *matched_op = NULL;
     struct ovn_port *op;
@@ -1240,7 +1240,7 @@ ovn_port_get_peer(const struct hmap *lr_ports, struct ovn_port *op)
         return NULL;
     }
 
-    return ovn_port_find_bound(lr_ports, peer_name);
+    return ovn_port_find(lr_ports, peer_name);
 }
 
 
@@ -1447,8 +1447,8 @@ create_mirror_port(struct ovn_port *op, struct hmap *ports,
 {
     char *mp_name = ovn_mirror_port_name(ovn_datapath_name(op->od->sdp->sb_dp),
                                          nb_mirror->sink);
-    struct ovn_port *mp = ovn_port_find_bound(ports, mp_name);
-    struct ovn_port *target_port = ovn_port_find_bound(ports, nb_mirror->sink);
+    struct ovn_port *mp = ovn_port_find(ports, mp_name);
+    struct ovn_port *target_port = ovn_port_find(ports, nb_mirror->sink);
 
     if (!target_port) {
         goto clear;
@@ -1483,7 +1483,7 @@ join_logical_ports_lsp(struct hmap *ports,
                        struct hmap *tag_alloc_table,
                        struct hmapx *mirror_attached_ports)
 {
-    struct ovn_port *op = ovn_port_find_bound(ports, name);
+    struct ovn_port *op = ovn_port_find(ports, name);
     if (op && (op->od || op->nbsp || op->nbrp)) {
         static struct vlog_rate_limit rl
             = VLOG_RATE_LIMIT_INIT(5, 1);
@@ -1578,7 +1578,7 @@ join_logical_ports_lrp(struct hmap *ports,
       return NULL;
     }
 
-    struct ovn_port *op = ovn_port_find_bound(ports, name);
+    struct ovn_port *op = ovn_port_find(ports, name);
     if (op && (op->od || op->nbsp || op->nbrp)) {
         static struct vlog_rate_limit rl
             = VLOG_RATE_LIMIT_INIT(5, 1);
@@ -1658,7 +1658,7 @@ create_cr_port(struct ovn_port *op, struct hmap *ports,
     char *redirect_name = ovn_chassis_redirect_name(
         op->nbsp ? op->nbsp->name : op->nbrp->name);
 
-    struct ovn_port *crp = ovn_port_find_bound(ports, redirect_name);
+    struct ovn_port *crp = ovn_port_find(ports, redirect_name);
     if (crp && crp->sb && crp->sb->datapath == op->od->sdp->sb_dp) {
         ovn_port_set_nb(crp, op->nbsp, op->nbrp);
         ovs_list_remove(&crp->list);
@@ -1831,7 +1831,7 @@ join_logical_ports(const struct sbrec_port_binding_table *sbrec_pb_table,
             }
         } else if (op->nbsp && op->nbsp->peer && lsp_is_switch(op->nbsp)) {
             static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
-            struct ovn_port *peer = ovn_port_find_bound(ports, op->nbsp->peer);
+            struct ovn_port *peer = ovn_port_find(ports, op->nbsp->peer);
 
             if (!peer) {
                 continue;
@@ -1859,7 +1859,7 @@ join_logical_ports(const struct sbrec_port_binding_table *sbrec_pb_table,
 
             op->peer = peer;
         } else if (op->nbrp && op->nbrp->peer && !is_cr_port(op)) {
-            struct ovn_port *peer = ovn_port_find_bound(ports, op->nbrp->peer);
+            struct ovn_port *peer = ovn_port_find(ports, op->nbrp->peer);
             if (peer) {
                 if (peer->nbrp && peer->nbrp->peer &&
                         !strcmp(op->nbrp->name, peer->nbrp->peer)) {
@@ -2866,7 +2866,7 @@ cleanup_mac_bindings(
             ovn_datapath_from_sbrec(NULL, lr_datapaths, b->datapath);
 
         if (!od || ovn_datapath_is_stale(od) ||
-            !ovn_port_find_bound(lr_ports, b->logical_port)) {
+            !ovn_port_find(lr_ports, b->logical_port)) {
             sbrec_mac_binding_delete(b);
         }
     }
@@ -3065,8 +3065,8 @@ ovn_lb_svc_create(struct ovsdb_idl_txn *ovnsb_txn,
             }
 
             sset_add(svc_monitor_lsps, backend_nb->logical_port);
-            struct ovn_port *op =
-                ovn_port_find_bound(ls_ports, backend_nb->logical_port);
+            struct ovn_port *op = ovn_port_find(ls_ports,
+                                                backend_nb->logical_port);
 
             if (backend_nb->local_backend &&
                 (!op || !lsp_is_enabled(op->nbsp))) {
@@ -4859,11 +4859,11 @@ northd_handle_sb_port_binding_changes(
              * So, first search in lr_ports hmap.  If not found, search in
              * ls_ports hmap.
              * */
-            op = ovn_port_find_bound(lr_ports, pb->logical_port);
+            op = ovn_port_find(lr_ports, pb->logical_port);
         }
 
         if (!op) {
-            op = ovn_port_find_bound(ls_ports, pb->logical_port);
+            op = ovn_port_find(ls_ports, pb->logical_port);
 
             if (op) {
                 is_router_port = false;
@@ -5471,8 +5471,8 @@ build_mirror_lflows(struct ovn_port *op,
                                         ovn_datapath_name(op->od->sdp->sb_dp),
                                         mirror->sink);
 
-        struct ovn_port *serving_port = ovn_port_find_bound(ls_ports,
-                                                            serving_port_name);
+        struct ovn_port *serving_port = ovn_port_find(ls_ports,
+                                        serving_port_name);
 
         /* Mirror serving port wasn't created
          * because the target port doesn't exist. */
@@ -8397,7 +8397,7 @@ build_lrouter_groups__(struct hmap *lr_ports, struct ovn_datapath *od)
 
     for (size_t i = 0; i < od->nbr->n_ports; i++) {
         struct ovn_port *router_port =
-            ovn_port_find_bound(lr_ports, od->nbr->ports[i]->name);
+            ovn_port_find(lr_ports, od->nbr->ports[i]->name);
 
         if (!router_port || !router_port->peer) {
             continue;
@@ -9069,7 +9069,7 @@ build_lswitch_dhcp_relay_flows(struct ovn_port *op,
         return;
     }
 
-    struct ovn_port *sp = ovn_port_find_bound(ls_ports, dhcp_relay_port);
+    struct ovn_port *sp = ovn_port_find(ls_ports, dhcp_relay_port);
 
     if (!sp || !sp->nbsp || !sp->peer) {
         return;
@@ -9415,7 +9415,7 @@ build_lswitch_arp_nd_responder_known_ips(struct ovn_port *op,
         char *vparent;
         for (vparent = strtok_r(tokstr, ",", &save_ptr); vparent != NULL;
              vparent = strtok_r(NULL, ",", &save_ptr)) {
-            struct ovn_port *vp = ovn_port_find_bound(ls_ports, vparent);
+            struct ovn_port *vp = ovn_port_find(ls_ports, vparent);
             if (!vp || vp->od != op->od) {
                 /* vparent name should be valid and it should belong
                  * to the same logical switch. */
@@ -9742,8 +9742,8 @@ build_lswitch_arp_nd_local_svc_mon(const struct ovn_lb_datapaths *lb_dps,
                 continue;
             }
 
-            struct ovn_port *op =
-                ovn_port_find_bound(ls_ports, backend_nb->logical_port);
+            struct ovn_port *op = ovn_port_find(ls_ports,
+                                                backend_nb->logical_port);
             if (!op || !backend_nb->svc_mon_src_ip) {
                 continue;
             }
@@ -9778,8 +9778,8 @@ build_lswitch_arp_nd_ic_learned_svc_mon(
     struct service_monitor_info *mon_info;
     HMAP_FOR_EACH (mon_info, hmap_node,
         svc_mons_data->ic_learned_svc_monitors_map) {
-        struct ovn_port *op =
-            ovn_port_find_bound(ls_ports, mon_info->sbrec_mon->logical_port);
+        struct ovn_port *op = ovn_port_find(ls_ports,
+                                            mon_info->sbrec_mon->logical_port);
 
         if (!op || !mon_info->sbrec_mon->src_ip) {
             continue;
@@ -10482,8 +10482,7 @@ bfd_table_sync(struct ovsdb_idl_txn *ovnsb_txn,
             continue;
         }
 
-        struct ovn_port *op = ovn_port_find_bound(lr_ports,
-                                                  nb_bt->logical_port);
+        struct ovn_port *op = ovn_port_find(lr_ports, nb_bt->logical_port);
         if (!op || !op->sb) {
             /* skip not bounded ports */
             continue;
@@ -10633,7 +10632,7 @@ get_outport_for_routing_policy_nexthop(struct ovn_datapath *od,
     for (int i = 0; i < od->nbr->n_ports; i++) {
        struct nbrec_logical_router_port *lrp = od->nbr->ports[i];
 
-       struct ovn_port *out_port = ovn_port_find_bound(lr_ports, lrp->name);
+       struct ovn_port *out_port = ovn_port_find(lr_ports, lrp->name);
        if (out_port && lrp_find_member_ip(out_port, nexthop)) {
            return out_port;
        }
@@ -11445,7 +11444,7 @@ find_route_outport(const struct hmap *lr_ports, const char *output_port,
                    bool force_out_port,
                    struct ovn_port **out_port, const char **lrp_addr_s)
 {
-    *out_port = ovn_port_find_bound(lr_ports, output_port);
+    *out_port = ovn_port_find(lr_ports, output_port);
     if (!*out_port) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(5, 1);
         VLOG_WARN_RL(&rl, "Bad out port %s for static route %s",
@@ -14426,8 +14425,8 @@ build_lrouter_routing_protocol_redirect(
 
     /* Ensure that LSP, to which the routing protocol traffic is redirected,
      * exists. */
-    struct ovn_port *lsp_in_peer = ovn_port_find_bound(ls_ports,
-                                                       redirect_port_name);
+    struct ovn_port *lsp_in_peer = ovn_port_find(ls_ports,
+                                                 redirect_port_name);
     if (!lsp_in_peer) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
         VLOG_WARN_RL(&rl, "Option 'routing-protocol-redirect' set on Logical "
@@ -14796,8 +14795,8 @@ build_check_pkt_len_flows_for_lrp(struct ovn_port *op,
                                  reg_ct_state[CS_DST_NAT])
                      : xstrdup("ct.trk && ct.rpl && ct.dnat");
     for (size_t i = 0; i < op->od->nbr->n_ports; i++) {
-        struct ovn_port *rp = ovn_port_find_bound(lr_ports,
-                                                  op->od->nbr->ports[i]->name);
+        struct ovn_port *rp = ovn_port_find(lr_ports,
+                                            op->od->nbr->ports[i]->name);
         if (!rp || rp == op) {
             continue;
         }
@@ -14848,8 +14847,8 @@ build_check_pkt_len_flows_for_lrouter(
                   "next;", lflow_ref);
 
     for (size_t i = 0; i < od->nbr->n_ports; i++) {
-        struct ovn_port *rp = ovn_port_find_bound(lr_ports,
-                                                  od->nbr->ports[i]->name);
+        struct ovn_port *rp = ovn_port_find(lr_ports,
+                                            od->nbr->ports[i]->name);
         if (!rp || !rp->nbrp) {
             continue;
         }
@@ -17078,8 +17077,8 @@ build_lrouter_nat_defrag_and_lb(
              * the virtual port has not claimed yet becaused otherwise
              * the traffic will be centralized misconfiguring the TOR switch.
              */
-            struct ovn_port *op = ovn_port_find_bound(ls_ports,
-                                                      nat->logical_port);
+            struct ovn_port *op = ovn_port_find(ls_ports,
+                                                nat->logical_port);
             if (op && op->nbsp && !strcmp(op->nbsp->type, "virtual")) {
                 ovn_lflow_add_with_hint(lflows, od, S_ROUTER_IN_GW_REDIRECT,
                                         80, ds_cstr(match),
@@ -18850,8 +18849,7 @@ build_static_mac_binding_table(
      * from NB Static_MAC_Binding entries. */
     const struct nbrec_static_mac_binding *nb_smb;
     NBREC_STATIC_MAC_BINDING_TABLE_FOR_EACH (nb_smb, nbrec_static_mb_table) {
-        struct ovn_port *op = ovn_port_find_bound(lr_ports,
-                                                  nb_smb->logical_port);
+        struct ovn_port *op = ovn_port_find(lr_ports, nb_smb->logical_port);
         if (op && op->nbrp) {
             struct ovn_datapath *od = op->od;
             if (od && od->sdp->sb_dp) {
@@ -19421,14 +19419,14 @@ handle_port_binding_changes(const struct sbrec_port_binding_table *sb_pb_table,
 
     SBREC_PORT_BINDING_TABLE_FOR_EACH (sb, sb_pb_table) {
 
-        struct ovn_port *orp = ovn_port_find_bound(lr_ports, sb->logical_port);
+        struct ovn_port *orp = ovn_port_find(lr_ports, sb->logical_port);
 
         if (orp && is_cr_port(orp)) {
             handle_cr_port_binding_changes(sb, orp);
             continue;
         }
 
-        struct ovn_port *op = ovn_port_find_bound(ls_ports, sb->logical_port);
+        struct ovn_port *op = ovn_port_find(ls_ports, sb->logical_port);
 
         if (!op || !op->nbsp) {
             /* The logical port doesn't exist for this port binding.  This can
@@ -19498,7 +19496,7 @@ const struct ovn_datapath *
 northd_get_datapath_for_port(const struct hmap *ls_ports,
                              const char *port_name)
 {
-    const struct ovn_port *op = ovn_port_find_bound(ls_ports, port_name);
+    const struct ovn_port *op = ovn_port_find(ls_ports, port_name);
 
     return op ? op->od : NULL;
 }

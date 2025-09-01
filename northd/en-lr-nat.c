@@ -318,7 +318,7 @@ lr_nat_entry_set_dgw_port(const struct ovn_datapath *od,
         }
     } else {
         nat_entry->l3dgw_port =
-            ovn_port_find_bound(lr_ports, nat->gateway_port->name);
+            ovn_port_find(lr_ports, nat->gateway_port->name);
 
         if (!nat_entry->l3dgw_port || nat_entry->l3dgw_port->od != od ||
             !lrp_is_l3dgw(nat_entry->l3dgw_port)) {

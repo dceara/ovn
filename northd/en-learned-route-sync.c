@@ -220,7 +220,7 @@ routes_table_sync(
     const struct sbrec_learned_route *sb_route;
     SBREC_LEARNED_ROUTE_TABLE_FOR_EACH_SAFE (sb_route,
                                              sbrec_learned_route_table) {
-        if (!ovn_port_find_bound(lr_ports, sb_route->logical_port->logical_port)) {
+        if (!ovn_port_find(lr_ports, sb_route->logical_port->logical_port)) {
             sbrec_learned_route_delete(sb_route);
             continue;
         }
