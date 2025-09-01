@@ -173,7 +173,8 @@ OVN To-do List
 
   * Remove datapath_get_nb_uuid_and_type_legacy() after the next LTS
     (likely in 26.09) as all deployments should be using the new
-    SB.Datapath_Binding.type column at that point.
+    SB.Datapath_Binding.type column at that point.  Also remove
+    datapath_legacy_update_run() at that point.
 
 * CI
 

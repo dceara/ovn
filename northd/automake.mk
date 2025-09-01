@@ -3,6 +3,8 @@ bin_PROGRAMS += northd/ovn-northd
 northd_ovn_northd_SOURCES = \
 	northd/aging.c \
 	northd/aging.h \
+	northd/datapath-legacy-update.c \
+	northd/datapath-legacy-update.h \
 	northd/datapath-sync.c \
 	northd/datapath-sync.h \
 	northd/debug.c \

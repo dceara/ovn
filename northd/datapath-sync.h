@@ -103,6 +103,9 @@ struct ovn_synced_datapaths {
      * the global configuration resulted in a change to this value.
      */
     bool vxlan_mode;
+
+    /* IDL pointer to simplify old-style datapath reference updates. */
+    struct ovsdb_idl *sb_idl;
 };
 
 struct ovn_unsynced_datapath *ovn_unsynced_datapath_alloc(

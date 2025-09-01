@@ -17984,3 +17984,105 @@ AT_CHECK([grep 'ls_in_l2_unknown' lflows | ovn_strip_lflows], [0], [dnl
 
 AT_CLEANUP
 ])
+
+dnl This test checks that ovn-northd gracefully upgrades from databases that
+dnl contained "old-style" Datapath_Binding records, i.e., with NB LR/LS UUIDs
+dnl embedded as external IDs and without NB UUIDs being in sync with SB ones.
+dnl
+dnl The test ensures that relevant (non ovn-northd created) SB records are
+dnl maintained and only their datapath references are updated.
+OVN_FOR_EACH_NORTHD_NO_HV([
+AT_SETUP([Old style datapath binding recreation - references update])
+ovn_start --backup-northd=paused
+
+dnl Simulate a chassis.
+check ovn-sbctl chassis-add hv1 geneve 127.0.0.1
+ch=$(fetch_column Chassis _uuid)
+
+dnl A topology with a switch and a router.
+create_topology() {
+    ovn-nbctl                                                     \
+        -- lr-add lr0                                             \
+           -- lrp-add lr0 lrp0 00:00:00:00:ff:01 192.168.0.1/24   \
+        -- ls-add sw0                                             \
+           -- lsp-add sw0 sw0-port1                               \
+           -- lsp-add sw0 lrp0-attachment                         \
+           -- lsp-set-type lrp0-attachment router                 \
+           -- lsp-set-addresses lrp0-attachment 00:00:00:00:ff:01 \
+           -- lsp-set-options lrp0-attachment router-port=lrp0
+}
+delete_topology() {
+    ovn-nbctl lr-del lr0 -- ls-del sw0
+}
+
+check create_topology
+check ovn-nbctl --wait=sb sync
+
+dnl Simulate ovn-controller created dynamic mac bindings, igmp groups
+dnl and learned routes.
+
+lr_dp=$(fetch_column Datapath_Binding _uuid external_ids:name=lr0)
+check_uuid ovn-sbctl create MAC_Binding \
+    ip="11.0.0.43"  datapath=$lr_dp     \
+    mac="'00\:00\:22\:33\:44\:55'"      \
+    logical_port=lrp1
+
+ls_dp=$(fetch_column Datapath_Binding _uuid external_ids:name=sw0)
+lsp_pb=$(fetch_column Port_Binding _uuid logical_port=sw0-port1)
+check_uuid ovn-sbctl create IGMP_Group        \
+    address=224.1.1.1 protocol=IGMPv3         \
+    datapath=$ls_dp chassis=$ch ports=$lsp_pb \
+    chassis_name=hv1
+
+lrp_pb=$(fetch_column Port_Binding _uuid logical_port=lrp0)
+check_uuid ovn-sbctl create Learned_Route         \
+    datapath=$lr_dp logical_port=$lrp_pb          \
+    ip_prefix=42.42.42.42/32 nexthop=192.168.0.42
+
+check ovn-nbctl --wait=hv sync
+
+dnl Pause ovn-northd, recreate the NB (so we get different LR/LS UUIDs),
+dnl mangle the SB.Datapath_Binding external IDs to make them appear as
+dnl old-style SB.Datapath_binding records.
+
+check as northd ovn-appctl -t ovn-northd pause
+check delete_topology
+check create_topology
+
+lr_uuid=$(fetch_column nb:Logical_Router _uuid name=lr0)
+ls_uuid=$(fetch_column nb:Logical_Switch _uuid name=sw0)
+check ovn-sbctl set Datapath_Binding $lr_dp external_ids:logical-router=$lr_uuid
+check ovn-sbctl set Datapath_Binding $ls_dp external_ids:logical-switch=$ls_uuid
+
+mb_uuid=$(fetch_column MAC_Binding _uuid)
+igmp_group_uuid=$(fetch_column IGMP_Group _uuid)
+learned_route_uuid=$(fetch_column Learned_Route _uuid)
+
+dnl Resume ovn-northd, it should recreate old-style datapaths and update
+dnl mac_binding, igmp groups and learned routes datapath reference.
+check as northd ovn-appctl -t ovn-northd resume
+check ovn-nbctl --wait=sb sync
+
+check_column $lr_uuid Datapath_Binding _uuid external_ids:name=lr0
+check_column $ls_uuid Datapath_Binding _uuid external_ids:name=sw0
+check_row_count Datapath_Binding 2
+
+check_column $mb_uuid MAC_binding _uuid \
+    ip="11.0.0.43" datapath=$lr_uuid    \
+    mac="'00\:00\:22\:33\:44\:55'"      \
+    logical_port=lrp1
+check_row_count MAC_Binding 1
+
+check_column $igmp_group_uuid IGMP_Group _uuid   \
+    address=224.1.1.1 protocol=IGMPv3            \
+    datapath=$ls_uuid chassis=$ch ports=$lsp_pb  \
+    chassis_name=hv1
+check_row_count IGMP_Group 1
+
+check_column $learned_route_uuid Learned_Route _uuid \
+    datapath=$lr_uuid logical_port=$lrp_pb           \
+    ip_prefix=42.42.42.42/32 nexthop=192.168.0.42
+check_row_count Learned_Route 1
+
+AT_CLEANUP
+])

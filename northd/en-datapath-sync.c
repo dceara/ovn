@@ -18,6 +18,7 @@
 
 #include "uuidset.h"
 
+#include "datapath-legacy-update.h"
 #include "en-datapath-sync.h"
 #include "en-global-config.h"
 #include "datapath-sync.h"
@@ -30,7 +31,7 @@ VLOG_DEFINE_THIS_MODULE(datapath_sync);
 
 void *
 en_datapath_sync_init(struct engine_node *node OVS_UNUSED,
-                      struct engine_arg *args OVS_UNUSED)
+                      struct engine_arg *arg)
 {
     struct ovn_synced_datapaths *synced_datapaths
         = xmalloc(sizeof *synced_datapaths);
@@ -40,22 +41,17 @@ en_datapath_sync_init(struct engine_node *node OVS_UNUSED,
         .new = HMAPX_INITIALIZER(&synced_datapaths->new),
         .deleted = HMAPX_INITIALIZER(&synced_datapaths->deleted),
         .updated = HMAPX_INITIALIZER(&synced_datapaths->updated),
+        .sb_idl = arg->sb_idl,
     };
 
     return synced_datapaths;
 }
 
 static struct ovn_unsynced_datapath *
-find_unsynced_datapath(const struct ovn_unsynced_datapath_map **maps,
-                       const struct sbrec_datapath_binding *sb_dp)
+find_unsynced_datapath_(const struct ovn_unsynced_datapath_map **maps,
+                        const char *type, struct uuid *nb_uuid)
 {
     enum ovn_datapath_type dp_type;
-    const char *type;
-    struct uuid nb_uuid;
-
-    if (!ovn_datapath_get_nb_uuid_and_type(sb_dp, &nb_uuid, &type)) {
-        return NULL;
-    }
 
     dp_type = ovn_datapath_type_from_string(type);
     if (dp_type == DP_MAX) {
@@ -63,16 +59,45 @@ find_unsynced_datapath(const struct ovn_unsynced_datapath_map **maps,
         return NULL;
     }
 
-    uint32_t hash = uuid_hash(&nb_uuid);
+    uint32_t hash = uuid_hash(nb_uuid);
     struct ovn_unsynced_datapath *dp;
     HMAP_FOR_EACH_WITH_HASH (dp, hmap_node, hash, &maps[dp_type]->dps) {
-        if (uuid_equals(&nb_uuid, &dp->nb_row->uuid)) {
+        if (uuid_equals(nb_uuid, &dp->nb_row->uuid)) {
             return dp;
         }
     }
 
     return NULL;
 }
+
+static struct ovn_unsynced_datapath *
+find_unsynced_datapath(const struct ovn_unsynced_datapath_map **maps,
+                       const struct sbrec_datapath_binding *sb_dp)
+{
+    struct uuid nb_uuid;
+    const char *type;
+
+    if (!ovn_datapath_get_nb_uuid_and_type(sb_dp, &nb_uuid, &type)) {
+        return NULL;
+    }
+
+    return find_unsynced_datapath_(maps, type, &nb_uuid);
+}
+
+static struct ovn_unsynced_datapath *
+find_unsynced_datapath_legacy(const struct ovn_unsynced_datapath_map **maps,
+                              const struct sbrec_datapath_binding *sb_dp)
+{
+    struct uuid nb_uuid;
+    const char *type;
+
+    if (!datapath_get_nb_uuid_and_type_legacy(sb_dp, &nb_uuid, &type)) {
+        return NULL;
+    }
+
+    return find_unsynced_datapath_(maps, type, &nb_uuid);
+}
+
 
 static struct ovn_synced_datapath *
 find_synced_datapath_from_udp(
@@ -167,13 +192,19 @@ create_synced_datapath_candidates_from_sb(
     const struct sbrec_datapath_binding_table *sb_dp_table,
     struct uuidset *visited,
     const struct ovn_unsynced_datapath_map **input_maps,
-    struct vector *candidate_sdps)
+    struct vector *candidate_sdps,
+    struct hmapx *recreated_sdps)
 {
     const struct sbrec_datapath_binding *sb_dp;
     SBREC_DATAPATH_BINDING_TABLE_FOR_EACH_SAFE (sb_dp, sb_dp_table) {
         struct ovn_unsynced_datapath *udp = find_unsynced_datapath(input_maps,
                                                                    sb_dp);
         if (!udp) {
+            if (find_unsynced_datapath_legacy(input_maps, sb_dp)) {
+                hmapx_add(recreated_sdps,
+                          CONST_CAST(struct sbrec_datapath_binding *, sb_dp));
+                continue;
+            }
             sbrec_datapath_binding_delete(sb_dp);
             continue;
         }
@@ -557,8 +588,10 @@ en_datapath_sync_run(struct engine_node *node , void *data)
     struct uuidset visited = UUIDSET_INITIALIZER(&visited);
     struct vector candidate_sdps =
         VECTOR_CAPACITY_INITIALIZER(struct candidate_sdp, num_datapaths);
+    struct hmapx recreated_sdps = HMAPX_INITIALIZER(&recreated_sdps);
     create_synced_datapath_candidates_from_sb(sb_dp_table, &visited,
-                                              input_maps, &candidate_sdps);
+                                              input_maps, &candidate_sdps,
+                                              &recreated_sdps);
 
     const struct engine_context *eng_ctx = engine_get_context();
     create_synced_datapath_candidates_from_nb(input_maps,
@@ -573,6 +606,10 @@ en_datapath_sync_run(struct engine_node *node , void *data)
 
     delete_unassigned_candidates(&candidate_sdps);
     vector_destroy(&candidate_sdps);
+
+    datapath_legacy_update_run(&recreated_sdps, synced_datapaths->sb_idl,
+                               sb_dp_table);
+    hmapx_destroy(&recreated_sdps);
 
     return EN_UPDATED;
 }
