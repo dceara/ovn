@@ -1054,7 +1054,10 @@ lrp_is_l3dgw(const struct ovn_port *op)
            (op->nbrp->n_gateway_chassis || op->nbrp->ha_chassis_group);
 }
 
-struct ovn_port *ovn_port_find(const struct hmap *ports, const char *name);
+struct ovn_port *ovn_port_find_unbound(const struct hmap *ports,
+                                       const char *name);
+struct ovn_port *ovn_port_find_bound(const struct hmap *ports,
+                                     const char *name);
 
 void build_igmp_lflows(struct hmap *igmp_groups,
                        const struct hmap *ls_datapaths,

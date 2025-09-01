@@ -278,7 +278,7 @@ build_nat_route_for_port(const struct ovn_port *advertising_op,
 
         const struct ovn_port *tracked_port =
             nat->is_distributed
-            ? ovn_port_find(ls_ports, nat->nb->logical_port)
+            ? ovn_port_find_bound(ls_ports, nat->nb->logical_port)
             : nat->l3dgw_port;
 
         if (!ar_entry_find(routes, advertising_od->sdp->sb_dp,
