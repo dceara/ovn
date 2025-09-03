@@ -95,9 +95,15 @@ find_synced_datapath_from_sb(const struct hmap *datapaths,
                              const struct sbrec_datapath_binding *sb_dp)
 {
     struct ovn_synced_datapath *sdp;
-    uint32_t hash = uuid_hash(sb_dp->nb_uuid);
+    struct uuid nb_uuid;
+
+    if (!datapath_get_nb_uuid(sb_dp, &nb_uuid)) {
+        return NULL;
+    }
+
+    uint32_t hash = uuid_hash(&nb_uuid);
     HMAP_FOR_EACH_WITH_HASH (sdp, hmap_node, hash, datapaths) {
-        if (uuid_equals(&sdp->nb_row->uuid, sb_dp->nb_uuid)) {
+        if (uuid_equals(&sdp->nb_row->uuid, &nb_uuid)) {
             return sdp;
         }
     }
