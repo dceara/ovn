@@ -20,6 +20,7 @@
 #include "ct-zone.h"
 #include "encaps.h"
 #include "evpn-binding.h"
+#include "evpn-arp.h"
 #include "evpn-fdb.h"
 #include "flow.h"
 #include "ha-chassis.h"
@@ -2779,13 +2780,37 @@ physical_consider_evpn_fdb(const struct evpn_fdb *fdb,
 }
 
 static void
+physical_consider_evpn_arp(const struct evpn_arp *arp,
+                           struct ofpbuf *ofpacts, struct match *match,
+                           struct ovn_desired_flow_table *flow_table)
+{
+    //TODO: not implemented
+    (void) arp;
+    (void) ofpacts;
+    (void) match;
+    (void) flow_table;
+
+    // ofpbuf_clear(ofpacts);
+    // match_init_catchall(match);
+
+    // match_set_metadata(match, htonll(fdb->dp_key));
+    // match_set_dl_dst(match, fdb->mac);
+
+    // put_load(fdb->binding_key, MFF_LOG_REMOTE_OUTPORT, 0, 32, ofpacts);
+    // ofctrl_add_flow(flow_table, OFTABLE_GET_REMOTE_FDB, 150,
+    //                 fdb->flow_uuid.parts[0],
+    //                 match, ofpacts, &fdb->flow_uuid);
+}
+
+static void
 physical_eval_evpn_flows(const struct physical_ctx *ctx,
                          struct ofpbuf *ofpacts,
                          struct ovn_desired_flow_table *flow_table)
 {
     if (hmap_is_empty(ctx->evpn_bindings) &&
         hmap_is_empty(ctx->evpn_multicast_groups) &&
-        hmap_is_empty(ctx->evpn_fdbs)) {
+        hmap_is_empty(ctx->evpn_fdbs) &&
+        hmap_is_empty(ctx->evpn_arps)) {
         return;
     }
 
@@ -2817,6 +2842,11 @@ physical_eval_evpn_flows(const struct physical_ctx *ctx,
     const struct evpn_fdb *fdb;
     HMAP_FOR_EACH (fdb, hmap_node, ctx->evpn_fdbs) {
         physical_consider_evpn_fdb(fdb, ofpacts, &match, flow_table);
+    }
+
+    const struct evpn_arp *arp;
+    HMAP_FOR_EACH (arp, hmap_node, ctx->evpn_arps) {
+        physical_consider_evpn_arp(arp, ofpacts, &match, flow_table);
     }
 }
 
@@ -2997,6 +3027,31 @@ physical_handle_evpn_fdb_changes(struct ovn_desired_flow_table *flow_table,
 
     const struct uuidset_node *uuidset_node;
     UUIDSET_FOR_EACH (uuidset_node, removed_fdbs) {
+        ofctrl_remove_flows(flow_table, &uuidset_node->uuid);
+    }
+}
+
+void
+physical_handle_evpn_arp_changes(struct ovn_desired_flow_table *flow_table,
+                                 const struct hmapx *updated_arps,
+                                 const struct uuidset *removed_arps)
+{
+    struct ofpbuf ofpacts;
+    ofpbuf_init(&ofpacts, 0);
+    struct match match = MATCH_CATCHALL_INITIALIZER;
+
+    const struct hmapx_node *node;
+    HMAPX_FOR_EACH (node, updated_arps) {
+        const struct evpn_arp *arp = node->data;
+
+        ofctrl_remove_flows(flow_table, &arp->flow_uuid);
+        physical_consider_evpn_arp(arp, &ofpacts, &match, flow_table);
+    }
+
+    ofpbuf_uninit(&ofpacts);
+
+    const struct uuidset_node *uuidset_node;
+    UUIDSET_FOR_EACH (uuidset_node, removed_arps) {
         ofctrl_remove_flows(flow_table, &uuidset_node->uuid);
     }
 }

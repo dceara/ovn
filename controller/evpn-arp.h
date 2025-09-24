@@ -13,47 +13,50 @@
  * limitations under the License.
  */
 
-#ifndef EVPN_FDB_H
-#define EVPN_FDB_H 1
+#ifndef EVPN_ARP_H
+#define EVPN_ARP_H 1
 
 #include <stdint.h>
 
 #include "hmapx.h"
+#include "local_data.h"
 #include "openvswitch/hmap.h"
 #include "uuidset.h"
 
 struct unixctl_conn;
 
-struct evpn_fdb_ctx_in {
-    /* Contains 'struct evpn_binding'. */
-    const struct hmap *bindings;
-    /* Contains 'struct evpn_static_entry', one for each FDB. */
-    const struct hmap *static_fdbs;
+struct evpn_arp_ctx_in {
+    /* Contains 'struct evpn_datapath'. */
+    const struct hmap *datapaths;
+    /* Contains 'struct evpn_static_entry' one for each ARP. */
+    const struct hmap *static_arps;
 };
 
-struct evpn_fdb_ctx_out {
-    /* Contains 'struct evpn_fdb'. */
-    struct hmap *fdbs;
+struct evpn_arp_ctx_out {
+    /* Contains 'struct evpn_arp'. */
+    struct hmap *arps;
     /* Contains pointers to 'struct evpn_binding'. */
-    struct hmapx *updated_fdbs;
+    struct hmapx *updated_arps;
     /* Contains 'flow_uuid' from removed 'struct evpn_binding'. */
-    struct uuidset *removed_fdbs;
+    struct uuidset *removed_arps;
 };
 
-struct evpn_fdb {
+struct evpn_arp {
     struct hmap_node hmap_node;
-    /* UUID used to identify physical flows related to this FDB. */
+    /* UUID used to identify physical flows related to this ARP entry. */
     struct uuid flow_uuid;
-    /* IP address of the remote VTEP. */
+    /* MAC address of the remote workload. */
     struct eth_addr mac;
-    /* Local tunnel key to identify the binding. */
-    uint32_t binding_key;
-    uint32_t dp_key;
+    /* IP address of the remote workload. */
+    struct in6_addr ip;
+    uint32_t vni;
+    /* Logical datapath of the switch this was learned on. */
+    const struct local_datapath *ldp;
 };
 
-void evpn_fdb_run(const struct evpn_fdb_ctx_in *, struct evpn_fdb_ctx_out *);
-void evpn_fdbs_destroy(struct hmap *fdbs);
-void evpn_fdb_list(struct unixctl_conn *conn, int argc,
+void evpn_arp_run(const struct evpn_arp_ctx_in *, struct evpn_arp_ctx_out *);
+void evpn_arps_destroy(struct hmap *arps);
+void evpn_arp_list(struct unixctl_conn *conn, int argc,
                    const char *argv[], void *data_);
 
-#endif /* EVPN_FDB_H */
+#endif /* EVPN_ARP_H */
