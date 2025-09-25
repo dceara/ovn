@@ -2779,27 +2779,30 @@ physical_consider_evpn_fdb(const struct evpn_fdb *fdb,
                     match, ofpacts, &fdb->flow_uuid);
 }
 
+//TODO: add a test that checks that local openflows generated for
+// adjacent routers are removed when the router is removed.
 static void
-physical_consider_evpn_arp(const struct evpn_arp *arp,
-                           struct ofpbuf *ofpacts, struct match *match,
+physical_consider_evpn_arp(const struct hmap *local_datapaths,
+                           const struct evpn_arp *arp,
                            struct ovn_desired_flow_table *flow_table)
 {
-    //TODO: not implemented
-    (void) arp;
-    (void) ofpacts;
-    (void) match;
-    (void) flow_table;
+    //TODO: walk connected routers:
+    // - for each patch or l3gw port learn mac binding
+    const struct peer_ports *peers;
+    VECTOR_FOR_EACH_PTR (&arp->ldp->peer_ports, peers) {
+        const struct sbrec_port_binding *remote_pb = peers->remote;
+        struct local_datapath *peer_ld =
+            get_local_datapath(local_datapaths,
+                               remote_pb->datapath->tunnel_key);
+        if (!peer_ld || peer_ld->is_switch) {
+            continue;
+        }
 
-    // ofpbuf_clear(ofpacts);
-    // match_init_catchall(match);
-
-    // match_set_metadata(match, htonll(fdb->dp_key));
-    // match_set_dl_dst(match, fdb->mac);
-
-    // put_load(fdb->binding_key, MFF_LOG_REMOTE_OUTPORT, 0, 32, ofpacts);
-    // ofctrl_add_flow(flow_table, OFTABLE_GET_REMOTE_FDB, 150,
-    //                 fdb->flow_uuid.parts[0],
-    //                 match, ofpacts, &fdb->flow_uuid);
+        consider_neighbor_flow(remote_pb, &arp->flow_uuid, &arp->ip, arp->mac,
+                               flow_table, 90, false);  //TODO: double check priority:
+                                                        // - we use 100 for dynamic SB mac bindings
+                                                        // - we use 150 or 50 for static SB mac bindings
+    }
 }
 
 static void
@@ -2846,7 +2849,7 @@ physical_eval_evpn_flows(const struct physical_ctx *ctx,
 
     const struct evpn_arp *arp;
     HMAP_FOR_EACH (arp, hmap_node, ctx->evpn_arps) {
-        physical_consider_evpn_arp(arp, ofpacts, &match, flow_table);
+        physical_consider_evpn_arp(ctx->local_datapaths, arp, flow_table);
     }
 }
 
@@ -3032,23 +3035,19 @@ physical_handle_evpn_fdb_changes(struct ovn_desired_flow_table *flow_table,
 }
 
 void
-physical_handle_evpn_arp_changes(struct ovn_desired_flow_table *flow_table,
+physical_handle_evpn_arp_changes(const struct hmap *local_datapaths,
+                                 struct ovn_desired_flow_table *flow_table,
                                  const struct hmapx *updated_arps,
                                  const struct uuidset *removed_arps)
 {
-    struct ofpbuf ofpacts;
-    ofpbuf_init(&ofpacts, 0);
-    struct match match = MATCH_CATCHALL_INITIALIZER;
-
+    //TODO: pass match + ofpacts to avoid extra allocs?
     const struct hmapx_node *node;
     HMAPX_FOR_EACH (node, updated_arps) {
         const struct evpn_arp *arp = node->data;
 
         ofctrl_remove_flows(flow_table, &arp->flow_uuid);
-        physical_consider_evpn_arp(arp, &ofpacts, &match, flow_table);
+        physical_consider_evpn_arp(local_datapaths, arp, flow_table);
     }
-
-    ofpbuf_uninit(&ofpacts);
 
     const struct uuidset_node *uuidset_node;
     UUIDSET_FOR_EACH (uuidset_node, removed_arps) {

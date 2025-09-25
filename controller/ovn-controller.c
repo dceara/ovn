@@ -5011,10 +5011,14 @@ static enum engine_input_handler_result
 pflow_output_arp_handler(struct engine_node *node, void *data)
 {
     struct ed_type_pflow_output *pfo = data;
+    struct ed_type_runtime_data *rt_data =
+        engine_get_input_data("runtime_data", node);
     struct ed_type_evpn_arp *ea_data =
         engine_get_input_data("evpn_arp", node);
 
-    physical_handle_evpn_arp_changes(&pfo->flow_table, &ea_data->updated_arps,
+    physical_handle_evpn_arp_changes(&rt_data->local_datapaths,
+                                     &pfo->flow_table,
+                                     &ea_data->updated_arps,
                                      &ea_data->removed_arps);
     return EN_HANDLED_UPDATED;
 }

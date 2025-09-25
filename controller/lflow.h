@@ -206,4 +206,12 @@ bool lflow_handle_changed_mc_groups(struct lflow_ctx_in *,
 bool lflow_handle_changed_port_bindings(struct lflow_ctx_in *,
                                         struct lflow_ctx_out *);
 
+//TODO: move to a separate neighbor-flow.[ch]
+void
+consider_neighbor_flow(const struct sbrec_port_binding *,
+                       const struct uuid *neighbor_uuid,
+                       const struct in6_addr *, struct eth_addr,
+                       struct ovn_desired_flow_table *,
+                       uint16_t priority, bool needs_usage_tracking);
+
 #endif /* controller/lflow.h */
