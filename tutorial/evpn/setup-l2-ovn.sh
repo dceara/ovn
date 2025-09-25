@@ -63,7 +63,7 @@ podman exec $h1 ovn-nbctl lr-add lr \
   -- set logical_router lr options:chassis=$h1
 
 podman exec $h1 ovn-nbctl ls-add ls-ext
-podman exec $h1 ovn-nbctl lrp-add lr lrp-ext 00:00:00:00:01:01 20.0.0.1/8
+podman exec $h1 ovn-nbctl lrp-add lr lrp-ext 00:00:00:00:01:01 20.0.0.1/8 42.42.255.254/16
 podman exec $h1 ovn-nbctl lsp-add ls-ext ls-ext-lr \
   -- lsp-set-type ls-ext-lr router \
   -- lsp-set-options ls-ext-lr router-port=lrp-ext \
@@ -105,6 +105,18 @@ podman exec $h1 ovn-nbctl lsp-add ls-ext workload \
 podman exec $h1 ovn-nbctl set logical-switch ls-ext other_config:dynamic-routing-vni=10
 podman exec $h1 ovn-nbctl set logical-switch ls-ext other_config:dynamic-routing-redistribute=fdb
 
+# Configure an OVN workload attached to ls-int.
+podman exec $h1 ovs-vsctl add-port br-int workload-int \
+  -- set interface workload-int type=internal \
+  -- set interface workload-int external_ids:iface-id=workload-int
+podman exec $h1 ip netns add workload-int
+podman exec $h1 ip link set dev workload-int netns workload-int
+podman exec $h1 ip netns exec workload-int ip link set workload-int address 00:00:00:00:42:42
+podman exec $h1 ip netns exec workload-int ip a a dev workload-int 30.0.0.42/16
+podman exec $h1 ip netns exec workload-int ip link set dev workload-int up
+podman exec $h1 ip netns exec workload-int ip r a default via 30.0.0.1
+podman exec $h1 ovn-nbctl lsp-add ls-int workload-int \
+  -- lsp-set-addresses workload-int "00:00:00:00:42:42 30.0.0.42/16"
 echo Sleeping for a bit...
 sleep 5
 
