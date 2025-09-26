@@ -26,7 +26,8 @@ consider_neighbor_flow(const struct sbrec_port_binding *pb,
                        const struct uuid *neighbor_uuid,
                        const struct in6_addr *ip, struct eth_addr mac,
                        struct ovn_desired_flow_table *flow_table,
-                       uint16_t priority, bool needs_usage_tracking)
+                       enum neigh_of_rule_prio priority,
+                       bool needs_usage_tracking)
 {
     struct match get_arp_match = MATCH_CATCHALL_INITIALIZER;
     struct match lookup_arp_match = MATCH_CATCHALL_INITIALIZER;

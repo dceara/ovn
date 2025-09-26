@@ -21,11 +21,30 @@
 #include "openvswitch/uuid.h"
 #include "ofctrl.h"
 
+/* Priorities of ovn-controller generated flows for various types of MAC
+ * Bindings in different situations.  Valid preference orders, based on
+ * the "dynamic-routing-arp-prefer-local" logical switch config and the
+ * SB.Static_MAC_Binding.override_dynamic_mac value are:
+ *
+ * - EVPN-learned < static-mac-binding < dynamic-mac-binding
+ * - EVPN-learned < dynamic-mac-binding < static-mac-binding
+ * - static-mac-binding < dynamic-mac-binding < EVPN-learned
+ * - dynamic-mac-binding < static-mac-binding < EVPN-learned
+ */
+enum neigh_of_rule_prio {
+    NEIGH_OF_EVPN_MAC_BINDING_LOW_PRIO    = 20,
+    NEIGH_OF_STATIC_MAC_BINDING_LOW_PRIO  = 50,
+    NEIGH_OF_DYNAMIC_MAC_BINDING_PRIO     = 100,
+    NEIGH_OF_STATIC_MAC_BINDING_HIGH_PRIO = 150,
+    NEIGH_OF_EVPN_MAC_BINDING_HIGH_PRIO   = 200,
+};
+
 void
 consider_neighbor_flow(const struct sbrec_port_binding *,
                        const struct uuid *neighbor_uuid,
                        const struct in6_addr *, struct eth_addr,
                        struct ovn_desired_flow_table *,
-                       uint16_t priority, bool needs_usage_tracking);
+                       enum neigh_of_rule_prio priority,
+                       bool needs_usage_tracking);
 
 #endif  /* NEIGHBOR_OF_H */

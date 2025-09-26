@@ -20,6 +20,7 @@
 
 #include "hmapx.h"
 #include "local_data.h"
+#include "neighbor-of.h"
 #include "openvswitch/hmap.h"
 #include "uuidset.h"
 
@@ -52,6 +53,8 @@ struct evpn_arp {
     uint32_t vni;
     /* Logical datapath of the switch this was learned on. */
     const struct local_datapath *ldp;
+    /* Priority to use for this ARP entry at OpenFlow level. */
+    enum neigh_of_rule_prio priority;
 };
 
 void evpn_arp_run(const struct evpn_arp_ctx_in *, struct evpn_arp_ctx_out *);

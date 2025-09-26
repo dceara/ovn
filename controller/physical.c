@@ -2797,9 +2797,8 @@ physical_consider_evpn_arp(const struct hmap *local_datapaths,
             continue;
         }
 
-        //TODO: double check priority: do we need a dynamic-routing-arp-prefer-local knob?
         consider_neighbor_flow(remote_pb, &arp->flow_uuid, &arp->ip, arp->mac,
-                               flow_table, 90, false);
+                               flow_table, arp->priority, false);
     }
 }
 

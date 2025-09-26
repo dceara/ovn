@@ -3781,28 +3781,28 @@ AT_CHECK_UNQUOTED([m_as ovn-gw-1 ovs-ofctl dump-flows br-int table=OFTABLE_MAC_B
                    awk '{print $7, $8}' | sort], [0], [dnl
 priority=100,reg0=0xa00000b,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:00:01,load:0x1->NXM_NX_REG10[[6]]
 priority=100,reg0=0xa00000c,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:00:02,load:0x1->NXM_NX_REG10[[6]]
-priority=90,reg0=0xa000029,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:01:00,load:0x1->NXM_NX_REG10[[6]]
+priority=200,reg0=0xa000029,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:01:00,load:0x1->NXM_NX_REG10[[6]]
 ])
 
 AT_CHECK_UNQUOTED([m_as ovn-gw-1 ovs-ofctl dump-flows br-int table=OFTABLE_MAC_LOOKUP | grep priority | \
                    awk '{print $7, $8}' | sort], [0], [dnl
 priority=100,arp,reg0=0xa00000b,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:00:01 actions=load:0x1->NXM_NX_REG10[[6]]
 priority=100,arp,reg0=0xa00000c,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:00:02 actions=load:0x1->NXM_NX_REG10[[6]]
-priority=90,arp,reg0=0xa000029,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:01:00 actions=load:0x1->NXM_NX_REG10[[6]]
+priority=200,arp,reg0=0xa000029,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:01:00 actions=load:0x1->NXM_NX_REG10[[6]]
 ])
 
 AT_CHECK_UNQUOTED([m_as ovn-gw-2 ovs-ofctl dump-flows br-int table=OFTABLE_MAC_BINDING | grep priority | \
                    awk '{print $7, $8}' | sort], [0], [dnl
 priority=100,reg0=0xa00000b,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:00:01,load:0x1->NXM_NX_REG10[[6]]
 priority=100,reg0=0xa00000c,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:00:02,load:0x1->NXM_NX_REG10[[6]]
-priority=90,reg0=0xa00002a,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:02:00,load:0x1->NXM_NX_REG10[[6]]
+priority=200,reg0=0xa00002a,reg15=0x$rtr_port_key,metadata=0x$rtr_dp_key actions=mod_dl_dst:00:00:00:00:02:00,load:0x1->NXM_NX_REG10[[6]]
 ])
 
 AT_CHECK_UNQUOTED([m_as ovn-gw-2 ovs-ofctl dump-flows br-int table=OFTABLE_MAC_LOOKUP | grep priority | \
                    awk '{print $7, $8}' | sort], [0], [dnl
 priority=100,arp,reg0=0xa00000b,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:00:01 actions=load:0x1->NXM_NX_REG10[[6]]
 priority=100,arp,reg0=0xa00000c,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:00:02 actions=load:0x1->NXM_NX_REG10[[6]]
-priority=90,arp,reg0=0xa00002a,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:02:00 actions=load:0x1->NXM_NX_REG10[[6]]
+priority=200,arp,reg0=0xa00002a,reg14=0x$rtr_port_key,metadata=0x$rtr_dp_key,dl_src=00:00:00:00:02:00 actions=load:0x1->NXM_NX_REG10[[6]]
 ])
 
 AS_BOX([Check traffic to "fabric" hosts - ping from internal hosts])

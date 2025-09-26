@@ -1294,7 +1294,7 @@ consider_neighbor_flow__(struct ovsdb_idl_index *sbrec_port_binding_by_name,
                          const struct sbrec_mac_binding *b,
                          const struct sbrec_static_mac_binding *smb,
                          struct ovn_desired_flow_table *flow_table,
-                         uint16_t priority)
+                         enum neigh_of_rule_prio priority)
 {
     if (!b && !smb) {
         return;
@@ -1344,7 +1344,8 @@ add_neighbor_flows(struct ovsdb_idl_index *sbrec_port_binding_by_name,
     const struct sbrec_mac_binding *b;
     SBREC_MAC_BINDING_TABLE_FOR_EACH (b, mac_binding_table) {
         consider_neighbor_flow__(sbrec_port_binding_by_name, local_datapaths,
-                                 b, NULL, flow_table, 100);
+                                 b, NULL, flow_table,
+                                 NEIGH_OF_DYNAMIC_MAC_BINDING_PRIO);
     }
 
     /* Add flows for statically configured MAC bindings */
@@ -1352,7 +1353,9 @@ add_neighbor_flows(struct ovsdb_idl_index *sbrec_port_binding_by_name,
     SBREC_STATIC_MAC_BINDING_TABLE_FOR_EACH (smb, smb_table) {
         consider_neighbor_flow__(sbrec_port_binding_by_name, local_datapaths,
                                  NULL, smb, flow_table,
-                                 smb->override_dynamic_mac ? 150 : 50);
+                                 smb->override_dynamic_mac
+                                 ? NEIGH_OF_STATIC_MAC_BINDING_HIGH_PRIO
+                                 : NEIGH_OF_STATIC_MAC_BINDING_LOW_PRIO);
     }
 }
 
@@ -1882,8 +1885,8 @@ lflow_handle_changed_mac_bindings(
             VLOG_DBG("handle new mac_binding "UUID_FMT,
                      UUID_ARGS(&mb->header_.uuid));
             consider_neighbor_flow__(sbrec_port_binding_by_name,
-                                     local_datapaths, mb, NULL,
-                                     flow_table, 100);
+                                     local_datapaths, mb, NULL, flow_table,
+                                     NEIGH_OF_DYNAMIC_MAC_BINDING_PRIO);
         }
     }
 }
@@ -1912,7 +1915,9 @@ lflow_handle_changed_static_mac_bindings(
                      UUID_ARGS(&smb->header_.uuid));
             consider_neighbor_flow__(sbrec_port_binding_by_name,
                                      local_datapaths, NULL, smb, flow_table,
-                                     smb->override_dynamic_mac ? 150 : 50);
+                                     smb->override_dynamic_mac
+                                     ? NEIGH_OF_STATIC_MAC_BINDING_HIGH_PRIO
+                                     : NEIGH_OF_STATIC_MAC_BINDING_LOW_PRIO);
         }
     }
 }
@@ -2117,7 +2122,8 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
         mb, mb_index_row, l_ctx_in->sbrec_mac_binding_by_datapath) {
         consider_neighbor_flow__(l_ctx_in->sbrec_port_binding_by_name,
                                  l_ctx_in->local_datapaths,
-                                 mb, NULL, l_ctx_out->flow_table, 100);
+                                 mb, NULL, l_ctx_out->flow_table,
+                                 NEIGH_OF_DYNAMIC_MAC_BINDING_PRIO);
     }
     sbrec_mac_binding_index_destroy_row(mb_index_row);
 
@@ -2131,7 +2137,9 @@ lflow_add_flows_for_datapath(const struct sbrec_datapath_binding *dp,
         consider_neighbor_flow__(l_ctx_in->sbrec_port_binding_by_name,
                                  l_ctx_in->local_datapaths,
                                  NULL, smb, l_ctx_out->flow_table,
-                                 smb->override_dynamic_mac ? 150 : 50);
+                                 smb->override_dynamic_mac
+                                 ? NEIGH_OF_STATIC_MAC_BINDING_HIGH_PRIO
+                                 : NEIGH_OF_STATIC_MAC_BINDING_LOW_PRIO);
     }
     sbrec_static_mac_binding_index_destroy_row(smb_index_row);
 
