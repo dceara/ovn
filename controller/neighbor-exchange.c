@@ -102,8 +102,9 @@ neighbor_exchange_run(const struct neighbor_exchange_ctx_in *n_ctx_in,
                     if (!evpn_static_entry_find(n_ctx_out->static_arps,
                                                 ne->lladdr, ne->addr,
                                                 nim->vni)) {
-                        evpn_static_entry_add(n_ctx_out->static_arps, ne->lladdr,
-                                              ne->addr, nim->vni);
+                        evpn_static_entry_add(n_ctx_out->static_arps,
+                                              ne->lladdr, ne->addr,
+                                              nim->vni);
                     }
                 }
             }
@@ -121,8 +122,9 @@ neighbor_exchange_run(const struct neighbor_exchange_ctx_in *n_ctx_in,
                     if (!evpn_static_entry_find(n_ctx_out->static_fdbs,
                                                 ne->lladdr, ne->addr,
                                                 nim->vni)) {
-                        evpn_static_entry_add(n_ctx_out->static_fdbs, ne->lladdr,
-                                              ne->addr, nim->vni);
+                        evpn_static_entry_add(n_ctx_out->static_fdbs,
+                                              ne->lladdr, ne->addr,
+                                              nim->vni);
                     }
                 }
             }

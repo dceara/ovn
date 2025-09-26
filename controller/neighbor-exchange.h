@@ -39,7 +39,7 @@ struct neighbor_exchange_ctx_out {
     struct hmap *static_fdbs;
     /* Contains 'struct evpn_static_entry', remote ARP entries learnt through
      * EVPN. */
-    struct hmap *static_arps;  //TODO: initialize, cleanup, use
+    struct hmap *static_arps;
 };
 
 struct evpn_remote_vtep {

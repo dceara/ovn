@@ -6075,7 +6075,7 @@ struct ed_type_neighbor_exchange {
     struct hmap static_fdbs;
     /* Contains 'struct evpn_static_entry', remote ARP entries learnt through
      * EVPN. */
-    struct hmap static_arps;  //TODO: cleanup, use
+    struct hmap static_arps;
 };
 
 static void *

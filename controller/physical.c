@@ -55,6 +55,7 @@
 #include "util.h"
 #include "vswitch-idl.h"
 #include "hmapx.h"
+#include "neighbor-of.h"
 
 VLOG_DEFINE_THIS_MODULE(physical);
 
@@ -2779,15 +2780,13 @@ physical_consider_evpn_fdb(const struct evpn_fdb *fdb,
                     match, ofpacts, &fdb->flow_uuid);
 }
 
-//TODO: add a test that checks that local openflows generated for
-// adjacent routers are removed when the router is removed.
 static void
 physical_consider_evpn_arp(const struct hmap *local_datapaths,
                            const struct evpn_arp *arp,
                            struct ovn_desired_flow_table *flow_table)
 {
-    //TODO: walk connected routers:
-    // - for each patch or l3gw port learn mac binding
+    /* Walk connected OVN routers and install neighbor flows for the ARPs
+     * learned on EVPN datapaths.*/
     const struct peer_ports *peers;
     VECTOR_FOR_EACH_PTR (&arp->ldp->peer_ports, peers) {
         const struct sbrec_port_binding *remote_pb = peers->remote;
@@ -2798,10 +2797,9 @@ physical_consider_evpn_arp(const struct hmap *local_datapaths,
             continue;
         }
 
+        //TODO: double check priority: do we need a dynamic-routing-arp-prefer-local knob?
         consider_neighbor_flow(remote_pb, &arp->flow_uuid, &arp->ip, arp->mac,
-                               flow_table, 90, false);  //TODO: double check priority:
-                                                        // - we use 100 for dynamic SB mac bindings
-                                                        // - we use 150 or 50 for static SB mac bindings
+                               flow_table, 90, false);
     }
 }
 
@@ -3040,7 +3038,7 @@ physical_handle_evpn_arp_changes(const struct hmap *local_datapaths,
                                  const struct hmapx *updated_arps,
                                  const struct uuidset *removed_arps)
 {
-    //TODO: pass match + ofpacts to avoid extra allocs?
+
     const struct hmapx_node *node;
     HMAPX_FOR_EACH (node, updated_arps) {
         const struct evpn_arp *arp = node->data;
