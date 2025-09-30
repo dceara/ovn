@@ -135,7 +135,6 @@ static bool vxlan_mode;
 #define REGBIT_IP_FRAG            "reg0[19]"
 #define REGBIT_ACL_PERSIST_ID     "reg0[20]"
 #define REGBIT_ACL_HINT_ALLOW_PERSISTED "reg0[21]"
-#define REGBIT_PKT_SAMPLED        "reg0[22]"
 
 /* Register definitions for switches and routers. */
 
@@ -5922,7 +5921,7 @@ skip_port_from_conntrack(const struct ovn_datapath *od, struct ovn_port *op,
     const char *ingress_action = "next;";
     const char *egress_action = has_stateful_acl
                                 ? "next;"
-                                : REGBIT_PKT_SAMPLED" = 0; ct_clear; next;";
+                                : "flags.pkt_sampled = 0; ct_clear; next;";
 
     char *ingress_match = xasprintf("ip && inport == %s", op->json_key);
     char *egress_match = xasprintf("ip && outport == %s", op->json_key);
@@ -6535,9 +6534,12 @@ build_acl_sample_action(struct ds *actions, const struct nbrec_acl *acl,
         point_id = sample->metadata;
     }
 
+    if (sample->n_collectors) {
+        ds_put_cstr(actions, "flags.pkt_sampled = 1; ");
+    }
+
     for (size_t i = 0; i < sample->n_collectors; i++) {
-        ds_put_format(actions, REGBIT_PKT_SAMPLED" = 1; "
-                               "sample(probability=%"PRIu16","
+        ds_put_format(actions, "sample(probability=%"PRIu16","
                                "collector_set=%"PRIu32","
                                "obs_domain=%"PRIu32","
                                "obs_point=%"PRIu32");",
@@ -6695,7 +6697,7 @@ build_acl_sample_est_orig_stateful_flows(const struct ovn_datapath *od,
     ds_clear(actions);
     ds_clear(match);
 
-    ds_put_cstr(match, REGBIT_PKT_SAMPLED" == 0 && "
+    ds_put_cstr(match, "flags.pkt_sampled == 0 && "
                        "ip && ct.trk && "
                        "(ct.est || ct.rel) && "
                        "!ct.rpl && ");
@@ -6729,7 +6731,7 @@ build_acl_sample_est_rpl_stateful_flows(const struct ovn_datapath *od,
     ds_clear(actions);
     ds_clear(match);
 
-    ds_put_cstr(match, REGBIT_PKT_SAMPLED" == 0 && "
+    ds_put_cstr(match, "flags.pkt_sampled == 0 && "
                        "ip && ct.trk && "
                        "(ct.est || ct.rel) && "
                        "ct.rpl && ");
@@ -6807,7 +6809,7 @@ build_acl_sample_generic_new_flows(const struct ovn_datapath *od,
                          (uint8_t) coll->id,
                          (uint8_t) obs_stage);
 
-    ds_put_format(actions, REGBIT_PKT_SAMPLED" = 1; "
+    ds_put_format(actions, "flags.pkt_sampled = 1; "
                            "sample(probability=%"PRIu16","
                            "collector_set=%"PRIu32","
                            "obs_domain=%"PRIu32","
@@ -6838,7 +6840,7 @@ build_acl_sample_generic_est_flows(const struct ovn_datapath *od,
     ds_clear(match);
     ds_clear(actions);
 
-    ds_put_cstr(match, REGBIT_PKT_SAMPLED" == 0 && "
+    ds_put_cstr(match, "flags.pkt_sampled == 0 && "
                        "ip && ct.trk && (ct.est || ct.rel) && "
                        "ct_label.obs_unused == 0 && ");
 
@@ -6848,7 +6850,7 @@ build_acl_sample_generic_est_flows(const struct ovn_datapath *od,
                          (uint8_t) coll->id,
                          (uint8_t) obs_stage);
 
-    ds_put_format(actions, REGBIT_PKT_SAMPLED" = 1; "
+    ds_put_format(actions, "flags.pkt_sampled = 1; "
                            "sample(probability=%"PRIu16","
                            "collector_set=%"PRIu32","
                            "obs_domain=%"PRIu32","
