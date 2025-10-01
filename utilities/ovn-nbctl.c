@@ -2460,7 +2460,7 @@ nbctl_nf_group_del_network_function(struct ctl_context *ctx)
         }
     }
     if (must_exist) {
-        ctl_error(ctx, "network-function %s is not part of any logical switch",
+        ctl_error(ctx, "network-function %s is not part of any group",
                   ctx->argv[1]);
         return;
     }
