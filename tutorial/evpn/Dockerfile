@@ -51,7 +51,7 @@ strace
 
 ARG OVN_PATH
 
-RUN git clone https://github.com/almusil/ovn --single-branch --revision bgp-evpn --depth 1
+RUN git clone https://github.com/ovn-org/ovn --single-branch --revision main --depth 1
 
 WORKDIR /ovn
 RUN git submodule update --init --depth 1
