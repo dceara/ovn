@@ -901,8 +901,8 @@
 
       <li>
         The priority-65532 flows that allow response and related traffic, also
-        set <code>reg8[21] = ct_label.network_function_group</code>, which gets
-        checked in the <code>Network Function</code> table.
+        set <code>reg8[21] = ct_label.nf_group</code>, which gets checked in
+        the <code>Network Function</code> table.
       </li>
 
       <li>
@@ -1491,13 +1491,13 @@
       </li>
 
       <li>
-        Correspinding to each of the two priority 100 flows above, a priority
+        Corresponding to each of the two priority 100 flows above, a priority
         110 flow is added, which has the following extra match and
         action, but otherwise identical to the priority 100 flow.
         Match: <code>reg8[21] == 1</code> (packet matched an ACL with
         <code>network_function_group</code> set)
-        Action: <code>ct_label.network_function_group = 1;
-        ct_label.network_function_group_id = reg0[22..29];</code>
+        Action: <code>ct_label.nf_group = 1;
+        ct_label.nf_group_id = reg0[22..29];</code>
         This is to commit the network_function information in conntrack so that
         the response and related packets can be redirected to it as well.
       </li>
@@ -1560,7 +1560,7 @@
       <li>
         For each network_function_group <var>id</var>, a priority-99 rule
         matches <code>reg8[21] == 1 &amp;&amp; reg8[22] == 0 &amp;&amp;
-        ct_label.network_function_group_id == <var>id</var></code> and takes
+        ct_label.nf_group_id == <var>id</var></code> and takes
         identical action as above. This ensures redirection of response and
         related packets matching <code>to-lport</code> ACLs with
         network_function.
@@ -2758,7 +2758,7 @@ output;
       <li>
         For each network_function_group <var>id</var>, a priority-99 rule
         matches <code>reg8[21] == 1 &amp;&amp; reg8[22] == 0 &amp;&amp;
-        ct_label.network_function_group_id == <var>id</var></code> and takes
+        ct_label.nf_group_id == <var>id</var></code> and takes
         identical action as above. This ensures redirection if response and
         related packets for flows matching <code>from-lport</code> ACLs with
         network_function.

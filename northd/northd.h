@@ -534,8 +534,7 @@ enum ovn_stage {
     PIPELINE_STAGE(SWITCH, IN,  ACL_AFTER_LB_ACTION,  22,    \
                    "ls_in_acl_after_lb_action")  \
     PIPELINE_STAGE(SWITCH, IN,  STATEFUL,      23, "ls_in_stateful")      \
-    PIPELINE_STAGE(SWITCH, IN,  NETWORK_FUNCTION, 24, \
-                   "ls_in_network_function") \
+    PIPELINE_STAGE(SWITCH, IN,  NF,            24, "ls_in_network_function") \
     PIPELINE_STAGE(SWITCH, IN,  ARP_ND_RSP,    25, "ls_in_arp_rsp")       \
     PIPELINE_STAGE(SWITCH, IN,  DHCP_OPTIONS,  26, "ls_in_dhcp_options")  \
     PIPELINE_STAGE(SWITCH, IN,  DHCP_RESPONSE, 27, "ls_in_dhcp_response") \
@@ -558,7 +557,7 @@ enum ovn_stage {
     PIPELINE_STAGE(SWITCH, OUT, MIRROR,          9, "ls_out_mirror")         \
     PIPELINE_STAGE(SWITCH, OUT, QOS,            10, "ls_out_qos")            \
     PIPELINE_STAGE(SWITCH, OUT, STATEFUL,       11, "ls_out_stateful")       \
-    PIPELINE_STAGE(SWITCH, OUT, NETWORK_FUNCTION, 12, \
+    PIPELINE_STAGE(SWITCH, OUT, NF,             12,                          \
                    "ls_out_network_function") \
     PIPELINE_STAGE(SWITCH, OUT, CHECK_PORT_SEC, 13, "ls_out_check_port_sec") \
     PIPELINE_STAGE(SWITCH, OUT, APPLY_PORT_SEC, 14, "ls_out_apply_port_sec") \
