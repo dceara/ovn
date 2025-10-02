@@ -3087,7 +3087,7 @@ create_or_get_service_mon(struct ovsdb_idl_txn *ovnsb_txn,
     sbrec_service_monitor_set_logical_port(sbrec_mon, logical_port);
     if (logical_input_port) {
         sbrec_service_monitor_set_logical_input_port(sbrec_mon,
-            logical_input_port);
+                                                     logical_input_port);
     }
     sbrec_service_monitor_set_protocol(sbrec_mon, protocol);
     sbrec_service_monitor_set_remote(sbrec_mon, remote_backend);
@@ -3112,27 +3112,24 @@ ovn_nf_svc_create(struct ovsdb_idl_txn *ovnsb_txn,
                   const char *logical_port, const char *logical_input_port,
                   const struct smap *health_check_options)
 {
+    static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+
     if (!ip_src || !ip_dst || !mac_src || !mac_dst) {
-       static struct vlog_rate_limit rl =
-          VLOG_RATE_LIMIT_INIT(1, 1);
-       VLOG_ERR_RL(&rl, "NetworkFunction: invalid  service monitor src_mac:%s "
-                    "dst_mac:%s src_ip:%s dst_ip:%s\n",
-                     mac_src, mac_dst, ip_src, ip_dst);
+        VLOG_ERR_RL(&rl, "NetworkFunction: invalid  service monitor src_mac:%s "
+                         "dst_mac:%s src_ip:%s dst_ip:%s\n",
+                          mac_src, mac_dst, ip_src, ip_dst);
         return;
     }
 
     const char *ports[] = {logical_port, logical_input_port};
-    size_t n_ports = sizeof(ports) / sizeof(ports[0]);
     const char *chassis_name = NULL;
     bool port_up = true;
 
-    for (size_t i = 0; i < n_ports; i++) {
+    for (size_t i = 0; i < ARRAY_SIZE(ports); i++) {
         const char *port = ports[i];
         sset_add(svc_monitor_lsps, port);
         struct ovn_port *op = ovn_port_find(ls_ports, port);
         if (op == NULL) {
-            static struct vlog_rate_limit rl =
-            VLOG_RATE_LIMIT_INIT(1, 1);
             VLOG_ERR_RL(&rl, "NetworkFunction: skip health check, port:%s "
                         "not found\n",  port);
             return;
@@ -3142,15 +3139,12 @@ ovn_nf_svc_create(struct ovsdb_idl_txn *ovnsb_txn,
             if (chassis_name == NULL) {
                 chassis_name = op->sb->chassis->name;
             } else if (strcmp(chassis_name, op->sb->chassis->name)) {
-                 static struct vlog_rate_limit rl =
-                    VLOG_RATE_LIMIT_INIT(1, 1);
                  VLOG_ERR_RL(&rl, "NetworkFunction: chassis mismatch "
                       " chassis:%s port:%s\n", op->sb->chassis->name, port);
             }
         }
-        port_up &= (op->sb->n_up && op->sb->up[0]);
+        port_up = port_up && (op->sb->n_up && op->sb->up[0]);
     }
-
 
     struct service_monitor_info *mon_info =
         create_or_get_service_mon(ovnsb_txn,
@@ -3189,11 +3183,9 @@ ovn_nf_svc_create(struct ovsdb_idl_txn *ovnsb_txn,
         sbrec_service_monitor_set_ip(mon_info->sbrec_mon, ip_dst);
     }
 
-    if (!port_up
-        && mon_info->sbrec_mon->status
+    if (!port_up && mon_info->sbrec_mon->status
         && !strcmp(mon_info->sbrec_mon->status, "online")) {
-        sbrec_service_monitor_set_status(mon_info->sbrec_mon,
-                                         "offline");
+        sbrec_service_monitor_set_status(mon_info->sbrec_mon, "offline");
     }
     mon_info->required = true;
 }
@@ -18119,8 +18111,7 @@ network_function_update_active(const struct nbrec_network_function_group *nfg,
     }
     /* Array to store healthy network functions */
     struct nbrec_network_function **healthy_nfs =
-        xmalloc(sizeof(struct nbrec_network_function *) \
-                       * nfg->n_network_function);
+        xmalloc(sizeof *healthy_nfs * nfg->n_network_function);
     struct nbrec_network_function *nf_active_prev = NULL;
     if (nfg->network_function_active) {
         nf_active_prev = nfg->network_function_active;
@@ -18180,7 +18171,6 @@ network_function_update_active(const struct nbrec_network_function_group *nfg,
                      "selected network_function %s as active", nfg->name,
                      nf_active->name);
     }
-
     free(healthy_nfs);
 
     if (nf_active_prev != nf_active) {

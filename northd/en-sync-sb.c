@@ -479,9 +479,8 @@ sync_addr_sets(struct ovsdb_idl_txn *ovnsb_txn,
 
     /* Service monitor MACs. */
     const char *svc_macs[] = {svc_monitor_macp, svc_monitor_macp_dst};
-    size_t n_macs = sizeof(svc_macs) / sizeof(svc_macs[0]);
-    struct sorted_array svc = sorted_array_from_unsorted(svc_macs, n_macs,
-                                                        false);
+    struct sorted_array svc =
+        sorted_array_from_unsorted(svc_macs, ARRAY_SIZE(svc_macs), false);
     sync_addr_set(ovnsb_txn, "svc_monitor_mac", &svc, &sb_address_sets);
     sorted_array_destroy(&svc);
 

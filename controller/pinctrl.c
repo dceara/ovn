@@ -6976,8 +6976,8 @@ sync_svc_monitors(struct ovsdb_idl_txn *ovnsb_idl_txn,
     const struct sbrec_service_monitor *sb_svc_mon;
     SBREC_SERVICE_MONITOR_TABLE_FOR_EACH (sb_svc_mon, svc_mon_table) {
         enum svc_monitor_type mon_type;
-        if (sb_svc_mon->type
-            && !strcmp(sb_svc_mon->type, "network-function")) {
+        if (sb_svc_mon->type && !strcmp(sb_svc_mon->type,
+                                        "network-function")) {
             mon_type = SVC_MON_TYPE_NF;
         } else {
             mon_type = SVC_MON_TYPE_LB;
