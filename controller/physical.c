@@ -516,18 +516,20 @@ put_remote_port_redirect_overlay(const struct sbrec_port_binding *binding,
 
 static const struct sbrec_port_binding *
 get_binding_network_function_linked_port(
-                    struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                    const struct sbrec_port_binding *binding)
+    struct ovsdb_idl_index *sbrec_port_binding_by_name,
+    const struct sbrec_port_binding *binding)
 {
-    const char *nf_linked_name = smap_get(&binding->options,
-                                          "nf-linked-port");
+    const char *nf_linked_name = smap_get(&binding->options, "nf-linked-port");
     if (!nf_linked_name) {
         return NULL;
     }
+
     VLOG_DBG("get NF linked port_binding %s:%s",
              binding->logical_port, nf_linked_name);
-    const struct sbrec_port_binding *nf_linked_port = lport_lookup_by_name(
-        sbrec_port_binding_by_name, nf_linked_name);
+
+    const struct sbrec_port_binding *nf_linked_port =
+        lport_lookup_by_name(sbrec_port_binding_by_name, nf_linked_name);
+
     static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
     if (!nf_linked_port) {
         VLOG_INFO_RL(&rl, "Binding not found for nf-linked-port"
@@ -540,8 +542,9 @@ get_binding_network_function_linked_port(
                   binding->logical_port,  nf_linked_name);
         return NULL;
     }
-    const char *nf_linked_linked_name = smap_get(
-        &nf_linked_port->options, "nf-linked-port");
+
+    const char *nf_linked_linked_name = smap_get(&nf_linked_port->options,
+                                                 "nf-linked-port");
     if (!nf_linked_linked_name || strcmp(nf_linked_linked_name,
                                          binding->logical_port)) {
         VLOG_INFO_RL(&rl, "LSP name %s does not match linked_linked_name",
@@ -590,7 +593,7 @@ send_traffic_by_tunnel(const struct sbrec_port_binding *binding,
 
 static void
 put_redirect_overlay_to_source(const struct sbrec_port_binding *binding,
-                               int linked_ct,
+                               int linked_ct_zone,
                                const struct hmap *chassis_tunnels,
                                enum mf_field_id mff_ovn_geneve,
                                struct match *match,
@@ -629,7 +632,7 @@ put_redirect_overlay_to_source(const struct sbrec_port_binding *binding,
     match_set_reg_masked(match, MFF_LOG_FLAGS - MFF_REG0, 0, MLF_RECIRC);
 
     put_load(1, MFF_LOG_FLAGS, MLF_RECIRC_BIT, 1, ofpacts_p);
-    put_load(linked_ct, MFF_LOG_CT_ZONE, 0, 16, ofpacts_p);
+    put_load(linked_ct_zone, MFF_LOG_CT_ZONE, 0, 16, ofpacts_p);
 
     struct ofpact_conntrack *ct = ofpact_put_CT(ofpacts_p);
     ct->recirc_table = OFTABLE_LOCAL_OUTPUT;
@@ -698,19 +701,20 @@ put_redirect_overlay_to_source(const struct sbrec_port_binding *binding,
 
 static void
 put_redirect_overlay_to_source_from_nf_port(
-        const struct sbrec_port_binding *binding,
-        struct ovsdb_idl_index *sbrec_port_binding_by_name,
-        const struct hmap *chassis_tunnels,
-        const struct shash *ct_zones,
-        enum mf_field_id mff_ovn_geneve,
-        struct match *match,
-        struct ofpbuf *ofpacts_p,
-        struct ovn_desired_flow_table *flow_table)
+    const struct sbrec_port_binding *binding,
+    struct ovsdb_idl_index *sbrec_port_binding_by_name,
+    const struct hmap *chassis_tunnels,
+    const struct shash *ct_zones,
+    enum mf_field_id mff_ovn_geneve,
+    struct match *match,
+    struct ofpbuf *ofpacts_p,
+    struct ovn_desired_flow_table *flow_table)
 {
-    const struct sbrec_port_binding *linked_pb;
-    linked_pb = get_binding_network_function_linked_port(
-        sbrec_port_binding_by_name, binding);
     static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 1);
+
+    const struct sbrec_port_binding *linked_pb =
+        get_binding_network_function_linked_port(sbrec_port_binding_by_name,
+                                                 binding);
     if (!linked_pb) {
         VLOG_INFO_RL(&rl, "Linked port not found for %s",
                      binding->logical_port);
@@ -727,8 +731,8 @@ put_redirect_overlay_to_source_from_nf_port(
                      binding->logical_port);
         return;
     }
-    VLOG_DBG_RL(&rl, "Both port zones found for NF port %s",
-                binding->logical_port);
+
+    VLOG_DBG("Both port zones found for NF port %s", binding->logical_port);
     put_redirect_overlay_to_source(binding, linked_zone.ct, chassis_tunnels,
                                    mff_ovn_geneve, match, ofpacts_p,
                                    flow_table);
@@ -1222,7 +1226,7 @@ static void
 clear_registers_for_nf_datapath(struct ofpbuf *ofpacts_p)
 {
     /* Clear all logical registers except MFF_LOG_TUN_OFPORT */
-    for (int i = 0; i < MFF_N_LOG_REGS; i++) {
+    for (size_t i = 0; i < MFF_N_LOG_REGS; i++) {
         if ((MFF_REG0 + i) != MFF_LOG_TUN_OFPORT) {
             /* Clear entire 32-bit register */
             put_load(0, MFF_REG0 + i, 0, 32, ofpacts_p);
@@ -2196,9 +2200,10 @@ consider_port_binding(const struct physical_ctx *ctx,
     struct ha_chassis_ordered *ha_ch_ordered;
     ha_ch_ordered = ha_chassis_get_ordered(binding->ha_chassis_group);
 
+    bool is_nf = smap_get_bool(&binding->options, "is-nf", false);
+
     /* Determine how the port is accessed. */
     enum access_type access_type = PORT_LOCAL;
-    bool is_nf = smap_get_bool(&binding->options, "is-nf", false);
     if (!ofport) {
         /* Enforce tunneling while we clone packets to additional chassis b/c
          * otherwise upstream switch won't flood the packet to both chassis. */

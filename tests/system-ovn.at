@@ -18796,15 +18796,14 @@ OVS_TRAFFIC_VSWITCHD_START()
 
 ADD_BR([br-int])
 
-# Set external-ids in br-int needed for ovn-controller
-ovs-vsctl \
-        -- set Open_vSwitch . external-ids:system-id=hv1 \
-        -- set Open_vSwitch . external-ids:ovn-remote=unix:$ovs_base/ovn-sb/ovn-sb.sock \
-        -- set Open_vSwitch . external-ids:ovn-encap-type=geneve \
-        -- set Open_vSwitch . external-ids:ovn-encap-ip=169.0.0.1 \
-        -- set bridge br-int fail-mode=secure other-config:disable-in-band=true
+# Set external-ids in br-int needed for ovn-controller.
+check ovs-vsctl \
+    -- set Open_vSwitch . external-ids:system-id=hv1 \
+    -- set Open_vSwitch . external-ids:ovn-remote=unix:$ovs_base/ovn-sb/ovn-sb.sock \
+    -- set Open_vSwitch . external-ids:ovn-encap-type=geneve \
+    -- set Open_vSwitch . external-ids:ovn-encap-ip=169.0.0.1 \
+    -- set bridge br-int fail-mode=secure other-config:disable-in-band=true
 
-# Start ovn-controller
 start_daemon ovn-controller
 
 ADD_NAMESPACES(client)
@@ -18931,6 +18930,7 @@ Server Ready
 
 AS_BOX([Verify inbound traffic forwarding through NF without health check])
 validate_single_nf_no_health_check "client" "server" "192.168.1.20" "Inbound"
+
 AS_BOX([Verify outbound traffic forwarding through NF without health check])
 validate_single_nf_no_health_check "server" "client" "192.168.1.10" "Outbound"
 

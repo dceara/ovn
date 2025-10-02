@@ -17956,30 +17956,31 @@ build_lswitch_stateful_nf(struct ovn_port *op,
     ds_clear(match);
 
     ds_put_cstr(actions,
-                 "ct_commit { "
-                    "ct_mark.blocked = 0; "
-                    "ct_mark.allow_established = " REGBIT_ACL_PERSIST_ID "; "
-                    "ct_label.acl_id = " REG_ACL_ID "; "
-                    "ct_label.tun_if_id = " REG_TUN_OFPORT "; }; next;");
-    ds_put_format(match,
-                  "outport == %s && " REGBIT_ACL_LABEL" == 0", op->json_key);
+                "ct_commit { "
+                   "ct_mark.blocked = 0; "
+                   "ct_mark.allow_established = " REGBIT_ACL_PERSIST_ID "; "
+                   "ct_label.acl_id = " REG_ACL_ID "; "
+                   "ct_label.tun_if_id = " REG_TUN_OFPORT "; "
+                "}; next;");
+    ds_put_format(match, "outport == %s && " REGBIT_ACL_LABEL" == 0",
+                  op->json_key);
     ovn_lflow_add(lflows, op->od, S_SWITCH_OUT_STATEFUL, 120,
                   ds_cstr(match), ds_cstr(actions), lflow_ref);
 
     ds_clear(actions);
     ds_clear(match);
-    ds_put_format(match,
-                  "outport == %s && " REGBIT_ACL_LABEL" == 1",
+    ds_put_format(match, "outport == %s && " REGBIT_ACL_LABEL" == 1",
                   op->json_key);
     ds_put_cstr(actions,
-                 "ct_commit { "
-                    "ct_mark.blocked = 0; "
-                    "ct_mark.allow_established = " REGBIT_ACL_PERSIST_ID "; "
-                    "ct_label.acl_id = " REG_ACL_ID "; "
-                    "ct_mark.obs_stage = " REGBIT_ACL_OBS_STAGE "; "
-                    "ct_mark.obs_collector_id = " REG_OBS_COLLECTOR_ID_EST "; "
-                    "ct_label.obs_point_id = " REG_OBS_POINT_ID_EST "; "
-                    "ct_label.tun_if_id = " REG_TUN_OFPORT "; }; next;");
+                "ct_commit { "
+                   "ct_mark.blocked = 0; "
+                   "ct_mark.allow_established = " REGBIT_ACL_PERSIST_ID "; "
+                   "ct_label.acl_id = " REG_ACL_ID "; "
+                   "ct_mark.obs_stage = " REGBIT_ACL_OBS_STAGE "; "
+                   "ct_mark.obs_collector_id = " REG_OBS_COLLECTOR_ID_EST "; "
+                   "ct_label.obs_point_id = " REG_OBS_POINT_ID_EST "; "
+                   "ct_label.tun_if_id = " REG_TUN_OFPORT "; "
+                "}; next;");
     ovn_lflow_add(lflows, op->od, S_SWITCH_OUT_STATEFUL, 120,
                   ds_cstr(match), ds_cstr(actions), lflow_ref);
 }
@@ -18158,8 +18159,8 @@ consider_network_function(struct lflow_table *lflows,
 
 static void
 build_network_function(const struct ovn_datapath *od,
-                       const struct ls_port_group_table *ls_pgs,
                        struct lflow_table *lflows,
+                       const struct ls_port_group_table *ls_pgs,
                        struct lflow_ref *lflow_ref)
 {
     unsigned long *nfg_ingress_bitmap = bitmap_allocate(MAX_OVN_NF_GROUP_IDS);
@@ -18291,7 +18292,7 @@ build_lswitch_and_lrouter_iterate_by_ls(struct ovn_datapath *od,
     build_mirror_default_lflow(od, lsi->lflows);
     build_lswitch_lflows_pre_acl_and_acl(od, lsi->lflows,
                                          lsi->meter_groups, NULL);
-    build_network_function(od, lsi->ls_port_groups, lsi->lflows, NULL);
+    build_network_function(od, lsi->lflows, lsi->ls_port_groups, NULL);
     build_fwd_group_lflows(od, lsi->lflows, NULL);
     build_lswitch_lflows_admission_control(od, lsi->lflows, NULL);
     build_lswitch_learn_fdb_od(od, lsi->lflows, NULL);
@@ -19376,8 +19377,9 @@ lflow_handle_ls_stateful_changes(struct ovsdb_idl_txn *ovnsb_txn,
                                 lflow_input->features,
                                 lflows,
                                 lflow_input->sbrec_acl_id_table);
-        build_network_function(od, lflow_input->ls_port_groups,
-                               lflows, ls_stateful_rec->lflow_ref);
+        build_network_function(od, lflows,
+                               lflow_input->ls_port_groups,
+                               ls_stateful_rec->lflow_ref);
 
         /* Sync the new flows to SB. */
         bool handled = lflow_ref_sync_lflows(
