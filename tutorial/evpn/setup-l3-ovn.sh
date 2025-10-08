@@ -1,0 +1,474 @@
+#!/bin/bash
+set -ex
+
+# HOST 1 is the one running OVN.
+# HOST 2 and 3 run FRR directly in the container.
+
+image=ovn-bgp-test:dev
+net=evpn-l2-net
+
+podman build -t $image -f Dockerfile ../../../
+
+h1=evpn-host1
+h2=evpn-host2
+h3=evpn-host3
+eth=eth0
+bgp_eth=lsp-bgp
+
+function cleanup() {
+    set +e
+    podman exec $h1 systemctl stop ovn-controller
+    podman exec $h1 systemctl stop ovn-northd
+    podman exec $h1 systemctl stop openvswitch
+
+    for host in $h1 $h2 $h3; do
+        podman stop $host
+        podman rm -f $host
+    done
+    podman network rm $net
+}
+
+trap "cleanup" EXIT
+
+# private l2 network
+podman network create --internal --ipam-driver=none $net
+
+# hosts
+podman run --privileged -d --pids-limit=-1 --security-opt apparmor=unconfined \
+           --network $net --mac-address=00:00:00:00:00:01 --name $h1 $image
+podman run --privileged -d --pids-limit=-1 --security-opt apparmor=unconfined \
+           --network $net --mac-address=00:00:00:00:00:02 --name $h2 $image
+podman run --privileged -d --pids-limit=-1 --security-opt apparmor=unconfined \
+           --network $net --mac-address=00:00:00:00:00:03 --name $h3 $image
+
+# Configure BGP IPs
+podman exec $h2 ip a a dev $eth 20.0.0.2/8
+podman exec $h3 ip a a dev $eth 20.0.0.3/8
+
+echo Provisioning OVN...
+podman exec $h1 systemctl start openvswitch
+podman exec $h1 ovs-vsctl set open . external_ids:system-id=$h1
+podman exec $h1 systemctl start ovn-northd
+podman exec $h1 systemctl start ovn-controller
+
+# Configure OVN:
+podman exec $h1 ovs-vsctl set open .         \
+  external-ids:ovn-remote=tcp:127.0.0.1:6642 \
+  external-ids:ovn-encap-type=geneve         \
+  external-ids:ovn-encap-ip=127.0.0.1
+podman exec $h1 ovn-sbctl set-connection ptcp:6642
+
+# Configure a GW router with external and internal switches connected.
+podman exec $h1 ovn-nbctl lr-add lr \
+  -- set logical_router lr          \
+        options:chassis=$h1         \
+        options:dynamic-routing=true options:requested-tnl-key=10
+
+podman exec $h1 ovn-nbctl ls-add ls-ext
+podman exec $h1 ovn-nbctl lrp-add lr lrp-ext 00:00:00:00:01:01 20.0.0.1/8 42.42.255.254/16 \
+  -- lrp-set-options lrp-ext dynamic-routing-maintain-vrf=false
+podman exec $h1 ovn-nbctl lsp-add ls-ext ls-ext-lr \
+  -- lsp-set-type ls-ext-lr router \
+  -- lsp-set-options ls-ext-lr router-port=lrp-ext \
+  -- lsp-set-addresses ls-ext-lr router
+podman exec $h1 ovn-nbctl lsp-add ls-ext ls-ext-ln \
+  -- lsp-set-type ls-ext-ln localnet \
+  -- lsp-set-addresses ls-ext-ln unknown \
+  -- lsp-set-options ls-ext-ln network_name=phys
+
+# Configure the localnet bridge/interface.
+podman exec $h1 ovs-vsctl add-br br-ex
+podman exec $h1 ovs-vsctl set open . external-ids:ovn-bridge-mappings=phys:br-ex
+podman exec $h1 ovs-vsctl add-port br-ex $eth
+podman exec $h1 ip addr add 20.0.0.1/8 dev br-ex
+podman exec $h1 ip link set up br-ex
+podman exec $h1 ovs-vsctl set open . external_ids:ovn-evpn-local-ip="20.0.0.1"
+podman exec $h1 ovs-vsctl set open . external_ids:ovn-evpn-vxlan-ports=4789
+
+# Add internal switch.
+podman exec $h1 ovn-nbctl ls-add ls-int
+podman exec $h1 ovn-nbctl lrp-add lr lrp-int 00:00:00:00:01:02 30.0.0.1/8
+podman exec $h1 ovn-nbctl lsp-add ls-int ls-int-lr \
+  -- lsp-set-type ls-int-lr router \
+  -- lsp-set-options ls-int-lr router-port=lrp-int \
+  -- lsp-set-addresses ls-int-lr router
+
+
+# Configure an OVN workload attached to ls-ext.
+podman exec $h1 ovs-vsctl add-port br-int workload \
+  -- set interface workload type=internal \
+  -- set interface workload external_ids:iface-id=workload
+podman exec $h1 ip netns add workload
+podman exec $h1 ip link set dev workload netns workload
+podman exec $h1 ip netns exec workload ip link set workload address 00:00:00:00:01:42
+podman exec $h1 ip netns exec workload ip a a dev workload 42.42.1.15/16
+podman exec $h1 ip netns exec workload ip link set dev workload up
+podman exec $h1 ovn-nbctl lsp-add ls-ext workload \
+  -- lsp-set-addresses workload "00:00:00:00:01:42 42.42.1.15/16"
+podman exec $h1 ovn-nbctl set logical-switch ls-ext other_config:dynamic-routing-vni=10
+podman exec $h1 ovn-nbctl set logical-switch ls-ext other_config:dynamic-routing-redistribute=fdb
+
+# Configure an OVN workload attached to ls-int.
+podman exec $h1 ovs-vsctl add-port br-int workload-int \
+  -- set interface workload-int type=internal \
+  -- set interface workload-int external_ids:iface-id=workload-int
+podman exec $h1 ip netns add workload-int
+podman exec $h1 ip link set dev workload-int netns workload-int
+podman exec $h1 ip netns exec workload-int ip link set workload-int address 00:00:00:00:42:42
+podman exec $h1 ip netns exec workload-int ip a a dev workload-int 30.0.0.42/16
+podman exec $h1 ip netns exec workload-int ip link set dev workload-int up
+podman exec $h1 ip netns exec workload-int ip r a default via 30.0.0.1
+podman exec $h1 ovn-nbctl lsp-add ls-int workload-int \
+  -- lsp-set-addresses workload-int "00:00:00:00:42:42 30.0.0.42/16"
+echo Sleeping for a bit...
+sleep 5
+
+echo Checking connectivity...
+podman exec $h2 ping -c 1 20.0.0.1
+podman exec $h3 ping -c 1 20.0.0.1
+podman exec $h3 ping -c 1 20.0.0.2
+
+# start frr
+for host in $h1 $h2 $h3; do
+    podman exec $host sed -i 's/bgpd=no/bgpd=yes/g' /etc/frr/daemons
+    podman exec $host systemctl start frr
+done
+
+# configure BGP on host 1
+echo "configure
+  vrf vrf10
+   vni 10
+  exit-vrf
+  !
+  vrf vrf20
+   vni 20
+  exit-vrf
+  !
+  log file /var/log/frr/frr.log
+  log syslog debugging
+  router bgp 65000
+    bgp log-neighbor-changes
+    neighbor 20.0.0.2 remote-as 65000
+    neighbor 20.0.0.3 remote-as 65000
+    !
+    address-family l2vpn evpn
+     neighbor 20.0.0.2 activate
+     neighbor 20.0.0.3 activate
+     advertise-all-vni
+     advertise-svi-ip
+    exit-address-family
+  exit
+  !
+  router bgp 65000 vrf vrf10
+   !
+   address-family ipv4 unicast
+    redistribute kernel
+    redistribute connected
+   exit-address-family
+   !
+   address-family l2vpn evpn
+    advertise ipv4 unicast
+   exit-address-family
+  exit
+  !
+  router bgp 65000 vrf vrf20
+   !
+   address-family ipv4 unicast
+    redistribute kernel
+    redistribute connected
+   exit-address-family
+   !
+   address-family l2vpn evpn
+    advertise ipv4 unicast
+   exit-address-family
+  exit
+  !
+  do copy running-config startup-config" | podman exec -i $h1 vtysh
+
+# configure BGP on host 2
+echo "configure
+  vrf vrf10
+   vni 10
+  exit-vrf
+  !
+  vrf vrf20
+   vni 20
+  exit-vrf
+  !
+  log file /var/log/frr/frr.log
+  log syslog debugging
+  router bgp 65000
+    bgp log-neighbor-changes
+    neighbor 20.0.0.1 remote-as 65000
+    neighbor 20.0.0.3 remote-as 65000
+    !
+    address-family l2vpn evpn
+     neighbor 20.0.0.1 activate
+     neighbor 20.0.0.3 activate
+     advertise-all-vni
+     advertise-svi-ip
+    exit-address-family
+  exit
+  !
+  router bgp 65000 vrf vrf10
+   !
+   address-family ipv4 unicast
+    redistribute kernel
+    redistribute connected
+   exit-address-family
+   !
+   address-family l2vpn evpn
+    advertise ipv4 unicast
+   exit-address-family
+  exit
+  !
+  router bgp 65000 vrf vrf20
+   !
+   address-family ipv4 unicast
+    redistribute kernel
+    redistribute connected
+   exit-address-family
+   !
+   address-family l2vpn evpn
+    advertise ipv4 unicast
+   exit-address-family
+  exit
+  !
+  do copy running-config startup-config" | podman exec -i $h2 vtysh
+
+# configure BGP on host 3
+echo "configure
+  vrf vrf10
+   vni 10
+  exit-vrf
+  !
+  vrf vrf20
+   vni 20
+  exit-vrf
+  !
+  log file /var/log/frr/frr.log
+  log syslog debugging
+  router bgp 65000
+    bgp log-neighbor-changes
+    neighbor 20.0.0.1 remote-as 65000
+    neighbor 20.0.0.2 remote-as 65000
+    !
+    address-family l2vpn evpn
+     neighbor 20.0.0.1 activate
+     neighbor 20.0.0.2 activate
+     advertise-all-vni
+     advertise-svi-ip
+    exit-address-family
+  exit
+  !
+  router bgp 65000 vrf vrf10
+   !
+   address-family ipv4 unicast
+    redistribute kernel
+    redistribute connected
+   exit-address-family
+   !
+   address-family l2vpn evpn
+    advertise ipv4 unicast
+   exit-address-family
+  exit
+  !
+  router bgp 65000 vrf vrf20
+   !
+   address-family ipv4 unicast
+    redistribute kernel
+    redistribute connected
+   exit-address-family
+   !
+   address-family l2vpn evpn
+    advertise ipv4 unicast
+   exit-address-family
+  exit
+  !
+  do copy running-config startup-config" | podman exec -i $h3 vtysh
+
+# Restart frr
+for host in $h1 $h2 $h3; do
+    podman exec $host systemctl restart frr
+done
+
+echo sleeping for a bit..
+sleep 10
+echo Configuring VTEPS..
+
+# Create VTEPs
+# - host1
+for vni in 10 20; do
+    # Setup a VRF to interact with OVN:
+    podman exec $h1 ip link add vrf$vni type vrf table $vni
+    podman exec $h1 ip link set vrf$vni up
+
+    # Add VNI bridge.
+    podman exec $h1 ip link add br-$vni type bridge
+    podman exec $h1 ip link set br-$vni master vrf$vni addrgenmode none
+    # WARNING: we MUST use the same MAC as in OVN GR because it's used as
+    # nexthop mac by the remote BGP peers.
+    podman exec $h1 ip link set br-$vni address 00:00:00:00:01:01
+
+    # Add VXLAN VTEP for the VNI.
+    # Use a dstport different than the one used by OVS.
+    # This is fine because we don't actually want traffic to pass through vxlan-$vni.
+    # FRR should read the dstport from the linked vxlan_sys_4789 device.
+    dstport=$((60000 + $vni))
+    podman exec $h1 ip link add vxlan-$vni type vxlan dev vxlan_sys_4789 id $vni dstport $dstport local 20.0.0.1 nolearning
+    podman exec $h1 ip link set vxlan-$vni master br-$vni
+    podman exec $h1 ip link set vxlan-$vni address 00:01:42:42:50:$vni
+
+    podman exec $h1 ip link set vxlan-$vni up
+    podman exec $h1 ip link set br-$vni up
+
+    # Add a dummy loopback to the VNI bridge to be used for advertising local
+    # MACs.
+    podman exec $h1 ip link add name lo-$vni type dummy
+    podman exec $h1 ip link set lo-$vni address 00:01:53:53:53:$vni
+    podman exec $h1 ip link set lo-$vni master br-$vni
+    podman exec $h1 ip link set lo-$vni up
+done
+
+# - host2
+for vni in 10 20; do
+    # Setup a VRF to interact with OVN:
+    podman exec $h2 ip link add vrf$vni type vrf table $vni
+    podman exec $h2 ip link set vrf$vni up
+
+    # Add VNI bridge.
+    podman exec $h2 ip link add br-$vni type bridge
+    podman exec $h2 ip link set br-$vni master vrf$vni addrgenmode none
+    podman exec $h2 ip link set br-$vni address 00:02:42:42:42:$vni
+
+    podman exec $h2 ip link add vxlan-$vni type vxlan id $vni dstport 4789 local 20.0.0.2 nolearning
+    podman exec $h2 ip link set vxlan-$vni master br-$vni
+    podman exec $h2 ip link set vxlan-$vni address 00:02:42:42:50:$vni
+
+    podman exec $h2 ip link set vxlan-$vni up
+    podman exec $h2 ip link set br-$vni up
+
+    # Add a dummy loopback to the VNI bridge to be used for advertising local
+    # MACs.
+    podman exec $h2 ip link add name lo-$vni type dummy
+    podman exec $h2 ip link set lo-$vni address 00:02:53:53:53:$vni
+    podman exec $h2 ip link set lo-$vni master br-$vni
+    podman exec $h2 ip link set lo-$vni up
+done
+
+# - host3
+for vni in 10 20; do
+    # Setup a VRF to interact with OVN:
+    podman exec $h3 ip link add vrf$vni type vrf table $vni
+    podman exec $h3 ip link set vrf$vni up
+
+    # Add VNI bridge.
+    podman exec $h3 ip link add br-$vni type bridge
+    podman exec $h3 ip link set br-$vni master vrf$vni addrgenmode none
+    podman exec $h3 ip link set br-$vni address 00:03:42:42:42:$vni
+
+    podman exec $h3 ip link add vxlan-$vni type vxlan id $vni dstport 4789 local 20.0.0.3 nolearning
+    podman exec $h3 ip link set vxlan-$vni master br-$vni
+    podman exec $h3 ip link set vxlan-$vni address 00:03:42:42:50:$vni
+
+    podman exec $h3 ip link set vxlan-$vni up
+    podman exec $h3 ip link set br-$vni up
+
+    # Add a dummy loopback to the VNI bridge to be used for advertising local
+    # MACs.
+    podman exec $h3 ip link add name lo-$vni type dummy
+    podman exec $h3 ip link set lo-$vni address 00:03:53:53:53:$vni
+    podman exec $h3 ip link set lo-$vni master br-$vni
+    podman exec $h3 ip link set lo-$vni up
+done
+
+echo sleeping for a bit..
+sleep 10
+echo Configuring workloads..
+
+# Workloads on host1:
+for vni in 10 20; do
+    # add a workload (add a "blackhole" route as if it was injected by OVN)
+    podman exec $h1 ip route add table $vni blackhole 66.66.1.$vni/32
+    # TODO: remove the loopback?
+    # also add a loopback in the vrf to check connectivity across vxlan
+    podman exec $h1 ip link add name lo-wl-$vni type dummy
+    podman exec $h1 ip link set lo-wl-$vni address 00:01:54:54:54:$vni
+    podman exec $h1 ip link set lo-wl-$vni master vrf$vni
+    podman exec $h1 ip a a dev lo-wl-$vni 77.77.1.$vni/32
+    podman exec $h1 ip link set lo-wl-$vni up
+
+    # Advertise MAC (type-2 EVPN route).
+    podman exec $h1 bridge fdb add 00:01:84:84:84:$vni dev lo-$vni master static
+
+    # Advertise MAC + IP (type-2 EVPN route).
+    podman exec $h1 ip neigh add dev br-$vni 42.42.1.$vni lladdr 00:01:42:42:00:$vni nud noarp
+    podman exec $h1 bridge fdb add 00:01:42:42:00:$vni dev lo-$vni master static
+done
+
+# Workloads on host2:
+for vni in 10 20; do
+    # add a workload (add a "blackhole" route as if it was injected by OVN)
+    podman exec $h2 ip route add table $vni blackhole 66.66.2.$vni/32
+    # TODO: remove the loopback?
+    # also add a loopback in the vrf to check connectivity across vxlan
+    podman exec $h2 ip link add name lo-wl-$vni type dummy
+    podman exec $h2 ip link set lo-wl-$vni address 00:02:54:54:54:$vni
+    podman exec $h2 ip link set lo-wl-$vni master vrf$vni
+    podman exec $h2 ip a a dev lo-wl-$vni 77.77.2.$vni/32
+    podman exec $h2 ip link set lo-wl-$vni up
+
+    # Advertise MAC (type-2 EVPN route).
+    podman exec $h2 bridge fdb add 00:02:84:84:84:$vni dev lo-$vni master static
+
+    # Advertise MAC + IP (type-2 EVPN route).
+    podman exec $h2 ip neigh add dev br-$vni 42.42.2.$vni lladdr 00:02:42:42:00:$vni nud noarp
+    podman exec $h2 bridge fdb add 00:02:42:42:00:$vni dev lo-$vni master static
+done
+
+# Workloads on host3:
+for vni in 10 20; do
+    # add a workload (add a "blackhole" route as if it was injected by OVN)
+    podman exec $h3 ip route add table $vni blackhole 66.66.3.$vni/32
+    # TODO: remove the loopback?
+    # also add a loopback in the vrf to check connectivity across vxlan
+    podman exec $h3 ip link add name lo-wl-$vni type dummy
+    podman exec $h3 ip link set lo-wl-$vni address 00:03:54:54:54:$vni
+    podman exec $h3 ip link set lo-wl-$vni master vrf$vni
+    podman exec $h3 ip a a dev lo-wl-$vni 77.77.3.$vni/32
+    podman exec $h3 ip link set lo-wl-$vni up
+
+    # Advertise MAC (type-2 EVPN route).
+    podman exec $h3 bridge fdb add 00:03:84:84:84:$vni dev lo-$vni master static
+
+    # Advertise MAC + IP (type-2 EVPN route).
+    podman exec $h3 ip neigh add dev br-$vni 42.42.3.$vni lladdr 00:03:42:42:00:$vni nud noarp
+    podman exec $h3 bridge fdb add 00:03:42:42:00:$vni dev lo-$vni master static
+done
+
+# TODO: because OVN doesn't advertise IPs YET on VNI 10 on h2 and h3:
+vni=10
+podman exec $h1 ip route add table $vni blackhole 30.0.0.42/32
+
+echo sleeping for a bit..
+sleep 10
+echo =======================
+echo Dumping VRF routes!!
+echo =======================
+for vni in 10 20; do
+    for h in $h1 $h2 $h3; do
+      echo "Routes in VRF $vni on $h:"
+      podman exec $h ip vrf exec vrf$vni ip r l table $vni
+      echo
+    done
+done
+
+echo =======================
+echo Checking connectivity!!
+echo =======================
+
+# Ping from workload internal (behind ovn router to remote workloads through evpn)
+podman exec $h1 ip netns exec workload-int ping -c1 77.77.2.10
+podman exec $h1 ip netns exec workload-int ping -c1 77.77.3.10
+
+sleep infinity

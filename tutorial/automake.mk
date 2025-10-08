@@ -7,6 +7,7 @@ EXTRA_DIST += \
 	tutorial/evpn/setup-l2.sh \
 	tutorial/evpn/setup-l2-ovn.sh \
 	tutorial/evpn/setup-l3.sh \
+	tutorial/evpn/setup-l3-ovn.sh \
 	tutorial/evpn/setup-unicast.sh
 sandbox: all
 	cd $(srcdir)/tutorial && MAKE=$(MAKE) HAVE_OPENSSL=$(HAVE_OPENSSL) \
