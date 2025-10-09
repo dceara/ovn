@@ -199,6 +199,7 @@ for vni in 10 20; do
     # Add VNI bridge.
     podman exec $h1 ip link add br-$vni type bridge
     podman exec $h1 ip link set br-$vni master vrf$vni addrgenmode none
+    podman exec $h1 ip link set br-$vni address 00:01:42:42:42:$vni
     podman exec $h1 ip link set dev br-$vni up
 
     # Add VXLAN VTEP for the VNI.
@@ -213,6 +214,7 @@ for vni in 10 20; do
     # Add a dummy loopback to the VNI bridge to be used for advertising local
     # MACs.
     podman exec $h1 ip link add name lo-$vni type dummy
+    podman exec $h1 ip link set lo-$vni address 00:01:53:53:53:$vni
     podman exec $h1 ip link set lo-$vni master br-$vni
     podman exec $h1 ip link set lo-$vni up
 done
@@ -221,6 +223,7 @@ done
 for vni in 10 20; do
     # Add VNI bridge.
     podman exec $h2 ip link add br-$vni type bridge
+    podman exec $h2 ip link set br-$vni address 00:02:42:42:42:$vni
     podman exec $h2 ip link set dev br-$vni up
 
     # Add VXLAN VTEP for the VNI.
@@ -231,6 +234,7 @@ for vni in 10 20; do
     # Add a dummy loopback to the VNI bridge to be used for advertising local
     # MACs.
     podman exec $h2 ip link add name lo-$vni type dummy
+    podman exec $h2 ip link set lo-$vni address 00:02:53:53:53:$vni
     podman exec $h2 ip link set lo-$vni master br-$vni
     podman exec $h2 ip link set lo-$vni up
 done
@@ -239,6 +243,7 @@ done
 for vni in 10 20; do
     # Add VNI bridge.
     podman exec $h3 ip link add br-$vni type bridge
+    podman exec $h3 ip link set br-$vni address 00:03:42:42:42:$vni
     podman exec $h3 ip link set dev br-$vni up
 
     # Add VXLAN VTEP for the VNI.
@@ -249,6 +254,7 @@ for vni in 10 20; do
     # Add a dummy loopback to the VNI bridge to be used for advertising local
     # MACs.
     podman exec $h3 ip link add name lo-$vni type dummy
+    podman exec $h3 ip link set lo-$vni address 00:03:53:53:53:$vni
     podman exec $h3 ip link set lo-$vni master br-$vni
     podman exec $h3 ip link set lo-$vni up
 done
