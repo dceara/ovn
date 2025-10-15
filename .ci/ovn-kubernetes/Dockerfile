@@ -42,7 +42,7 @@ ARG FEDORA_VERSION
 
 # Clone OVN Kubernetes and build the binary based on the commit passed as argument
 WORKDIR /root
-RUN git clone https://github.com/ovn-kubernetes/ovn-kubernetes.git
+RUN git clone https://github.com/trozet/ovn-kubernetes.git
 WORKDIR /root/ovn-kubernetes
 RUN git checkout ${OVNKUBE_COMMIT} && git log -n 1
 
