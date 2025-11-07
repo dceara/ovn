@@ -67,7 +67,7 @@ m_setup_external_frr_router() {
     local node=$1 bgp_ip=$2
     local br_name=br-$node
 
-    check m_as $node ovs-vsctl add-br $br_name
+    check m_as $node ovs-vsctl add-br $br_name -- set bridge $br_name datapath_type=netdev
     on_exit "m_as $node ovs-vsctl del-br $br_name"
     check m_as $node ip netns add frr-ns
     on_exit "m_as $node ip netns del frr-ns"
@@ -387,7 +387,6 @@ m_setup_host_frr_vrf() {
     # vxlan_sys_${vxlan_port} device.
     local dstport=$((60000 + $vni))
     check m_as $node ip link add $vxlan type vxlan   \
-        dev vxlan_sys_${vxlan_port}                  \
         id $vni dstport $dstport local $vxlan_ip nolearning
     on_exit "m_as $node ip link del $vxlan"
     check m_as $node ip link set dev $vxlan up
