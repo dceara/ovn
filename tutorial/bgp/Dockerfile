@@ -1,4 +1,4 @@
-FROM fedora:latest
+FROM fedora:42
 
 RUN dnf install -y --skip-broken \
 autoconf \
@@ -51,7 +51,7 @@ strace
 
 ARG OVN_PATH
 
-RUN git clone https://github.com/almusil/ovn --single-branch --revision bgp-evpn --depth 1
+RUN git clone https://github.com/ovn-org/ovn --single-branch --revision main --depth 1
 
 WORKDIR /ovn
 RUN git submodule update --init --depth 1
@@ -70,6 +70,9 @@ RUN ./boot.sh
 RUN ./configure
 RUN make rpm-fedora
 RUN rm rpm/rpmbuild/RPMS/x86_64/*docker*
+
+RUN groupadd -r openvswitch && \
+    useradd -r -g openvswitch -d /var/lib/openvswitch -s /sbin/nologin openvswitch
 
 RUN find /ovn/ -name *.rpm
 RUN dnf install -y /ovn/ovs/rpm/rpmbuild/RPMS/noarch/*.rpm /ovn/ovs/rpm/rpmbuild/RPMS/x86_64/*.rpm
