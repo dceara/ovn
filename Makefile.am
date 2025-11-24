@@ -501,6 +501,7 @@ dist-docs:
 
 include automake.mk
 include Documentation/automake.mk
+include ai-plans/automake.mk
 include m4/automake.mk
 include lib/automake.mk
 include utilities/automake.mk
