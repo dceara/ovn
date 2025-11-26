@@ -9,7 +9,7 @@ Enhance `ovn-northd` and `ovn-controller` to support a command-line argument tha
     -   **DOT**: If extension is `.dot` (or default).
     -   **Mermaid**: If extension is `.mmd` or `.mermaid`.
 3.  **Behavior**:
-    -   If this argument is present, it must be the *only* argument (besides the program name). If others are present, exit with error.
+    -   If this argument is present, it must be the *only* argument (besides the program name).
     -   The program should initialize the engine (construct the graph).
     -   Dump the graph to the specified file.
     -   The graph edges must be labeled with the name of the change handler function (if any).
