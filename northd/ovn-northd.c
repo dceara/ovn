@@ -68,6 +68,12 @@ static const char *ovnnb_db;
 static const char *ovnsb_db;
 static const char *unixctl_path;
 
+/* --dump-inc-proc-graph[=<i-p-node>]: Whether to dump the I-P engine graph
+ * representation in DOT format to stdout.  Optionally only up to <i-p-node>.
+ */
+static bool dump_inc_proc_graph;
+static const char *dump_inc_proc_graph_arg;
+
 /* SSL/TLS options. */
 static const char *ssl_private_key_file;
 static const char *ssl_certificate_file;
@@ -625,6 +631,7 @@ parse_options(int argc OVS_UNUSED, char *argv[] OVS_UNUSED,
         SSL_OPTION_ENUMS,
         OPT_DRY_RUN,
         OPT_N_THREADS,
+        OPT_DUMP_INC_PROC_GRAPH,
     };
     static const struct option long_options[] = {
         {"ovnsb-db", required_argument, NULL, 'd'},
@@ -635,6 +642,8 @@ parse_options(int argc OVS_UNUSED, char *argv[] OVS_UNUSED,
         {"version", no_argument, NULL, 'V'},
         {"dry-run", no_argument, NULL, OPT_DRY_RUN},
         {"n-threads", required_argument, NULL, OPT_N_THREADS},
+        {"dump-inc-proc-graph", optional_argument, NULL,
+         OPT_DUMP_INC_PROC_GRAPH},
         OVN_DAEMON_LONG_OPTIONS,
         VLOG_LONG_OPTIONS,
         STREAM_SSL_LONG_OPTIONS,
@@ -725,6 +734,11 @@ parse_options(int argc OVS_UNUSED, char *argv[] OVS_UNUSED,
 
         case OPT_DRY_RUN:
             *paused = true;
+            break;
+
+        case OPT_DUMP_INC_PROC_GRAPH:
+            dump_inc_proc_graph = true;
+            dump_inc_proc_graph_arg = optarg;
             break;
 
         default:
@@ -843,6 +857,16 @@ main(int argc, char *argv[])
     ovn_set_program_name(argv[0]);
     service_start(&argc, &argv);
     parse_options(argc, argv, &state.paused, &n_threads);
+
+    if (dump_inc_proc_graph) {
+        struct ovsdb_idl_loop ovnnb_idl_loop = OVSDB_IDL_LOOP_INITIALIZER(
+            ovsdb_idl_create_unconnected(&nbrec_idl_class, true));
+        struct ovsdb_idl_loop ovnsb_idl_loop = OVSDB_IDL_LOOP_INITIALIZER(
+            ovsdb_idl_create_unconnected(&sbrec_idl_class, true));
+        inc_proc_northd_init(&ovnnb_idl_loop, &ovnsb_idl_loop);
+        engine_dump_graph(dump_inc_proc_graph_arg);
+        exit(0);
+    }
 
     daemonize_start(false, false);
 

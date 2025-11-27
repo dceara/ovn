@@ -157,6 +157,12 @@ static const char *ssl_ca_cert_file;
 /* --unixctl-path: Path to use for unixctl server socket. */
 static char *unixctl_path;
 
+/* --dump-inc-proc-graph[=<i-p-node>]: Whether to dump the I-P engine graph
+ * representation in DOT format to stdout.  Optionally only up to <i-p-node>.
+ */
+static bool dump_inc_proc_graph;
+static const char *dump_inc_proc_graph_arg;
+
 /* By default don't set an upper bound for the lflow cache and enable auto
  * trimming above 10K logical flows when reducing cache size by 50%.
  */
@@ -7066,6 +7072,19 @@ main(int argc, char *argv[])
     char *ovs_remote = parse_options(argc, argv);
     fatal_ignore_sigpipe();
 
+    if (dump_inc_proc_graph) {
+        struct ovsdb_idl_loop ovs_idl_loop = OVSDB_IDL_LOOP_INITIALIZER(
+            ovsdb_idl_create_unconnected(&ovsrec_idl_class, true));
+        struct ovsdb_idl_loop ovnsb_idl_loop = OVSDB_IDL_LOOP_INITIALIZER(
+            ovsdb_idl_create_unconnected(&sbrec_idl_class, true));
+
+        inc_proc_ovn_controller_init(&ovnsb_idl_loop, &ovs_idl_loop,
+                                     NULL, NULL, NULL, NULL, NULL,
+                                     NULL, NULL, NULL, NULL);
+        engine_dump_graph(dump_inc_proc_graph_arg);
+        exit(0);
+    }
+
     daemonize_start(true, false);
 
     char *abs_unixctl_path = get_abs_unix_ctl_path(unixctl_path);
@@ -8091,6 +8110,7 @@ parse_options(int argc, char *argv[])
         OVN_DAEMON_OPTION_ENUMS,
         SSL_OPTION_ENUMS,
         OPT_ENABLE_DUMMY_VIF_PLUG,
+        OPT_DUMP_INC_PROC_GRAPH,
     };
 
     static struct option long_options[] = {
@@ -8105,6 +8125,8 @@ parse_options(int argc, char *argv[])
         {"chassis", required_argument, NULL, 'n'},
         {"enable-dummy-vif-plug", no_argument, NULL,
          OPT_ENABLE_DUMMY_VIF_PLUG},
+        {"dump-inc-proc-graph", optional_argument, NULL,
+         OPT_DUMP_INC_PROC_GRAPH},
         {NULL, 0, NULL, 0}
     };
     char *short_options = ovs_cmdl_long_options_to_short_options(long_options);
@@ -8171,6 +8193,11 @@ parse_options(int argc, char *argv[])
 
         case OPT_ENABLE_DUMMY_VIF_PLUG:
             vif_plug_dummy_enable();
+            break;
+
+        case OPT_DUMP_INC_PROC_GRAPH:
+            dump_inc_proc_graph = true;
+            dump_inc_proc_graph_arg = optarg;
             break;
 
         case 'n':
