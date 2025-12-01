@@ -14254,7 +14254,7 @@ build_neigh_learning_flows_for_lrouter_port(
 
     if (lrp_is_l3dgw(op)) {
         ds_clear(match);
-        ds_put_format(match, "inport == %s && (nd_na || nd_ns) && "
+        ds_put_format(match, "inport == %s && (nd_na || nd_ns || arp.op = 2) && "
                              "eth.mcast && "
                              "!is_chassis_resident(%s)", op->json_key,
                              op->cr_port->json_key);
