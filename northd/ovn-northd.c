@@ -1011,6 +1011,8 @@ main(int argc, char *argv[])
     stopwatch_create(DYNAMIC_ROUTES_RUN_STOPWATCH_NAME, SW_MS);
     stopwatch_create(GROUP_ECMP_ROUTE_RUN_STOPWATCH_NAME, SW_MS);
 
+    (void)vlog_set_levels_from_string("jsonrpc:dbg");
+
     /* Initialize incremental processing engine for ovn-northd */
     inc_proc_northd_init(&ovnnb_idl_loop, &ovnsb_idl_loop);
 

@@ -19544,6 +19544,11 @@ handle_port_binding_changes(const struct sbrec_port_binding_table *sb_pb_table,
             continue;
         }
 
+        if (sb != op->sb) {
+            VLOG_INFO("DEBUG DEBUG DCEARA stale op->sb for logical port %s", sb->logical_port);
+        }
+        ovs_assert(sb == op->sb);
+
         bool up = false;
 
         if (lsp_is_router(op->nbsp) || lsp_is_switch(op->nbsp)) {
