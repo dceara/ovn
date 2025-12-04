@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  OVNKUBE_COMMIT: "release-1.1"
+  OVNKUBE_COMMIT: "master"
   KIND_CLUSTER_NAME: ovn
   KIND_INSTALL_INGRESS: true
   KIND_ALLOW_SYSTEM_WRITES: true
@@ -98,8 +98,8 @@ jobs:
     env:
       JOB_NAME: "${{ matrix.target }}-${{ matrix.ha }}-${{ matrix.gateway-mode }}-${{ matrix.ipfamily }}-${{ matrix.disable-snat-multiple-gws }}-${{ matrix.second-bridge }}"
       OVN_HYBRID_OVERLAY_ENABLE: "${{ matrix.target == 'control-plane' }}"
-      KIND_INSTALL_METALLB: "${{ matrix.target == 'control-plane' }}"
-      OVN_MULTICAST_ENABLE:  "${{ matrix.target == 'control-plane' }}"
+      KIND_INSTALL_METALLB: "${{ matrix.target == 'control-plane' || matrix.target == 'network-segmentation' }}"
+      OVN_MULTICAST_ENABLE:  "${{ matrix.target == 'control-plane' || matrix.target == 'network-segmentation'}}"
       OVN_EMPTY_LB_EVENTS: "${{ matrix.target == 'control-plane' }}"
       # TODO: We have been testing only non-interconnect ovn-k8s jobs until
       # now.  We only enable interconnect mode for the external-gateway and
