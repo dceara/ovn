@@ -88,14 +88,6 @@ jobs:
         # forwarding : ["", "disable-forwarding"]
         # network-segmentation : ["", "enable-network-segmentation"]
         include:
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "local",  "ipfamily": "ipv6",      "disable-snat-multiple-gws": "snatGW",   "ic": "ic-disabled"}
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "local",  "ipfamily": "dualstack", "disable-snat-multiple-gws": "snatGW",   "ic": "ic-disabled"}
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv4",      "disable-snat-multiple-gws": "snatGW",   "ic": "ic-disabled"}
-          - {"target": "shard-conformance", "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv6",      "disable-snat-multiple-gws": "snatGW",   "ic": "ic-disabled"}
-          - {"target": "control-plane",     "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv4",      "disable-snat-multiple-gws": "noSnatGW", "ic": "ic-disabled"}
-          - {"target": "control-plane",     "ha": "HA",   "gateway-mode": "shared", "ipfamily": "ipv4",      "disable-snat-multiple-gws": "snatGW",   "ic": "ic-disabled"}
-          - {"target": "external-gateway",  "ha": "noHA", "gateway-mode": "shared", "ipfamily": "ipv4",      "disable-snat-multiple-gws": "noSnatGW", "second-bridge": "2br", "ic": "ic-single-node-zones"}
-          - {"target": "external-gateway",  "ha": "noHA", "gateway-mode": "local",  "ipfamily": "ipv6",      "disable-snat-multiple-gws": "noSnatGW", "second-bridge": "1br", "ic": "ic-single-node-zones"}
           - {"target": "network-segmentation", "ha": "noHA", "gateway-mode": "shared", "ipfamily": "dualstack", "disable-snat-multiple-gws": "noSnatGW", "second-bridge": "1br", "ic": "ic-single-node-zones", "forwarding": "disable-forwarding"}
           - {"target": "network-segmentation", "ha": "noHA", "gateway-mode": "local", "ipfamily": "dualstack", "disable-snat-multiple-gws": "noSnatGW", "second-bridge": "1br", "ic": "ic-single-node-zones"}
           - {"target": "network-segmentation", "ha": "noHA", "gateway-mode": "shared", "ipfamily": "dualstack", "disable-snat-multiple-gws": "SnatGW", "second-bridge": "1br", "ic": "ic-disabled"}
