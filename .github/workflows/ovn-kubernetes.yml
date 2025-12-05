@@ -126,6 +126,13 @@ jobs:
         . .ci/linux-util.sh
         fix_etc_hosts
 
+    - name: Install VRF kernel module
+      run: |
+        set -x
+        sudo apt update
+        sudo apt-get install linux-modules-extra-$(uname -r) -y
+        sudo modprobe vrf
+
     - name: Free up disk space
       run: |
         . .ci/linux-util.sh
