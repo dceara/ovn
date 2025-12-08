@@ -10379,6 +10379,7 @@ AT_CHECK([ovn-nbctl --wait=sb  set logical_switch_port local1 tag_request=50])
 AT_CHECK([ovn-nbctl lsp-get-tag local1], [0], [50
 ])
 
+OVN_CLEANUP_NORTHD
 AT_CLEANUP
 ])
 
