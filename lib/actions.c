@@ -1432,9 +1432,9 @@ encode_ct_lb(const struct ovnact_ct_lb *cl,
     }
 
     BUILD_ASSERT(MFF_LOG_CT_ZONE >= MFF_REG0);
-    BUILD_ASSERT(MFF_LOG_CT_ZONE < MFF_REG0 + FLOW_N_REGS);
+    BUILD_ASSERT(MFF_LOG_CT_ZONE < MFF_REG0 + OVN_FLOW_N_REGS);
     BUILD_ASSERT(MFF_LOG_DNAT_ZONE >= MFF_REG0);
-    BUILD_ASSERT(MFF_LOG_DNAT_ZONE < MFF_REG0 + FLOW_N_REGS);
+    BUILD_ASSERT(MFF_LOG_DNAT_ZONE < MFF_REG0 + OVN_FLOW_N_REGS);
     for (size_t bucket_id = 0; bucket_id < cl->n_dsts; bucket_id++) {
         const struct ovnact_ct_lb_dst *dst = &cl->dsts[bucket_id];
         char ip_addr[INET6_ADDRSTRLEN];

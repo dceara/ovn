@@ -24,6 +24,13 @@
 #include "lib/svec.h"
 #include "include/ovn/version.h"
 
+#if FLOW_N_REGS == 32
+/* We currently only use the first 16 registers. */
+#define OVN_FLOW_N_REGS 16
+#else
+#error We expect OVS to support 32 registers.
+#endif
+
 #define ovn_set_program_name(name) \
     ovs_set_program_name(name, OVN_PACKAGE_VERSION)
 

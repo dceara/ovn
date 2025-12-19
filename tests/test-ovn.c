@@ -1095,7 +1095,7 @@ test_exhaustive(struct ovs_cmdl_context *ctx OVS_UNUSED)
 
     ovs_assert(test_nvars <= ARRAY_SIZE(nvars));
     ovs_assert(test_svars <= ARRAY_SIZE(svars));
-    ovs_assert(test_nvars + test_svars <= FLOW_N_REGS);
+    ovs_assert(test_nvars + test_svars <= OVN_FLOW_N_REGS);
 
     shash_init(&symtab);
     for (int i = 0; i < test_nvars; i++) {
