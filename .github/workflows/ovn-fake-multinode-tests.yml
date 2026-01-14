@@ -1,6 +1,7 @@
 name: System tests using ovn-fake-multinode
 
 on:
+  push:
   schedule:
     # Run everyday at midnight
     - cron: '0 0 * * *'
@@ -31,7 +32,7 @@ jobs:
       with:
         repository: 'ovn-org/ovn-fake-multinode'
         path: 'ovn-fake-multinode'
-        ref: 'v0.4'
+        ref: 'main'
 
     # Check out ovn and ovs separately inside ovn-fake-multinode/ovn and ovn-fake-multinode/ovs
     # ovn-fake-multinode builds and installs ovs from ovn-fake-multinode/ovs
@@ -160,7 +161,7 @@ jobs:
       with:
         repository: 'ovn-org/ovn-fake-multinode'
         path: 'ovn-fake-multinode'
-        ref: 'v0.4'
+        ref: 'main'
 
     - name: Start openvswitch
       run: |
