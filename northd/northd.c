@@ -1767,7 +1767,7 @@ peer_needs_cr_port_creation(struct ovn_port *op)
     if ((op->nbrp->n_gateway_chassis || op->nbrp->ha_chassis_group)
         && vector_len(&op->od->l3dgw_ports) == 1 && op->peer && op->peer->nbsp
         && vector_is_empty(&op->peer->od->localnet_ports)) {
-        return true;
+        return smap_get_bool(&op->nbrp->options, "centralize_routing", false);
     }
 
     return false;
