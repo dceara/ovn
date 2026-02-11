@@ -82,9 +82,6 @@ struct tracked_lb_data {
 
     /* Indicates if any lb (in the tracked data) has 'routable' flag set. */
     bool has_routable_lb;
-
-    /* Indicates if any lb (in the tracked data) has 'distibuted' flag set. */
-    bool has_distributed_lb;
 };
 
 /* Datapath (logical switch) to lb/lbgrp association data. */
