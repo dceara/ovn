@@ -1425,3 +1425,52 @@ ovn_debug_commands_register(void)
     unixctl_command_register("debug/enable-timewarp", "", 0, 0,
                              ovn_enable_timewarp, NULL);
 }
+
+/* Parses string 's', which must be a MAC address with an optional mask or
+ * mask prefix length.  Stores the MAC address into '*ea' and the mask prefix
+ * length into '*plen' (if 's' does not contain a mask, all-one-bits
+ * is assumed).
+ *
+ * Returns true if successful, otherwise false and the '*ea' is zeroed out in
+ * case. */
+bool
+eth_addr_parse_masked(const char *s, struct eth_addr *ea, unsigned int *plen)
+{
+    int n = 0;
+
+    if (!ovs_scan_len(s, &n, ETH_ADDR_SCAN_FMT, ETH_ADDR_SCAN_ARGS(*ea))) {
+        *ea = eth_addr_zero;
+        return false;
+    }
+
+    /* There isn't any mask provided. */
+    if (s[n] != '/') {
+        *plen = 48;
+        return true;
+    }
+
+    struct eth_addr mask;
+    if (ovs_scan_len(s, &n, "/"ETH_ADDR_SCAN_FMT, ETH_ADDR_SCAN_ARGS(mask))) {
+        int prefix = eth_addr_get_prefix_len(mask);
+        if (!eth_addr_equals(mask, eth_addr_create_mask(prefix))) {
+            *ea = eth_addr_zero;
+            return false;
+        }
+
+        *plen = prefix;
+        return true;
+    }
+
+    int prefix;
+    if (ovs_scan_len(s, &n, "/%d", &prefix)) {
+        if (prefix < 0 || prefix > 48) {
+            *ea = eth_addr_zero;
+            return false;
+        }
+        *plen = prefix;
+        return true;
+    }
+
+    *ea = eth_addr_zero;
+    return false;
+}

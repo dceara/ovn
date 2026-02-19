@@ -477,6 +477,24 @@ void sorted_array_apply_diff(const struct sorted_array *a1,
                                                     bool add),
                              const void *arg);
 
+static inline struct eth_addr
+eth_addr_create_mask(unsigned int len)
+{
+    struct eth_addr mac;
+    eth_addr_from_uint64((UINT64_MAX << (48 - len)), &mac);
+
+    return mac;
+}
+
+static inline unsigned int
+eth_addr_get_prefix_len(struct eth_addr mac)
+{
+    uint64_t n = (UINT64_C(0xffff) << 48) | eth_addr_to_uint64(mac);
+    return 48 - ctz64(n);
+}
+
+bool eth_addr_parse_masked(const char *, struct eth_addr *, unsigned int *);
+
 /* Utilities around properly handling exit command. */
 struct ovn_exit_args {
     struct unixctl_conn **conns;
