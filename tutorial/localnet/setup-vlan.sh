@@ -31,15 +31,29 @@ trap "cleanup" EXIT
 function setup_workload() {
     local h=$1
     local name=$2
+    local pvid=$3
+    local vlans=$4
 
-    podman exec $h ip link add $name type veth peer name ovs-$name
-    podman exec $h ip netns add $name
-    podman exec $h ip link set dev $name netns $name
+    podman exec $h ip link add int-$name type veth peer name ovs-$name
     podman exec $h ip link set dev ovs-$name up
-    podman exec $h ip netns exec $name ip link set dev $name up
-    podman exec $h ip netns exec $name ip link set lo up
+    podman exec $h ip link set dev int-$name up
+
+    podman exec $h ip link add int2-$name type veth peer name $name
+    podman exec $h ip link set dev int2-$name up
+
+    podman exec $h ovs-vsctl add-br br-vif-$name \
+        -- add-port br-vif-$name int-$name \
+        -- add-port br-vif-$name int2-$name \
+        -- set port int-$name vlan_mode=native-tagged tag=$pvid trunks=$vlans \
+        -- set port int2-$name vlan_mode=native-untagged tag=$pvid trunks=$vlans
+
     podman exec $h ovs-vsctl add-port br-int ovs-$name \
         -- set interface ovs-$name external-ids:iface-id=$name
+
+    podman exec $h ip netns add $name
+    podman exec $h ip link set dev $name netns $name
+    podman exec $h ip netns exec $name ip link set dev $name up
+    podman exec $h ip netns exec $name ip link set lo up
 }
 
 modprobe openvswitch
@@ -115,18 +129,80 @@ podman exec $h3 ovs-vsctl set open .            \
 echo Configuring OVN...
 
 podman exec $h1 ovn-nbctl ls-add ls                          \
-    -- lsp-add ls lsp1                                       \
-    -- lsp-add ls lsp2                                       \
-    -- lsp-add ls lsp3                                       \
+    -- lsp-add ls lsp1 -- lsp-set-addresses lsp1 unknown     \
+    -- lsp-add ls lsp11 -- lsp-set-addresses lsp11 unknown   \
+    -- lsp-add ls lsp2 -- lsp-set-addresses lsp2 unknown     \
+    -- lsp-add ls lsp22 -- lsp-set-addresses lsp22 unknown   \
+    -- lsp-add ls lsp3 -- lsp-set-addresses lsp3 unknown     \
+    -- lsp-add ls lsp33 -- lsp-set-addresses lsp33 unknown   \
     -- lsp-add-localnet-port ls lsp-ln phys                  \
     -- set logical_switch ls other_config:vlan-passthru=true
 
-setup_workload $h1 lsp1
-setup_workload $h2 lsp2
-setup_workload $h3 lsp3
+setup_workload $h1 lsp1  42 42,43
+setup_workload $h1 lsp11 42 42,43
+setup_workload $h2 lsp2  43 43,44
+setup_workload $h2 lsp22 43 43,44
+setup_workload $h3 lsp3  44 42,44
+setup_workload $h3 lsp33 44 42,44
 
-podman exec $h1 ovs-vsctl set port ovs-lsp1 vlan_mode=native-tagged tag=42 trunks=42,43
-podman exec $h2 ovs-vsctl set port ovs-lsp2 vlan_mode=native-tagged tag=43 trunks=43,44
-podman exec $h3 ovs-vsctl set port ovs-lsp3 vlan_mode=native-tagged tag=44 trunks=42,44
+podman exec $h1 ip netns exec lsp1 ip a a dev lsp1 42.42.42.1/24
+podman exec $h1 ip netns exec lsp1 ip link add link lsp1 name lsp1.43 type vlan id 43
+podman exec $h1 ip netns exec lsp1 ip link set lsp1.43 up
+podman exec $h1 ip netns exec lsp1 ip a a dev lsp1.43 43.43.43.1/24
+
+podman exec $h1 ip netns exec lsp11 ip a a dev lsp11 42.42.42.11/24
+podman exec $h1 ip netns exec lsp11 ip link add link lsp11 name lsp11.43 type vlan id 43
+podman exec $h1 ip netns exec lsp11 ip link set lsp11.43 up
+podman exec $h1 ip netns exec lsp11 ip a a dev lsp11.43 43.43.43.11/24
+
+podman exec $h2 ip netns exec lsp2 ip a a dev lsp2 43.43.43.2/24
+podman exec $h2 ip netns exec lsp2 ip link add link lsp2 name lsp2.44 type vlan id 44
+podman exec $h2 ip netns exec lsp2 ip link set lsp2.44 up
+podman exec $h2 ip netns exec lsp2 ip a a dev lsp2.44 44.44.44.2/24
+
+podman exec $h2 ip netns exec lsp22 ip a a dev lsp22 43.43.43.22/24
+podman exec $h2 ip netns exec lsp22 ip link add link lsp22 name lsp22.44 type vlan id 44
+podman exec $h2 ip netns exec lsp22 ip link set lsp22.44 up
+podman exec $h2 ip netns exec lsp22 ip a a dev lsp22.44 44.44.44.22/24
+
+podman exec $h3 ip netns exec lsp3 ip a a dev lsp3 44.44.44.3/24
+podman exec $h3 ip netns exec lsp3 ip link add link lsp3 name lsp3.42 type vlan id 42
+podman exec $h3 ip netns exec lsp3 ip link set lsp3.42 up
+podman exec $h3 ip netns exec lsp3 ip a a dev lsp3.42 42.42.42.3/24
+
+podman exec $h3 ip netns exec lsp33 ip a a dev lsp33 44.44.44.33/24
+podman exec $h3 ip netns exec lsp33 ip link add link lsp33 name lsp33.42 type vlan id 42
+podman exec $h3 ip netns exec lsp33 ip link set lsp33.42 up
+podman exec $h3 ip netns exec lsp33 ip a a dev lsp33.42 42.42.42.33/24
+
+echo "Test from LSP1"
+for dest in 42.42.42.11 42.42.42.3 42.42.42.33; do
+    podman exec $h1 ip netns exec lsp1 ping -c1 $dest
+done
+
+echo "Test from LSP11"
+for dest in 42.42.42.1 42.42.42.3 42.42.42.33; do
+    podman exec $h1 ip netns exec lsp11 ping -c1 $dest
+done
+
+echo "Test from LSP2"
+for dest in 43.43.43.1 43.43.43.11 43.43.43.22; do
+    podman exec $h2 ip netns exec lsp2 ping -c1 $dest
+done
+
+echo "Test from LSP22"
+for dest in 43.43.43.1 43.43.43.11 43.43.43.2; do
+    podman exec $h2 ip netns exec lsp22 ping -c1 $dest
+done
+
+echo "Test from LSP3"
+for dest in 44.44.44.2 44.44.44.22 44.44.44.33; do
+    podman exec $h3 ip netns exec lsp3 ping -c1 $dest
+done
+
+echo "Test from LSP33"
+for dest in 44.44.44.2 44.44.44.22 44.44.44.3; do
+    podman exec $h3 ip netns exec lsp3 ping -c1 $dest
+done
 
 sleep infinity
