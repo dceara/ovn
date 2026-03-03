@@ -8712,7 +8712,7 @@ build_lswitch_rport_arp_req_flow(
      */
     if (vector_len(&od->router_ports) != od->nbs->n_ports) {
         ds_put_format(&actions, "clone {outport = %s; output; }; "
-                                "outport = \""MC_FLOOD_L2"\"; output;",
+                                "outport = \""MC_UNKNOWN"\"; output;",
                       patch_op->json_key);
         ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
                                 priority, ds_cstr(&match),
@@ -8734,7 +8734,7 @@ build_lswitch_rport_arp_req_flow(
         ds_clear(&actions);
         if (vector_len(&od->router_ports) != od->nbs->n_ports) {
             ds_put_format(&actions, "clone {outport = %s; output; }; "
-                                    "outport = \""MC_FLOOD_L2"\"; output;",
+                                    "outport = \""MC_UNKNOWN"\"; output;",
                           patch_op->cr_port->json_key);
             ovn_lflow_add_with_hint(lflows, od, S_SWITCH_IN_L2_LKUP,
                                     priority, ds_cstr(&match),
@@ -10114,14 +10114,16 @@ build_lswitch_destination_lookup_bmcast(struct ovn_datapath *od,
                       lflow_ref);
     }
 
+    //TODO: make this depend on the mac binding aging timeout config?
     if (!smap_get_bool(&od->nbs->other_config,
                        "broadcast-arps-to-all-routers", true)) {
         ovn_lflow_add(lflows, od, S_SWITCH_IN_L2_LKUP, 72,
                       "eth.mcast && (arp.op == 1 || nd_ns)",
-                      "outport = \""MC_FLOOD_L2"\"; output;",
+                      "outport = \""MC_UNKNOWN"\"; output;",
                       lflow_ref);
     }
 
+    //TODO: make this depend on the mac binding aging timeout config?
     ovn_lflow_add(lflows, od, S_SWITCH_IN_L2_LKUP, 71,
                   "eth.mcast && (arp || ip)",
                   "outport = \""MC_FLOOD"\"; output;", lflow_ref);
