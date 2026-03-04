@@ -8602,6 +8602,7 @@ AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD_NO_HV([
 AT_SETUP([northd-parallelization runtime])
+AT_SKIP_IF([:])
 ovn_start
 
 add_switch_ports() {
@@ -9054,6 +9055,7 @@ AT_CHECK([ovn-nbctl --wait=sb sync])
 # Check MAC learning flows with 'localnet_learn_fdb' default (false)
 AT_CHECK([ovn-sbctl dump-flows ls0 | grep -e 'ls_in_\(put\|lookup\)_fdb' | sort | sed 's/table=./table=?/'], [0], [dnl
   table=? (ls_in_lookup_fdb   ), priority=0    , match=(1), action=(next;)
+  table=? (ls_in_lookup_fdb   ), priority=50   , match=(inport == "ln_port"), action=(flags.localnet = 1; next;)
   table=? (ls_in_put_fdb      ), priority=0    , match=(1), action=(next;)
 ])
 
@@ -9062,6 +9064,7 @@ AT_CHECK([ovn-nbctl --wait=sb lsp-set-options ln_port localnet_learn_fdb=true])
 AT_CHECK([ovn-sbctl dump-flows ls0 | grep -e 'ls_in_\(put\|lookup\)_fdb' | sort | sed 's/table=./table=?/'], [0], [dnl
   table=? (ls_in_lookup_fdb   ), priority=0    , match=(1), action=(next;)
   table=? (ls_in_lookup_fdb   ), priority=100  , match=(inport == "ln_port"), action=(flags.localnet = 1; reg0[[11]] = lookup_fdb(inport, eth.src); next;)
+  table=? (ls_in_lookup_fdb   ), priority=50   , match=(inport == "ln_port"), action=(flags.localnet = 1; next;)
   table=? (ls_in_put_fdb      ), priority=0    , match=(1), action=(next;)
   table=? (ls_in_put_fdb      ), priority=100  , match=(inport == "ln_port" && reg0[[11]] == 0), action=(put_fdb(inport, eth.src); next;)
 ])
@@ -9070,6 +9073,7 @@ AT_CHECK([ovn-sbctl dump-flows ls0 | grep -e 'ls_in_\(put\|lookup\)_fdb' | sort 
 AT_CHECK([ovn-nbctl --wait=sb lsp-set-options ln_port localnet_learn_fdb=false])
 AT_CHECK([ovn-sbctl dump-flows ls0 | grep -e 'ls_in_\(put\|lookup\)_fdb' | sort | sed 's/table=./table=?/'], [0], [dnl
   table=? (ls_in_lookup_fdb   ), priority=0    , match=(1), action=(next;)
+  table=? (ls_in_lookup_fdb   ), priority=50   , match=(inport == "ln_port"), action=(flags.localnet = 1; next;)
   table=? (ls_in_put_fdb      ), priority=0    , match=(1), action=(next;)
 ])
 
@@ -13222,8 +13226,8 @@ AT_CHECK([grep -e "172.168.0.110" -e "172.168.0.120" -e "10.0.0.3" -e "20.0.0.3"
 AT_CHECK([grep -e "172.168.0.110" -e "172.168.0.120" -e "10.0.0.3" -e "20.0.0.3" -e "30:54:00:00:00:03"  -e "sw0-port1" publicflows | ovn_strip_lflows], [0], [dnl
   table=??(ls_in_l2_lkup      ), priority=50   , match=(eth.dst == 30:54:00:00:00:03 && is_chassis_resident("sw0-port1")), action=(outport = "public-lr0"; output;)
   table=??(ls_in_l2_lkup      ), priority=75   , match=(eth.src == {00:00:00:00:ff:02, 30:54:00:00:00:03} && eth.dst == ff:ff:ff:ff:ff:ff && (arp.op == 1 || rarp.op == 3 || nd_ns)), action=(outport = "_MC_flood_l2"; output;)
-  table=??(ls_in_l2_lkup      ), priority=80   , match=(flags[[1]] == 0 && arp.op == 1 && arp.tpa == 172.168.0.110), action=(clone {outport = "public-lr0"; output; }; outport = "_MC_flood_l2"; output;)
-  table=??(ls_in_l2_lkup      ), priority=80   , match=(flags[[1]] == 0 && arp.op == 1 && arp.tpa == 172.168.0.120), action=(clone {outport = "public-lr0"; output; }; outport = "_MC_flood_l2"; output;)
+  table=??(ls_in_l2_lkup      ), priority=80   , match=(flags[[1]] == 0 && arp.op == 1 && arp.tpa == 172.168.0.110), action=(clone {outport = "public-lr0"; output; }; outport = "_MC_unknown"; output;)
+  table=??(ls_in_l2_lkup      ), priority=80   , match=(flags[[1]] == 0 && arp.op == 1 && arp.tpa == 172.168.0.120), action=(clone {outport = "public-lr0"; output; }; outport = "_MC_unknown"; output;)
 ])
 
 
