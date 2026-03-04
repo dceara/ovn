@@ -29644,7 +29644,7 @@ wait_for_ports_up sw0-p1
 # Wait for arp flow to be installed
 OVS_WAIT_UNTIL([
     test $(as hv1 ovs-ofctl dump-flows br-int | \
-    grep "arp_tpa=10.0.0.3,arp_op=1" -c) -eq 2
+    grep "arp_tpa=10.0.0.3,arp_op=1" -c) -eq 4
 ])
 
 # Get the number of OF flows in hv1 and hv2
@@ -29664,7 +29664,7 @@ wait_for_ports_up sw0-p2
 # Wait for arp flow to be installed
 OVS_WAIT_UNTIL([
     test $(as hv2 ovs-ofctl dump-flows br-int | \
-    grep "arp_tpa=10.0.0.4,arp_op=1" -c) -eq 2
+    grep "arp_tpa=10.0.0.4,arp_op=1" -c) -eq 4
 ])
 
 hv2_offlows=$(as hv2 ovs-ofctl dump-flows br-int | wc -l)
@@ -29708,7 +29708,7 @@ wait_for_ports_up sw0-p1
 # Wait for arp flow to be installed
 OVS_WAIT_UNTIL([
     test $(as hv1 ovs-ofctl dump-flows br-int | \
-    grep "arp_tpa=10.0.0.3,arp_op=1" -c) -eq 2
+    grep "arp_tpa=10.0.0.3,arp_op=1" -c) -eq 4
 ])
 
 # Get the number of OF flows in hv1 and hv2
@@ -29728,7 +29728,7 @@ wait_for_ports_up sw0-p2
 # Wait for arp flow to be installed
 OVS_WAIT_UNTIL([
     test $(as hv2 ovs-ofctl dump-flows br-int | \
-    grep "arp_tpa=10.0.0.4,arp_op=1" -c) -eq 2
+    grep "arp_tpa=10.0.0.4,arp_op=1" -c) -eq 4
 ])
 
 hv2_offlows_mon=$(as hv2 ovs-ofctl dump-flows br-int | wc -l)
