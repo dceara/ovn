@@ -64,10 +64,7 @@ struct stats_node {
                                struct ofputil_flow_stats *ofp_stats);
     /* Function to process the parsed stats.
      * This function runs in main thread locked behind mutex. */
-    void (*run)(struct rconn *swconn,
-                struct ovsdb_idl_index *sbrec_port_binding_by_name,
-                struct ovs_list *stats_list,
-                uint64_t *req_delay, void *data);
+    void (*run)(struct ovs_list *stats_list, uint64_t *req_delay, void *data);
     /* Name of the stats node corresponding stopwatch. */
     const char *stopwatch_name;
 };
@@ -178,16 +175,24 @@ statctrl_init(void)
 void
 statctrl_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
              struct ovsdb_idl_index *sbrec_port_binding_by_name,
+             const struct sbrec_chassis *chassis,
              struct mac_cache_data *mac_cache_data)
 {
     if (!ovnsb_idl_txn) {
         return;
     }
 
+    struct mac_binding_probe_data mac_binding_probe_data = {
+        .cache_data = mac_cache_data,
+        .sbrec_port_binding_by_name = sbrec_port_binding_by_name,
+        .swconn = statctrl_ctx.swconn,
+        .chassis = chassis,
+    };
+
     void *node_data[STATS_MAX] = {
-        mac_cache_data,
-        mac_cache_data,
-        mac_cache_data
+        [STATS_MAC_BINDING] = mac_cache_data,
+        [STATS_FDB] = mac_cache_data,
+        [STATS_MAC_BINDING_PROBE] = &mac_binding_probe_data,
     };
 
     bool schedule_updated = false;
@@ -200,9 +205,7 @@ statctrl_run(struct ovsdb_idl_txn *ovnsb_idl_txn,
         uint64_t prev_delay = node->request_delay;
 
         stopwatch_start(node->stopwatch_name, time_msec());
-        node->run(statctrl_ctx.swconn,
-                  sbrec_port_binding_by_name, &node->stats_list,
-                  &node->request_delay, node_data[i]);
+        node->run(&node->stats_list, &node->request_delay, node_data[i]);
         stopwatch_stop(node->stopwatch_name, time_msec());
 
         schedule_updated |=
