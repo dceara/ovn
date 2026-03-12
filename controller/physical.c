@@ -2503,6 +2503,11 @@ consider_port_binding(const struct physical_ctx *ctx,
              * switch will also contain the tag. */
             ofpact_put_STRIP_VLAN(ofpacts_p);
         }
+
+        // TODO: don't match packets received from remote vteps.
+        match_set_reg_masked(&match, MFF_LOG_FLAGS - MFF_REG0,
+                             0, MLF_RCV_FROM_VTEP);
+
         ofctrl_add_flow(flow_table, OFTABLE_LOG_TO_PHY, 100,
                         binding->header_.uuid.parts[0],
                         &match, ofpacts_p, &binding->header_.uuid);
@@ -3407,6 +3412,8 @@ physical_consider_evpn_binding(const struct evpn_binding *binding,
 
     put_load(binding->dp_key, MFF_LOG_DATAPATH, 0, 32, ofpacts);
     put_load(binding->binding_key, MFF_LOG_INPORT, 0, 32, ofpacts);
+    //TODO: Mark packets received from remote vteps.
+    put_load(1, MFF_LOG_FLAGS, MLF_RCV_FROM_VTEP_BIT, 1, ofpacts);
     put_resubmit(OFTABLE_LEARN_REMOTE_FDB, ofpacts);
     put_resubmit(OFTABLE_LOG_INGRESS_PIPELINE, ofpacts);
 
