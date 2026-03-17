@@ -6232,6 +6232,13 @@ build_lswitch_learn_fdb_od(
                   lflow_ref);
     ovn_lflow_add(lflows, od, S_SWITCH_OUT_PUT_FDB, 0, "1", "next;",
                   lflow_ref);
+
+    //TODO: should be in a different place but i'm lazy
+    if (od->has_evpn_vni) {
+        ovn_lflow_add(lflows, od, S_SWITCH_IN_PRE_ACL, 110,
+                    "flags.rcvd_from_vtep", "next;", lflow_ref,
+                    WITH_HINT(&od->nbs->header_));
+    }
 }
 
 /* Egress table 12: Egress port security - IP (priority 0)

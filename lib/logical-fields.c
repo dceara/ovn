@@ -118,6 +118,10 @@ ovn_init_symtab(struct shash *symtab)
     char flags_str[16];
     snprintf(flags_str, sizeof flags_str, "flags[%d]", MLF_ALLOW_LOOPBACK_BIT);
     expr_symtab_add_subfield(symtab, "flags.loopback", NULL, flags_str);
+
+    snprintf(flags_str, sizeof flags_str, "flags[%d]", MLF_RCV_FROM_VTEP_BIT);
+    expr_symtab_add_subfield(symtab, "flags.rcvd_from_vtep", NULL, flags_str);
+
     snprintf(flags_str, sizeof flags_str, "flags[%d]",
              MLF_FORCE_SNAT_FOR_DNAT_BIT);
     expr_symtab_add_subfield(symtab, "flags.force_snat_for_dnat", NULL,
