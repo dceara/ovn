@@ -2504,9 +2504,12 @@ consider_port_binding(const struct physical_ctx *ctx,
             ofpact_put_STRIP_VLAN(ofpacts_p);
         }
 
-        // TODO: don't match packets received from remote vteps.
-        match_set_reg_masked(&match, MFF_LOG_FLAGS - MFF_REG0,
-                             0, MLF_RCV_FROM_VTEP);
+        // TODO: don't match packets received from remote vteps when forwarding
+        // to localnet
+        if (type == LP_LOCALNET) {
+            match_set_reg_masked(&match, MFF_LOG_FLAGS - MFF_REG0,
+                                 0, MLF_RCV_FROM_VTEP);
+        }
 
         ofctrl_add_flow(flow_table, OFTABLE_LOG_TO_PHY, 100,
                         binding->header_.uuid.parts[0],
