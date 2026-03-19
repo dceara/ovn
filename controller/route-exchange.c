@@ -267,7 +267,12 @@ route_exchange_run(const struct route_exchange_ctx_in *r_ctx_in,
                          "%s table id: %"PRIu32,
                          UUID_ARGS(&ad->db->header_.uuid),
                          !valid ? "invalid" : "duplicate", table_id);
-            continue;
+            //TODO: we need a better fix probably:
+            //don't skip dups, we might have "no-learning=true" but we still
+            //need to monitor in order to advertise
+            if (!valid) {
+                continue;
+            }
         }
 
         if (ad->maintain_vrf) {
