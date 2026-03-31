@@ -291,6 +291,15 @@ accepts a comma-separated list of the following values:
 These options can also be set per logical router port, overriding the
 router-level setting for routes associated with that specific port.
 
+Each ``Advertised_Route`` record includes:
+
+- ``datapath`` --- The logical router datapath this route belongs to.
+- ``logical_port`` --- The port binding this route is associated with.
+- ``ip_prefix`` --- The IP prefix of this route (e.g., 192.168.100.0/24).
+- ``tracked_port`` --- Tracks the port OVN will forward packets for this
+  destination to.  An announcing chassis can use this to check if the
+  destination is local and adjust route priorities accordingly.
+
 Route Installation on the Chassis
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -613,9 +622,9 @@ EVPN Source IP Configuration
 
 The ``ovn-evpn-local-ip`` option in the ``Open_vSwitch`` table
 ``external_ids`` configures the source IP addresses used for EVPN VXLAN
-tunnels.  The format supports per-VNI IP assignment::
+tunnels.  The format supports per-VNI IP assignment:
 
-    vni0-IPv4,vni1-IPv4,vni1-IPv6,IPv4,IPv6
+``vni0-IPv4,vni1-IPv4,vni1-IPv6,IPv4,IPv6``
 
 If no VNI-specific address is provided, the default IP address is used
 for all VNIs.
