@@ -50,6 +50,7 @@
 #include "openvswitch/rconn.h"
 #include "socket-util.h"
 #include "timeval.h"
+#include "unixctl.h"
 #include "util.h"
 #include "vswitch-idl.h"
 #include "ovn-sb-idl.h"
@@ -363,6 +364,11 @@ static enum ofctrl_state state;
 /* Release wait before clear stage. */
 static bool wait_before_clear_proceed = false;
 
+/* Bundle log limit: if non-zero and bundle entry count exceeds this,
+ * VLOG_INFO all bundle contents.  Logs only once per limit value. */
+static unsigned int bundle_log_limit;
+static bool bundle_logged;
+
 /* Transaction IDs for messages in flight to the switch. */
 static ovs_be32 xid, xid2;
 
@@ -425,6 +431,20 @@ static void ovn_installed_flow_table_destroy(void);
 
 static void ofctrl_recv(const struct ofp_header *, enum ofptype);
 
+static void
+debug_set_bundle_log_limit(struct unixctl_conn *conn, int argc OVS_UNUSED,
+                           const char *argv[], void *aux OVS_UNUSED)
+{
+    unsigned int limit;
+    if (!str_to_uint(argv[1], 10, &limit)) {
+        unixctl_command_reply_error(conn, "unsigned integer required");
+        return;
+    }
+    bundle_log_limit = limit;
+    bundle_logged = false;
+    unixctl_command_reply(conn, NULL);
+}
+
 void
 ofctrl_init(struct ovn_extend_table *group_table,
             struct ovn_extend_table *meter_table)
@@ -439,6 +459,8 @@ ofctrl_init(struct ovn_extend_table *group_table,
     groups = group_table;
     meters = meter_table;
     shash_init(&meter_bands);
+    unixctl_command_register("debug/set-bundle-log-limit", "LIMIT", 1, 1,
+                             debug_set_bundle_log_limit, NULL);
 }
 
 /* S_NEW, for a new connection.
@@ -2991,6 +3013,26 @@ ofctrl_put(struct ovn_desired_flow_table *lflow_table,
         bc.type = OFPBCT_COMMIT_REQUEST;
         bundle_commit = ofputil_encode_bundle_ctrl_request(OFP15_VERSION, &bc);
         ovs_list_push_back(&msgs, &bundle_commit->list_node);
+
+        /* Log bundle contents if limit is configured and exceeded. */
+        if (bundle_log_limit && !bundle_logged) {
+            /* Exclude bundle_open and bundle_commit from the count. */
+            size_t n = ovs_list_size(&msgs) - 2;
+            if (n > bundle_log_limit) {
+                VLOG_INFO("Bundle #%d: %"PRIuSIZE" entries exceeds "
+                          "log limit %u, dumping contents:",
+                          bundle_id - 1, n, bundle_log_limit);
+                struct ofpbuf *b;
+                LIST_FOR_EACH (b, list_node, &msgs) {
+                    const struct ofp_header *oh = b->data;
+                    char *s = ofp_to_string(oh, ntohs(oh->length),
+                                            NULL, NULL, 2);
+                    VLOG_INFO("%s", s);
+                    free(s);
+                }
+                bundle_logged = true;
+            }
+        }
     }
 
     /* Sync the contents of groups->desired to groups->existing. */
