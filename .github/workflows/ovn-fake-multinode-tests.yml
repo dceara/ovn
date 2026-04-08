@@ -19,7 +19,7 @@ jobs:
       matrix:
         cfg:
         - { repo: "${{ github.repository }}", branch: "${{ github.ref_name }}" }
-        - { repo: ovn-org/ovn, branch: "branch-22.03" }
+        - { repo: ovn-org/ovn, branch: "branch-24.03" }
     env:
       RUNC_CMD: podman
       OS_IMAGE: "fedora:42"
@@ -31,7 +31,7 @@ jobs:
       with:
         repository: 'ovn-org/ovn-fake-multinode'
         path: 'ovn-fake-multinode'
-        ref: 'v0.2'
+        ref: 'v0.4'
 
     # Check out ovn and ovs separately inside ovn-fake-multinode/ovn and ovn-fake-multinode/ovs
     # ovn-fake-multinode builds and installs ovs from ovn-fake-multinode/ovs
@@ -91,7 +91,7 @@ jobs:
       matrix:
         cfg:
         - { branch: "${{ github.ref_name }}", testsuiteflags: ""}
-        - { branch: "branch-22.03", testsuiteflags: "-k 'basic test'" }
+        - { branch: "branch-24.03", testsuiteflags: "-k 'basic test'" }
     name: multinode tests ${{ join(matrix.cfg.*, ' ') }}
     env:
       RUNC_CMD: podman
@@ -142,19 +142,19 @@ jobs:
 
     - uses: actions/download-artifact@v8
       with:
-        name: test-branch-22.03-image
+        name: test-branch-24.03-image
 
     - name: Load podman image
       run: |
         sudo podman load --input ovn_${{ github.ref_name }}_image.tar
-        sudo podman load --input ovn_branch-22.03_image.tar
+        sudo podman load --input ovn_branch-24.03_image.tar
 
     - name: Check out ovn-fake-multi-node
       uses: actions/checkout@v6
       with:
         repository: 'ovn-org/ovn-fake-multinode'
         path: 'ovn-fake-multinode'
-        ref: 'v0.2'
+        ref: 'v0.4'
 
     - name: Start openvswitch
       run: |
@@ -164,8 +164,8 @@ jobs:
     - name: Start basic cluster
       run: |
         sudo -E CHASSIS_COUNT=4 GW_COUNT=4 ./ovn_cluster.sh start
-        sudo podman exec -it ovn-central-az1-1 ovn-nbctl show
-        sudo podman exec -it ovn-central-az1-1 ovn-appctl -t ovn-northd version
+        sudo podman exec -it ovn-central-az1 ovn-nbctl show
+        sudo podman exec -it ovn-central-az1 ovn-appctl -t ovn-northd version
         sudo podman exec -it ovn-chassis-1 ovn-appctl -t ovn-controller version
       working-directory: ovn-fake-multinode
 
@@ -201,8 +201,8 @@ jobs:
     - name: Run fake-multinode system tests
       run: |
         if ! sudo -E make check-multinode TESTSUITEFLAGS="${{ matrix.cfg.testsuiteflags }}"; then
-          sudo podman exec -it ovn-central-az1-1 ovn-nbctl show || :
-          sudo podman exec -it ovn-central-az1-1 ovn-sbctl show || :
+          sudo podman exec -it ovn-central-az1 ovn-nbctl show || :
+          sudo podman exec -it ovn-central-az1 ovn-sbctl show || :
           sudo podman exec -it ovn-chassis-1 ovs-vsctl show || :
           sudo podman exec -it ovn-chassis-1 ip netns || :
           sudo podman exec -it ovn-chassis-1 cat /var/log/ovn/ovn-controller.log || :
