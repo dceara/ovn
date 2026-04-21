@@ -7,6 +7,7 @@ EXTRA_DIST += \
 	tutorial/bgp/setup-l2.sh \
 	tutorial/bgp/setup-l2-ovn.sh \
 	tutorial/bgp/setup-l3.sh \
+	tutorial/bgp/setup-l3-FDP-3476.sh \
 	tutorial/bgp/setup-unicast.sh
 sandbox: all
 	cd $(srcdir)/tutorial && MAKE=$(MAKE) HAVE_OPENSSL=$(HAVE_OPENSSL) \
