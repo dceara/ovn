@@ -7523,7 +7523,7 @@ main(int argc, char *argv[])
 
                 const struct sbrec_sb_global *sbg =
                     sbrec_sb_global_first(ovnsb_idl_loop.idl);
-                if (chassis && sbg && ovs_feature_set_discovered()) {
+                if (chassis && sbg && ovs_feature_set_discovered() && !ofctrl_has_backlog()) {
                     encaps_run(ovs_idl_txn, ovnsb_idl_txn, br_int,
                                sbrec_chassis_table_get(ovnsb_idl_loop.idl),
                                chassis,

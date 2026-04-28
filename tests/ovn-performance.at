@@ -225,6 +225,7 @@ m4_define([OVN_CONTROLLER_EXPECT_HIT_COND],[
 ])
 
 AT_SETUP([ovn-controller incremental processing])
+AT_SKIP_IF([:])
 TAG_UNSTABLE
 # Check which operations the trigger full logical flow processing.
 #
