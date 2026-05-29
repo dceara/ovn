@@ -298,8 +298,8 @@ Usage Examples
 The following examples demonstrate complete configurations for common
 deployment scenarios.
 
-Example 1: Gateway Router with BGP
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example: Gateway Router with BGP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A centralized gateway router pinned to a specific chassis, peering
 with an external BGP speaker to advertise connected and static
@@ -323,7 +323,7 @@ routes.
               |
         VM1  VM2  VM3
 
-**Step 1: Create the logical topology.**
+**Create the logical topology.**
 ::
 
     $ ovn-nbctl lr-add lr-gw
@@ -346,7 +346,7 @@ routes.
     $ ovn-nbctl lsp-add-localnet-port ls-fabric \
         lsp-fabric-ln physnet-fabric
 
-**Step 2: Pin the router to a chassis and enable dynamic routing.**
+**Pin the router to a chassis and enable dynamic routing.**
 ::
 
     $ ovn-nbctl set Logical_Router lr-gw \
@@ -355,7 +355,7 @@ routes.
         options:dynamic-routing-redistribute=connected,static \
         options:dynamic-routing-vrf-id=100
 
-**Step 3: Configure VRF management and routing protocol redirect.**
+**Configure VRF management and routing protocol redirect.**
 ::
 
     # Have ovn-controller manage the VRF lifecycle.
@@ -378,7 +378,7 @@ routes.
         ipv6_ra_configs:max_interval=10 \
         ipv6_ra_configs:min_interval=5
 
-**Step 4: Bind the BGP interface on the chassis.**
+**Bind the BGP interface on the chassis.**
 ::
 
     # Create an OVS internal port bound to the BGP LSP.
@@ -390,7 +390,7 @@ routes.
     $ ip link set dev ext0-bgp master ovnvrf100
     $ ip link set dev ext0-bgp up
 
-**Step 5: Configure FRR on the chassis.**
+**Configure FRR on the chassis.**
 ::
 
     configure terminal
@@ -409,8 +409,8 @@ routes.
         neighbor ext0-bgp activate
       exit-address-family
 
-Example 2: Distributed Router with Gateway Ports
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Example: Distributed Router with Gateway Ports
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A distributed logical router with a distributed gateway port,
 advertising connected, NAT, and load balancer routes.  The
@@ -437,7 +437,7 @@ chassis hosting the workload.
                      VM-A1         VM-B1
                   (chassis-1)   (chassis-2)
 
-**Step 1: Create the distributed router with a gateway port.**
+**Create the distributed router with a gateway port.**
 ::
 
     $ ovn-nbctl lr-add lr-dist
@@ -471,7 +471,7 @@ chassis hosting the workload.
     $ ovn-nbctl set Logical_Router_Port lrp-gw \
         ha_chassis_group=$GRP
 
-**Step 2: Add NAT and load balancer.**
+**Add NAT and load balancer.**
 ::
 
     $ ovn-nbctl lr-nat-add lr-dist dnat_and_snat \
@@ -480,7 +480,7 @@ chassis hosting the workload.
         10.0.1.10:8080,10.0.2.10:8080
     $ ovn-nbctl lr-lb-add lr-dist lb-web
 
-**Step 3: Enable dynamic routing with NAT and LB redistribution.**
+**Enable dynamic routing with NAT and LB redistribution.**
 ::
 
     $ ovn-nbctl set Logical_Router lr-dist \
@@ -496,8 +496,8 @@ With ``local-only`` enabled, NAT and LB host routes are only
 advertised from the chassis where the associated workload is bound,
 ensuring optimal traffic forwarding.
 
-**Step 4: Set up routing protocol redirect and FRR** (same pattern
-as Example 1).
+**Set up routing protocol redirect and FRR** (same pattern as the
+gateway router example above).
 
 Verification and Troubleshooting
 --------------------------------
