@@ -28,25 +28,10 @@ Dynamic Routing Configuration and Usage
 Introduction
 ------------
 
-This guide explains how to configure OVN's dynamic routing feature to
-exchange IP routes and EVPN information with external routing daemons
-such as FRR (Free Range Routing).  For the underlying architecture and
-data flow details, see
+This guide covers how to configure OVN's IP route exchange feature
+with an external routing daemon such as FRR (Free Range Routing).
+For the underlying architecture and data flow details, see
 :doc:`/topics/dynamic-routing/architecture`.
-
-OVN does not implement any routing protocol itself.  Instead,
-``ovn-controller`` exchanges routes with the Linux kernel through
-Netlink, and an external routing daemon (e.g., FRR) running on the
-same chassis handles protocol peering (BGP, OSPF, etc.).  The two
-main capabilities are:
-
-- **IP Route Exchange** --- Advertise OVN routes into VRF routing
-  tables for the routing daemon to announce, and learn external routes
-  that the routing daemon installs.
-
-- **EVPN** --- Extend Layer 2/Layer 3 connectivity across the fabric
-  by exchanging MAC addresses, IP neighbors, and VTEP information
-  through BGP EVPN.
 
 Prerequisites
 -------------
@@ -62,9 +47,6 @@ Before configuring dynamic routing, ensure the following are in place:
 
 - Linux kernel VRF support (``CONFIG_NET_VRF``).  Most modern
   distributions enable this by default.
-
-- For EVPN: VXLAN kernel module (``CONFIG_VXLAN``) and pre-configured
-  bridge, VXLAN, and advertise interfaces on each chassis.
 
 IP Route Exchange
 -----------------
@@ -99,8 +81,10 @@ of the following values:
     Individual host routes (``/32`` for IPv4, ``/128`` for IPv6) for
     each actively used IP on the connected networks.  This includes
     logical switch port addresses, router port addresses, and NAT
-    entries of neighboring routers.  Implies ``connected``.  Useful
-    for steering traffic to the chassis that hosts a specific workload.
+    entries of routers connected directly or via a shared logical
+    switch.  Replaces the subnet prefix routes that ``connected``
+    would advertise with per-IP host routes.  Useful for steering
+    traffic to the chassis that hosts a specific workload.
 
 ``static``
     All ``Logical_Router_Static_Route`` entries on the router.
@@ -144,7 +128,8 @@ exchange routes through this VRF's routing table.
 The VRF table ID is determined by:
 
 1. The ``dynamic-routing-vrf-id`` option, if set to a valid integer
-   (1--4294967295, excluding reserved IDs like 253--255)::
+   (1--4294967295; IDs 253--255 are reserved by the Linux kernel
+   and should be avoided)::
 
        $ ovn-nbctl set Logical_Router lr1 \
            options:dynamic-routing-vrf-id=100
@@ -192,8 +177,11 @@ routing daemon requires a resolvable nexthop), set::
     $ ovn-nbctl set Logical_Router lr1 \
         options:dynamic-routing-v6-prefix-nexthop=fd00::1
 
-The IPv4 nexthop accepts either an IPv4 or IPv6 address.  The IPv6
-nexthop accepts only IPv6 addresses.
+The ``dynamic-routing-v4-prefix-nexthop`` option accepts either an
+IPv4 or IPv6 address; an IPv6 nexthop for IPv4 prefixes enables
+RFC 5549-style routing where IPv4 traffic is forwarded over an
+IPv6-only peering link.  The ``dynamic-routing-v6-prefix-nexthop``
+option accepts only IPv6 addresses.
 
 Route Advertisement Locality
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -229,9 +217,10 @@ Route Learning
 by the external routing daemon.  Routes with a protocol value above
 ``RTPROT_STATIC`` (i.e., routes from dynamic routing protocols like
 BGP) are learned and recorded as ``Learned_Route`` entries in the
-Southbound database.  ``ovn-northd`` then generates logical flows
-so that the logical router forwards traffic for these learned
-prefixes.
+Southbound database.  Routes installed by ``ovn-controller`` itself
+(protocol ``RTPROT_OVN``) are excluded from learning.
+``ovn-northd`` then generates logical flows so that the logical
+router forwards traffic for these learned prefixes.
 
 Learned routes receive lower priority than static routes, ensuring
 explicitly configured routes always take precedence.
@@ -309,239 +298,6 @@ automatically.  Otherwise, configure an explicit mapping on the
     $ ovs-vsctl set Open_vSwitch . \
         external_ids:dynamic-routing-port-mapping=\
     lsp-fabric1=eth1,lsp-fabric2=eth2
-
-FRR Configuration for IP Route Exchange
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The following example configures FRR to peer with OVN using BGP
-unnumbered mode in a VRF.  This configuration is applied via
-``vtysh``::
-
-    configure terminal
-
-    ip prefix-list no-default seq 5 deny 0.0.0.0/0
-    ip prefix-list no-default seq 10 permit 0.0.0.0/0 le 32
-
-    ipv6 prefix-list no-default seq 5 deny ::/0
-    ipv6 prefix-list no-default seq 10 permit ::/0 le 128
-
-    vrf ovnvrf100
-    exit-vrf
-
-    router bgp 65000 vrf ovnvrf100
-      bgp router-id 10.0.0.1
-      neighbor ext0-bgp interface remote-as external
-      address-family ipv4 unicast
-        redistribute kernel
-        neighbor ext0-bgp prefix-list no-default out
-      exit-address-family
-      address-family ipv6 unicast
-        redistribute kernel
-        neighbor ext0-bgp activate
-        neighbor ext0-bgp prefix-list no-default out
-      exit-address-family
-
-Key points:
-
-- ``redistribute kernel`` tells FRR to advertise routes from the
-  kernel routing table, which includes the routes ``ovn-controller``
-  installs via Netlink with ``RTPROT_OVN``.
-
-- The prefix lists filter out the default route to prevent
-  accidentally announcing it to peers.
-
-- ``ext0-bgp`` is the name of the OVS internal interface bound to
-  the logical switch port that has ``routing-protocol-redirect``
-  configured.  It must be placed into the VRF::
-
-      $ ip link set dev ext0-bgp master ovnvrf100
-      $ ip link set dev ext0-bgp up
-
-EVPN Configuration
-------------------
-
-EVPN extends OVN logical switches across the physical fabric using
-VXLAN encapsulation and BGP EVPN signaling.  This allows OVN to
-connect its logical switches with external Layer 2 or Layer 3
-domains that participate in the same EVPN fabric.
-
-Enabling EVPN on a Logical Switch
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Enable EVPN by setting the VNI and the required interface names on
-the logical switch::
-
-    $ ovn-nbctl set Logical_Switch ls1 \
-        other_config:dynamic-routing-vni=1000 \
-        other_config:dynamic-routing-bridge-ifname=br-evpn \
-        other_config:dynamic-routing-vxlan-ifname=vxlan-1000 \
-        other_config:dynamic-routing-advertise-ifname=lo-1000
-
-All four settings are required:
-
-``dynamic-routing-vni``
-    The VXLAN Network Identifier (0--16777215) for this EVPN domain.
-
-``dynamic-routing-bridge-ifname``
-    The Linux bridge interface associated with the EVPN domain.
-
-``dynamic-routing-vxlan-ifname``
-    One or more VXLAN device interface names (comma-separated).
-
-``dynamic-routing-advertise-ifname``
-    The interface where ``ovn-controller`` installs static FDB and
-    ARP/ND entries for the routing daemon to discover and advertise.
-
-These interfaces must be pre-created on each chassis.  See the
-`Linux Interface Setup for EVPN`_ section below.
-
-Local Advertisement
-~~~~~~~~~~~~~~~~~~~
-
-The ``dynamic-routing-redistribute`` option on the logical switch
-controls what ``ovn-controller`` advertises to the routing daemon:
-
-``fdb``
-    Install static bridge FDB entries for all local workloads (VIF
-    ports, container ports, virtual ports, distributed gateway ports,
-    gateway router ports) on the advertise interface.
-
-``ip``
-    Install static ARP/ND neighbor entries for local IP-to-MAC
-    bindings on the advertise interface.
-
-Set both for full EVPN Type-2 (MAC+IP) advertisement::
-
-    $ ovn-nbctl set Logical_Switch ls1 \
-        other_config:dynamic-routing-redistribute=fdb,ip
-
-Lookup Order
-~~~~~~~~~~~~
-
-When both OVN's native mechanisms and EVPN provide forwarding
-information, the lookup order can be configured:
-
-``dynamic-routing-fdb-prefer-local``
-    When ``true``, OVN checks the Southbound ``FDB`` table before the
-    EVPN-learned FDB cache.  Default: ``false`` (EVPN entries take
-    precedence).
-
-``dynamic-routing-arp-prefer-local``
-    When ``true``, OVN checks the Southbound ``MAC_Binding`` table
-    before the EVPN-learned ARP/ND cache.  Default: ``false``.
-
-::
-
-    $ ovn-nbctl set Logical_Switch ls1 \
-        other_config:dynamic-routing-fdb-prefer-local=true \
-        other_config:dynamic-routing-arp-prefer-local=true
-
-Controller EVPN Settings
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-The following settings are configured on the ``Open_vSwitch`` table
-on each chassis:
-
-``ovn-evpn-vxlan-ports``
-    Comma-separated list of UDP ports used as destination ports for
-    EVPN VXLAN tunnels created by ``ovn-controller``::
-
-        $ ovs-vsctl set Open_vSwitch . \
-            external_ids:ovn-evpn-vxlan-ports=4789
-
-``ovn-evpn-local-ip``
-    Source IP addresses for EVPN VXLAN traffic.  Supports per-VNI
-    assignment::
-
-        $ ovs-vsctl set Open_vSwitch . \
-            external_ids:ovn-evpn-local-ip=10.0.0.1
-
-    Format: ``vni0-IPv4,vni1-IPv4,vni1-IPv6,IPv4,IPv6``.  If no
-    VNI-specific address is given, the default IP is used for all
-    VNIs.
-
-.. _evpn-linux-setup:
-
-Linux Interface Setup for EVPN
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Each chassis participating in EVPN needs pre-configured Linux
-interfaces.  The following example sets up the interfaces for VNI
-1000::
-
-    # Create a VRF for the VNI.
-    $ ip link add vrf-1000 type vrf table 1000
-    $ ip link set vrf-1000 up
-
-    # Create the EVPN bridge.
-    $ ip link add br-evpn type bridge
-    $ ip link set br-evpn master vrf-1000 addrgenmode none
-    $ ip link set br-evpn up
-
-    # Create the VXLAN device.
-    $ ip link add vxlan-1000 type vxlan \
-        id 1000 dstport 4789 local $LOCAL_IP nolearning
-    $ ip link set vxlan-1000 up
-    $ ip link set vxlan-1000 master br-evpn
-
-    # Create the advertise device (dummy interface).
-    $ ip link add lo-1000 type dummy
-    $ ip link set lo-1000 master br-evpn
-    $ ip link set lo-1000 up
-
-Where ``$LOCAL_IP`` is the chassis IP address used for VXLAN tunnels.
-
-FRR Configuration for EVPN
-~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-**L2 EVPN** --- Advertise MAC addresses and IP neighbors for the
-EVPN domain::
-
-    configure terminal
-
-    router bgp 65000
-      bgp router-id 10.0.0.1
-      no bgp ebgp-requires-policy
-      neighbor fabric interface remote-as external
-      address-family l2vpn evpn
-        neighbor fabric activate
-        advertise-all-vni
-      exit-address-family
-
-**L3 EVPN** --- Additionally advertise IP prefixes for inter-subnet
-routing.  This requires a VRF-specific BGP instance::
-
-    configure terminal
-
-    vrf vrf-1000
-      vni 1000
-    exit-vrf
-
-    router bgp 65000
-      bgp router-id 10.0.0.1
-      no bgp ebgp-requires-policy
-      neighbor fabric interface remote-as external
-      address-family l2vpn evpn
-        neighbor fabric activate
-        advertise-all-vni
-        advertise-svi-ip
-      exit-address-family
-
-    router bgp 65000 vrf vrf-1000
-      bgp router-id 10.0.0.1
-      no bgp ebgp-requires-policy
-      address-family ipv4 unicast
-        redistribute kernel
-        redistribute connected
-      exit-address-family
-      address-family ipv6 unicast
-        redistribute kernel
-        redistribute connected
-      exit-address-family
-      address-family l2vpn evpn
-        advertise ipv4 unicast
-        advertise ipv6 unicast
-      exit-address-family
 
 Usage Examples
 --------------
@@ -750,230 +506,6 @@ ensuring optimal traffic forwarding.
 **Step 4: Set up routing protocol redirect and FRR** (same pattern
 as Example 1).
 
-Example 3: EVPN L2 Integration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-An OVN logical switch connected to an external Layer 2 domain through
-BGP EVPN.  External hosts (bare-metal servers, network appliances, or
-workloads on non-OVN platforms) participate in the same EVPN fabric
-and share the same VNI, allowing OVN workloads to communicate at
-Layer 2 with hosts outside OVN.
-
-::
-
-    OVN Chassis                         External EVPN Peer
-    +----------------------------+     +----------------------------+
-    |                            |     |                            |
-    | VM-A1 (MAC-A1, 10.0.1.10) |     | Server-X (MAC-X,10.0.1.50)|
-    | VM-A2 (MAC-A2, 10.0.1.11) |     |                            |
-    |                            |     |                            |
-    | ovn-controller             |     | FRR / routing daemon       |
-    |   ls-evpn (VNI 1000)      |     |   VNI 1000                 |
-    |                            |     |                            |
-    | FRR (BGP EVPN)             |     |                            |
-    +--------------+-------------+     +--------------+-------------+
-                   |                                  |
-                   |        BGP EVPN peering          |
-                   +----------------------------------+
-
-In this scenario, ``ovn-controller`` advertises the MAC and IP
-addresses of VM-A1 and VM-A2 as EVPN Type-2 routes through FRR.
-The external peer learns these entries and can forward traffic
-directly to the OVN chassis.  Conversely, FRR on the OVN chassis
-learns MAC-X and 10.0.1.50 from the external peer, and
-``ovn-controller`` picks up these entries via Netlink to enable
-forwarding to Server-X.
-
-**Step 1: Create the logical switch with EVPN settings.**
-::
-
-    $ ovn-nbctl ls-add ls-evpn
-    $ ovn-nbctl set Logical_Switch ls-evpn \
-        other_config:dynamic-routing-vni=1000 \
-        other_config:dynamic-routing-bridge-ifname=br-evpn \
-        other_config:dynamic-routing-vxlan-ifname=vxlan-1000 \
-        other_config:dynamic-routing-advertise-ifname=lo-1000 \
-        other_config:dynamic-routing-redistribute=fdb,ip
-
-**Step 2: Set up Linux interfaces on the chassis** (see
-`Linux Interface Setup for EVPN`_).
-
-**Step 3: Configure ``ovn-controller`` EVPN settings.**
-::
-
-    $ ovs-vsctl set Open_vSwitch . \
-        external_ids:ovn-evpn-vxlan-ports=4789 \
-        external_ids:ovn-evpn-local-ip=$LOCAL_IP
-
-**Step 4: Configure FRR for L2 EVPN.**
-::
-
-    configure terminal
-
-    router bgp 65000
-      bgp router-id $LOCAL_IP
-      no bgp ebgp-requires-policy
-      neighbor br-fabric interface remote-as external
-      address-family l2vpn evpn
-        neighbor br-fabric activate
-        advertise-all-vni
-      exit-address-family
-
-``ovn-controller`` installs static FDB and ARP/ND entries on the
-``lo-1000`` advertise interface for local workloads.  FRR reads these
-and advertises them as EVPN Type-2 routes.  Remote entries learned by
-FRR from the external peer are installed into the kernel, and
-``ovn-controller`` picks them up via Netlink to create the necessary
-OVS VXLAN tunnels and forwarding rules.
-
-Example 4: EVPN L3 Integration
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-An OVN deployment connected to external networks through EVPN with
-Layer 3 routing.  This extends the L2 EVPN integration by adding
-inter-subnet routing: OVN workloads on one subnet can reach external
-hosts on different subnets through the EVPN fabric, and vice versa.
-The external network may be bare-metal infrastructure, a separate
-data center fabric, or any other network participating in the EVPN
-domain.
-
-Each OVN logical router maps to a single VRF and monitors a single
-VNI.  To support multiple subnets, use one gateway router per VNI.
-
-::
-
-    OVN Chassis                          External Network
-    +-----------------------------+     +-----------------------------+
-    |                             |     |                             |
-    | VM-A1: 10.0.1.10           |     | Host-X: 10.0.3.50          |
-    |                             |     |                             |
-    | LS-1 (VNI 1000, 10.0.1/24) |     | VNI 1000 (10.0.3/24)       |
-    |          |                  |     |                             |
-    |    +-----+------+          |     |                             |
-    |    | LR-1       | VRF 1000 |     |                             |
-    |    +------------+          |     |                             |
-    |                             |     |                             |
-    | VM-A2: 10.0.2.20           |     | Host-Y: 10.0.4.60          |
-    |                             |     |                             |
-    | LS-2 (VNI 2000, 10.0.2/24) |     | VNI 2000 (10.0.4/24)       |
-    |          |                  |     |                             |
-    |    +-----+------+          |     |                             |
-    |    | LR-2       | VRF 2000 |     |                             |
-    |    +------------+          |     |                             |
-    |                             |     |                             |
-    | FRR (BGP L3 EVPN)          |     | FRR with L3 EVPN           |
-    +---------------+-------------+     +---------------+-------------+
-                    |                                   |
-                    |         BGP EVPN peering          |
-                    +-----------------------------------+
-
-**Step 1: Create logical switches with EVPN settings.**
-::
-
-    $ ovn-nbctl ls-add ls-1
-    $ ovn-nbctl set Logical_Switch ls-1 \
-        other_config:dynamic-routing-vni=1000 \
-        other_config:dynamic-routing-bridge-ifname=br-evpn \
-        other_config:dynamic-routing-vxlan-ifname=vxlan-1000 \
-        other_config:dynamic-routing-advertise-ifname=lo-1000 \
-        other_config:dynamic-routing-redistribute=fdb,ip
-
-    $ ovn-nbctl ls-add ls-2
-    $ ovn-nbctl set Logical_Switch ls-2 \
-        other_config:dynamic-routing-vni=2000 \
-        other_config:dynamic-routing-bridge-ifname=br-evpn \
-        other_config:dynamic-routing-vxlan-ifname=vxlan-2000 \
-        other_config:dynamic-routing-advertise-ifname=lo-2000 \
-        other_config:dynamic-routing-redistribute=fdb,ip
-
-**Step 2: Create gateway routers, one per VNI.**
-
-Each router is pinned to the chassis and has its own VRF::
-
-    # Router for VNI 1000.
-    $ ovn-nbctl lr-add lr-1
-    $ ovn-nbctl set Logical_Router lr-1 \
-        options:chassis=chassis-1 \
-        options:dynamic-routing=true \
-        options:dynamic-routing-vrf-id=1000
-
-    $ ovn-nbctl lrp-add lr-1 lrp-1 \
-        00:00:00:00:10:01 10.0.1.1/24
-    $ ovn-nbctl lsp-add-router-port ls-1 lsp-1-to-lr lrp-1
-    $ ovn-nbctl set Logical_Router_Port lrp-1 \
-        options:dynamic-routing-maintain-vrf=true
-
-    # Router for VNI 2000.
-    $ ovn-nbctl lr-add lr-2
-    $ ovn-nbctl set Logical_Router lr-2 \
-        options:chassis=chassis-1 \
-        options:dynamic-routing=true \
-        options:dynamic-routing-vrf-id=2000
-
-    $ ovn-nbctl lrp-add lr-2 lrp-2 \
-        00:00:00:00:10:02 10.0.2.1/24
-    $ ovn-nbctl lsp-add-router-port ls-2 lsp-2-to-lr lrp-2
-    $ ovn-nbctl set Logical_Router_Port lrp-2 \
-        options:dynamic-routing-maintain-vrf=true
-
-**Step 3: Set up Linux interfaces for each VNI on the chassis**
-(see `Linux Interface Setup for EVPN`_).
-
-**Step 4: Configure FRR for L3 EVPN.**
-::
-
-    configure terminal
-
-    vrf vrf-1000
-      vni 1000
-    exit-vrf
-
-    vrf vrf-2000
-      vni 2000
-    exit-vrf
-
-    router bgp 65000
-      bgp router-id $LOCAL_IP
-      no bgp ebgp-requires-policy
-      neighbor br-fabric interface remote-as external
-      address-family l2vpn evpn
-        neighbor br-fabric activate
-        advertise-all-vni
-        advertise-svi-ip
-      exit-address-family
-
-    router bgp 65000 vrf vrf-1000
-      bgp router-id $LOCAL_IP
-      no bgp ebgp-requires-policy
-      address-family ipv4 unicast
-        redistribute kernel
-        redistribute connected
-      exit-address-family
-      address-family ipv6 unicast
-        redistribute kernel
-        redistribute connected
-      exit-address-family
-      address-family l2vpn evpn
-        advertise ipv4 unicast
-        advertise ipv6 unicast
-      exit-address-family
-
-    router bgp 65000 vrf vrf-2000
-      bgp router-id $LOCAL_IP
-      no bgp ebgp-requires-policy
-      address-family ipv4 unicast
-        redistribute kernel
-        redistribute connected
-      exit-address-family
-      address-family ipv6 unicast
-        redistribute kernel
-        redistribute connected
-      exit-address-family
-      address-family l2vpn evpn
-        advertise ipv4 unicast
-        advertise ipv6 unicast
-      exit-address-family
-
 Verification and Troubleshooting
 --------------------------------
 
@@ -988,10 +520,6 @@ table::
 Check for learned routes from external peers::
 
     $ ovn-sbctl list Learned_Route
-
-For EVPN, check the advertised MAC bindings::
-
-    $ ovn-sbctl list Advertised_MAC_Binding
 
 Checking the VRF and Kernel Routes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1018,12 +546,6 @@ Check received and advertised routes::
     $ vtysh -c "show bgp ipv4 unicast"
     $ vtysh -c "show bgp ipv6 unicast"
 
-For EVPN, check the EVPN routing table::
-
-    $ vtysh -c "show bgp l2vpn evpn"
-    $ vtysh -c "show evpn vni"
-    $ vtysh -c "show evpn mac vni all"
-
 Best Practices
 --------------
 
@@ -1045,11 +567,6 @@ to let ``ovn-controller`` handle VRF creation and deletion.  This
 simplifies chassis provisioning and ensures VRF lifecycle matches
 port binding.
 
-**Separate VRF IDs from EVPN VNIs.**
-While VRF table IDs and VNIs can share the same numeric value for
-convenience, they are independent concepts.  Use a consistent
-numbering scheme that makes the mapping clear.
-
 **Configure BFD for fast failure detection.**
 Include ``BFD`` in the ``routing-protocols`` option and enable BFD
 in FRR for sub-second failure detection.  This significantly improves
@@ -1066,12 +583,11 @@ See Also
 - :doc:`/topics/dynamic-routing/architecture` --- Architecture and
   internal design of the dynamic routing feature.
 
-- ``ovn-nb``\(5) --- Full reference for all ``Logical_Router``,
-  ``Logical_Router_Port``, and ``Logical_Switch`` dynamic routing
-  options.
+- ``ovn-nb``\(5) --- Full reference for all ``Logical_Router``
+  and ``Logical_Router_Port`` dynamic routing options.
 
-- ``ovn-sb``\(5) --- Documentation of the ``Advertised_Route``,
-  ``Learned_Route``, and ``Advertised_MAC_Binding`` tables.
+- ``ovn-sb``\(5) --- Documentation of the ``Advertised_Route``
+  and ``Learned_Route`` tables.
 
 - ``ovn-controller``\(8) --- Controller-side configuration options
-  including ``dynamic-routing-port-mapping`` and EVPN settings.
+  including ``dynamic-routing-port-mapping``.
