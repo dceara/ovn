@@ -28,25 +28,20 @@ Dynamic Routing Configuration and Usage
 Introduction
 ------------
 
-This guide covers how to configure OVN's IP route exchange feature
-with an external routing daemon such as FRR (Free Range Routing).
-For the underlying architecture and data flow details, see
-:doc:`/topics/dynamic-routing/architecture`.
+This guide covers some common examples of how to configure OVN's IP
+route exchange feature with an external routing daemon such as FRR
+(Free Range Routing).  For the underlying architecture and data flow
+details, see :doc:`/topics/dynamic-routing/architecture`.
 
 Prerequisites
 -------------
 
 Before configuring dynamic routing, ensure the following are in place:
 
-- A running OVN deployment (``ovn-northd``, Southbound database, and
-  ``ovn-controller`` on each chassis).
+- A running OVN deployment.
 
 - FRR (or another routing daemon) installed on each chassis that will
-  participate in dynamic routing.  FRR version 8.4 or later is
-  recommended.
-
-- Linux kernel VRF support (``CONFIG_NET_VRF``).  Most modern
-  distributions enable this by default.
+  participate in dynamic routing.
 
 IP Route Exchange
 -----------------
@@ -136,6 +131,20 @@ The VRF table ID is determined by:
 
 2. Otherwise, the datapath tunnel key of the logical router is used.
 
+**VRF Lifecycle.**
+By default, ``ovn-controller`` expects the VRF associated with a
+logical router port to already exist on the chassis, managed by
+external tooling.  To have ``ovn-controller`` create and delete the
+VRF automatically, set ``dynamic-routing-maintain-vrf`` on the
+logical router port that is bound to the chassis::
+
+    $ ovn-nbctl set Logical_Router_Port lrp-fabric \
+        options:dynamic-routing-maintain-vrf=true
+
+When set, ``ovn-controller`` creates the VRF when the port is bound
+and deletes it when the port is unbound or dynamic routing is
+disabled.
+
 **VRF Name.**
 The VRF interface name defaults to ``ovnvrf`` followed by the table
 ID (e.g., ``ovnvrf100``).  Override it with
@@ -146,20 +155,6 @@ ID (e.g., ``ovnvrf100``).  Override it with
 
 The name must be a valid Linux network interface name (at most 15
 characters).
-
-**VRF Lifecycle.**
-By default, ``ovn-controller`` expects the VRF to already exist on
-the chassis, managed by external tooling.  To have ``ovn-controller``
-create and delete the VRF automatically, set
-``dynamic-routing-maintain-vrf`` on the logical router port that is
-bound to the chassis::
-
-    $ ovn-nbctl set Logical_Router_Port lrp-fabric \
-        options:dynamic-routing-maintain-vrf=true
-
-When set, ``ovn-controller`` creates the VRF when the port is bound
-and deletes it when the port is unbound or dynamic routing is
-disabled.
 
 Route Nexthop Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -239,16 +234,14 @@ setting)::
 Routing Protocol Redirect
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. note::
-
-   Routing protocol redirect is **entirely optional**.  OVN's dynamic
-   routing works with any control plane configuration.  The routing
-   daemon can establish its BGP or BFD sessions completely outside of
-   OVN --- for example, on a separate physical interface, a loopback,
-   or any other interface that is not managed by OVN.  Use this
-   feature only when you want the routing daemon to peer using the
-   logical router port's IP addresses through an OVN-managed logical
-   switch port.
+**Note:** Routing protocol redirect is entirely optional.  OVN's
+dynamic routing works with any control plane configuration.  The
+routing daemon can establish its BGP or BFD sessions completely
+outside of OVN --- for example, on a separate physical interface, a
+loopback, or any other interface that is not managed by OVN.  Use
+this feature only when you want the routing daemon to peer using the
+logical router port's IP addresses through an OVN-managed logical
+switch port.
 
 OVN can redirect routing protocol control plane traffic (BGP, BFD)
 from a logical router port to a logical switch port where an external
