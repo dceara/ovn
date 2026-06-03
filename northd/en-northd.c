@@ -215,6 +215,7 @@ northd_lb_data_handler(struct engine_node *node, void *data)
     struct ed_type_lb_data *lb_data = engine_get_input_data("lb_data", node);
 
     if (!lb_data->tracked) {
+        VLOG_INFO("DCEARA northd_lb_data_handler() failed !lb_data->tracked");
         return EN_UNHANDLED;
     }
 
@@ -225,6 +226,7 @@ northd_lb_data_handler(struct engine_node *node, void *data)
                                        &nd->lb_datapaths_map,
                                        &nd->lb_group_datapaths_map,
                                        &nd->trk_data)) {
+        VLOG_INFO("DCEARA northd_lb_data_handler() failed !northd_handle_lb_data_changes()");
         return EN_UNHANDLED;
     }
 

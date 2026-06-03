@@ -4580,6 +4580,10 @@ northd_handle_ls_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
     if (!hmapx_is_empty(&ni->synced_lses->new) ||
         !hmapx_is_empty(&ni->synced_lses->deleted) ||
         hmapx_is_empty(&ni->synced_lses->updated)) {
+        VLOG_INFO("DCEARA northd_handle_ls_changes() failed new %s deleted %s updated %s",
+                  hmapx_is_empty(&ni->synced_lses->new) ? "empty" : "not-empty",
+                  hmapx_is_empty(&ni->synced_lses->deleted) ? "empty" : "not-empty",
+                  hmapx_is_empty(&ni->synced_lses->updated) ? "empty" : "not-empty");
         goto fail;
     }
 
@@ -4600,11 +4604,13 @@ northd_handle_ls_changes(struct ovsdb_idl_txn *ovnsb_idl_txn,
 
         /* Check if the ls changes can be handled or not. */
         if (!ls_changes_can_be_handled(changed_ls)) {
+            VLOG_INFO("DCEARA northd_handle_ls_changes() failed !ls_changes_can_be_handled(%s)", changed_ls->name);
             goto fail;
         }
 
         if (!ls_handle_lsp_changes(ovnsb_idl_txn, changed_ls,
                                    ni, nd, od, &trk_data->trk_lsps)) {
+            VLOG_INFO("DCEARA northd_handle_ls_changes() failed !ls_handle_lsp_changes(%s)", changed_ls->name);
             goto fail;
         }
 
@@ -4832,6 +4838,10 @@ northd_handle_lr_changes(const struct northd_input *ni,
     if (!hmapx_is_empty(&ni->synced_lrs->new) ||
         !hmapx_is_empty(&ni->synced_lrs->deleted) ||
         hmapx_is_empty(&ni->synced_lrs->updated)) {
+        VLOG_INFO("DCEARA northd_handle_lr_changes() failed new %s deleted %s updated %s",
+                  hmapx_is_empty(&ni->synced_lrs->new) ? "empty" : "not-empty",
+                  hmapx_is_empty(&ni->synced_lrs->deleted) ? "empty" : "not-empty",
+                  hmapx_is_empty(&ni->synced_lrs->updated) ? "empty" : "not-empty");
         goto fail;
     }
 
@@ -4843,6 +4853,7 @@ northd_handle_lr_changes(const struct northd_input *ni,
         /* Presently only able to handle load balancer,
          * load balancer group changes and NAT changes. */
         if (!lr_changes_can_be_handled(changed_lr)) {
+            VLOG_INFO("DCEARA northd_handle_lr_changes() failed !lr_changes_can_be_handled(%s)", changed_lr->name);
             goto fail;
         }
 
