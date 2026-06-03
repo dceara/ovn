@@ -403,7 +403,7 @@ engine_get_internal_data(struct engine_node *node)
 void
 engine_init_run(void)
 {
-    VLOG_DBG("Initializing new run");
+    VLOG_INFO("Initializing new run");
     struct engine_node *node;
     VECTOR_FOR_EACH (&engine_nodes, node) {
         engine_set_node_state(node, EN_STALE, "engine_init_run");
@@ -429,7 +429,7 @@ engine_recompute(struct engine_node *node, bool allowed,
     va_end(reason_args);
 
     if (!allowed) {
-        VLOG_DBG("node: %s, recompute (%s) canceled", node->name, reason);
+        VLOG_INFO("node: %s, recompute (%s) canceled", node->name, reason);
         engine_set_node_state(node, EN_CANCELED, "recompute not allowed");
         goto done;
     }
@@ -447,12 +447,11 @@ engine_recompute(struct engine_node *node, bool allowed,
     node->stats.recompute++;
     long long int delta_time = time_msec() - now;
     if (delta_time > engine_compute_log_timeout_msec) {
-        static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(20, 10);
-        VLOG_INFO_RL(&rl, "node: %s, recompute (%s) took %lldms", node->name,
-                     reason, delta_time);
+        VLOG_INFO("node: %s, recompute (%s) took %lldms", node->name,
+                  reason, delta_time);
     } else {
-        VLOG_DBG("node: %s, recompute (%s) took %lldms", node->name, reason,
-                 delta_time);
+        VLOG_INFO("node: %s, recompute (%s) took %lldms", node->name, reason,
+                  delta_time);
     }
 done:
     free(reason);
@@ -475,13 +474,11 @@ engine_compute(struct engine_node *node, bool recompute_allowed)
             handled = node->inputs[i].change_handler(node, node->data);
             long long int delta_time = time_msec() - now;
             if (delta_time > engine_compute_log_timeout_msec) {
-                static struct vlog_rate_limit rl =
-                    VLOG_RATE_LIMIT_INIT(20, 10);
-                VLOG_INFO_RL(&rl, "node: %s, handler for input %s took %lldms",
-                             node->name, input_node->name, delta_time);
+                VLOG_INFO("node: %s, handler for input %s took %lldms",
+                          node->name, input_node->name, delta_time);
             } else {
-                VLOG_DBG("node: %s, handler for input %s took %lldms",
-                         node->name, input_node->name, delta_time);
+                VLOG_INFO("node: %s, handler for input %s took %lldms",
+                          node->name, input_node->name, delta_time);
             }
             if (handled == EN_UNHANDLED) {
                 input_node->get_compute_failure_info(input_node);
