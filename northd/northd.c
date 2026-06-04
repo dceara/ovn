@@ -10501,8 +10501,12 @@ build_lswitch_arp_nd_responder_known_ips(struct ovn_port *op,
                  * Without proxy arp configured, these flows are
                  * unnecessary since the packets will hit the default
                  * "next" flow at priority 0.
+                 *
+                 * Router ports are excluded: their IPs should be answered
+                 * by the proxy ARP responder (priority 30), not bypassed.
                  */
-                if (op->od->has_arp_proxy_port) {
+                if (op->od->has_arp_proxy_port
+                    && !lsp_is_router(op->nbsp)) {
                     size_t match_len = match->length;
                     ds_put_format(match, " && eth.dst == %s",
                                   op->lsp_addrs[i].ea_s);
@@ -10563,9 +10567,13 @@ build_lswitch_arp_nd_responder_known_ips(struct ovn_port *op,
              *     with IPv4, if proxy ARP is configured, then we need to
              *     install unicast nd_ns flows that allow the packet to reach
              *     its target as intended.
+             *
+             *   - Router ports are excluded: their IPs should be answered
+             *     by the proxy ARP/ND responder (priority 30), not bypassed.
              */
             for (size_t j = 0; j < op->lsp_addrs[i].n_ipv6_addrs; j++) {
-                if (op->od->has_arp_proxy_port) {
+                if (op->od->has_arp_proxy_port
+                    && !lsp_is_router(op->nbsp)) {
                     ds_clear(match);
                     ds_put_format(match,
                                   "nd_ns && ip6.dst == %s && nd.target == %s",

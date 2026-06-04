@@ -44910,6 +44910,101 @@ AT_CLEANUP
 ])
 
 OVN_FOR_EACH_NORTHD([
+AT_SETUP([Unicast ARP for router IP with proxy ARP - resubmit overflow])
+AT_KEYWORDS([slowtest])
+ovn_start
+
+dnl Create a logical switch and router, connected via a router port.
+check ovn-nbctl ls-add ls1
+check ovn-nbctl lr-add lr1
+check ovn-nbctl lrp-add lr1 lr1-ls1 00:00:00:00:00:01 10.0.0.1/24
+check ovn-nbctl lsp-add-router-port ls1 ls1-lr1 lr1-ls1
+
+dnl Configure proxy ARP on the router port with a range that includes the
+dnl router IP (10.0.0.1 is within 10.0.0.0/24).
+check ovn-nbctl set logical_switch_port ls1-lr1 \
+    options:arp_proxy="10.0.0.0/24"
+
+dnl Add a VIF port that will send the unicast ARP.
+check ovn-nbctl lsp-add ls1 vm1 -- \
+      lsp-set-addresses vm1 "00:00:00:00:00:02 10.0.0.2"
+
+dnl Add 220 additional VIF ports to make MC_FLOOD_L2 large enough
+dnl that flooding to it would exceed the OVS 4096 resubmit limit.
+dnl On release branches where ls_in_l2_lkup P80 uses MC_FLOOD_L2
+dnl instead of MC_UNKNOWN, this causes the packet to be dropped.
+nbctl_cmd=""
+for i in $(seq 1 220); do
+    idx=$(printf "%04d" $i)
+    mac=$(printf "00:00:01:%02x:%02x:%02x" $(($i / 65536 % 256)) $(($i / 256 % 256)) $(($i % 256)))
+    ip=$(printf "10.0.%d.%d" $(( ($i + 10) / 256)) $(( ($i + 10) % 256)))
+    nbctl_cmd="$nbctl_cmd -- lsp-add ls1 vif-$idx -- lsp-set-addresses vif-$idx \"$mac $ip\""
+done
+eval check ovn-nbctl $nbctl_cmd
+
+net_add n1
+sim_add hv1
+as hv1
+ovs-vsctl add-br br-phys
+ovn_attach n1 br-phys 192.168.0.1
+
+dnl Bind the sender VIF port.
+ovs-vsctl add-port br-int vif-vm1 -- \
+    set Interface vif-vm1 external-ids:iface-id=vm1 \
+    options:tx_pcap=hv1/vif-vm1-tx.pcap \
+    options:rxq_pcap=hv1/vif-vm1-rx.pcap
+
+dnl Bind all 220 additional VIF ports so they join MC_FLOOD_L2.
+vsctl_cmd=""
+for i in $(seq 1 220); do
+    idx=$(printf "%04d" $i)
+    vsctl_cmd="$vsctl_cmd -- add-port br-int vif-$idx -- set Interface vif-$idx external-ids:iface-id=vif-$idx"
+done
+eval check ovs-vsctl $vsctl_cmd
+
+OVN_POPULATE_ARP
+wait_for_ports_up vm1
+
+check ovn-nbctl --wait=hv sync
+
+dnl Trace a unicast ARP request from vm1 for the router IP.
+dnl This is a normal ARP request (NOT a GARP): arp.spa != arp.tpa.
+dnl eth.dst is the router MAC (unicast).
+dnl
+dnl Correct behavior: the P30 proxy ARP responder in ls_in_arp_rsp
+dnl should answer with an ARP reply, since 10.0.0.1 is within the
+dnl proxy ARP range 10.0.0.0/24.  The reply is generated directly
+dnl in the switch pipeline without any cloning or flooding.
+dnl
+dnl Buggy behavior: the P50 bypass flow created by commit c73f7912665d
+dnl for the router port IP prevents the proxy ARP responder from
+dnl answering.  The ARP passes through to ls_in_l2_lkup where it is
+dnl flooded.  On release branches (without MC_UNKNOWN fix), this
+dnl floods to MC_FLOOD_L2 with 220+ members, exceeding the 4096
+dnl resubmit limit and dropping the packet.
+
+dnl Verify via ofproto/trace that the packet is not dropped.
+packet="in_port=vif-vm1,dl_src=00:00:00:00:00:02,dl_dst=00:00:00:00:00:01,arp,arp_spa=10.0.0.2,arp_tpa=10.0.0.1,arp_op=1,arp_sha=00:00:00:00:00:02,arp_tha=00:00:00:00:00:01"
+AT_CHECK([as hv1 ovs-appctl ofproto/trace br-int "$packet" 2>&1 | tee trace-output], [0], [stdout])
+AT_CHECK([grep -q "packet is dropped" trace-output], [1])
+
+dnl Verify via ovn-trace that the proxy ARP responder handles
+dnl the packet directly (no clone/flood via ls_in_l2_lkup).
+dnl When the proxy ARP responder answers, the output is a direct
+dnl ARP reply without a "clone" wrapper.  When the bypass causes
+dnl the packet to pass through to ls_in_l2_lkup, ovn-trace shows
+dnl a "clone" action.
+AT_CHECK([ovn_trace --minimal ls1 \
+    'inport == "vm1" && eth.src == 00:00:00:00:00:02 && eth.dst == 00:00:00:00:00:01 && arp.spa == 10.0.0.2 && arp.tpa == 10.0.0.1 && arp.op == 1' \
+    2>/dev/null], [0], [stdout])
+AT_CHECK([grep -q "arp.op = 2" stdout])
+AT_CHECK([grep -q "clone" stdout], [1])
+
+OVN_CLEANUP([hv1])
+AT_CLEANUP
+])
+
+OVN_FOR_EACH_NORTHD([
 AT_SETUP([Port security - VRRPv3 ARP/ND])
 AT_SKIP_IF([test $HAVE_SCAPY = no])
 ovn_start

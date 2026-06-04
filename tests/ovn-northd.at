@@ -20037,13 +20037,13 @@ AT_CHECK([ovn-sbctl lflow-list ls1 | grep ls_in_arp_rsp | grep "ip6.dst == fd01:
   table=??(ls_in_arp_rsp      ), priority=50   , match=(nd_ns && ip6.dst == fd01::2 && nd.target == fd01::2), action=(next;)
 ])
 
-# We should also see an ARP flow for ls1-lr1's MAC.
+# We should NOT see an ARP flow for ls1-lr1's MAC. Router ports should not
+# get unicast ARP bypass flows because proxy ARP (P30) should answer for
+# router IPs within the proxy ARP range.
 AT_CHECK([ovn-sbctl lflow-list ls1 | grep ls_in_arp_rsp | grep "eth.dst == 00:00:00:00:00:01" | ovn_strip_lflows], [0], [dnl
-  table=??(ls_in_arp_rsp      ), priority=50   , match=(arp.tpa == 192.168.0.1 && arp.op == 1 && eth.dst == 00:00:00:00:00:01), action=(next;)
 ])
-# And we should see an ND flow for ls1-lr1's IPv6 address.
+# And we should NOT see a unicast ND flow for ls1-lr1's IPv6 address either.
 AT_CHECK([ovn-sbctl lflow-list ls1 | grep ls_in_arp_rsp | grep "ip6.dst == fd01::1" | ovn_strip_lflows], [0], [dnl
-  table=??(ls_in_arp_rsp      ), priority=50   , match=(nd_ns && ip6.dst == fd01::1 && nd.target == fd01::1), action=(next;)
 ])
 
 check ovn-nbctl remove logical_switch_port ls1-lr1 options arp_proxy
@@ -20058,6 +20058,40 @@ AT_CHECK([ovn-sbctl lflow-list ls1 | grep ls_in_arp_rsp | grep "eth.dst == 00:00
 ])
 AT_CHECK([ovn-sbctl lflow-list ls1 | grep ls_in_arp_rsp | grep "ip6.dst == fd01::1" | ovn_strip_lflows], [0], [dnl
 ])
+
+OVN_CLEANUP_NORTHD
+AT_CLEANUP
+])
+
+OVN_FOR_EACH_NORTHD_NO_HV([
+AT_SETUP([Unicast ARP bypass should not apply to router ports])
+ovn_start
+
+check ovn-nbctl ls-add ls1
+check ovn-nbctl lsp-add ls1 vm1 -- \
+      lsp-set-addresses vm1 "00:00:00:00:00:02 10.0.0.2"
+
+check ovn-nbctl lr-add lr1
+check ovn-nbctl lrp-add lr1 lr1-ls1 00:00:00:00:00:01 10.0.0.1/24
+check ovn-nbctl lsp-add-router-port ls1 ls1-lr1 lr1-ls1
+
+dnl Configure proxy ARP on the router port with a range that includes the
+dnl router IP (10.0.0.1 is within 10.0.0.0/24).
+check ovn-nbctl set logical_switch_port ls1-lr1 options:arp_proxy="10.0.0.0/24"
+check ovn-nbctl --wait=sb sync
+
+dnl The P50 unicast ARP bypass should be created for the VIF port (vm1) so
+dnl that unicast ARPs for 10.0.0.2 are forwarded to vm1 rather than being
+dnl intercepted by the proxy ARP responder.
+AT_CHECK([ovn-sbctl lflow-list ls1 | grep ls_in_arp_rsp | grep -q "eth.dst == 00:00:00:00:00:02"])
+
+dnl The P50 unicast ARP bypass should NOT be created for the router port
+dnl (ls1-lr1).  Unicast ARPs for the router IP (10.0.0.1) should be answered
+dnl by the P30 proxy ARP responder, not bypassed.  Creating the bypass
+dnl prevents the proxy ARP responder from answering, causing the ARP to be
+dnl flooded in ls_in_l2_lkup which can exceed the 4096 resubmit limit on
+dnl switches with many ports.
+AT_CHECK([ovn-sbctl lflow-list ls1 | grep ls_in_arp_rsp | grep -q "eth.dst == 00:00:00:00:00:01"], [1])
 
 OVN_CLEANUP_NORTHD
 AT_CLEANUP
