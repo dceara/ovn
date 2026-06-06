@@ -833,6 +833,10 @@ print_lr(const struct nbrec_logical_router *lr, struct ds *s)
             ds_put_cstr(s, "]\n");
             free(gcs);
         }
+
+        if (lrp->peer) {
+            ds_put_format(s, "        peer: %s\n", lrp->peer);
+        }
     }
 
     for (size_t i = 0; i < lr->n_nat; i++) {
@@ -945,6 +949,7 @@ nbctl_pre_show(struct ctl_context *ctx)
     ovsdb_idl_add_column(ctx->idl, &nbrec_logical_router_port_col_networks);
     ovsdb_idl_add_column(ctx->idl, &nbrec_logical_router_port_col_options);
     ovsdb_idl_add_column(ctx->idl, &nbrec_logical_router_port_col_gateway_chassis);
+    ovsdb_idl_add_column(ctx->idl, &nbrec_logical_router_port_col_peer);
 
     ovsdb_idl_add_column(ctx->idl, &nbrec_gateway_chassis_col_chassis_name);
 
@@ -2163,10 +2168,10 @@ acl_cmp(const void *acl1_, const void *acl2_)
         return dir1 < dir2 ? -1 : 1;
     } else if (after_lb1 != after_lb2) {
         return after_lb2 ? -1 : 1;
+    } else if (acl1->tier != acl2->tier) {
+        return acl1->tier < acl2->tier ? -1 : 1;
     } else if (acl1->priority != acl2->priority) {
         return acl1->priority > acl2->priority ? -1 : 1;
-    } else if (acl1->tier != acl2->tier) {
-        return acl1->tier > acl2->tier ? -1 : 1;
     } else {
         return strcmp(acl1->match, acl2->match);
     }
@@ -2263,6 +2268,9 @@ nbctl_acl_list(struct ctl_context *ctx)
         if (acl->label) {
           ds_put_format(&ctx->output, " label=%"PRId64, acl->label);
         }
+
+        ds_put_format(&ctx->output, " [tier %"PRId64"]", acl->tier);
+
         if (smap_get_bool(&acl->options, "apply-after-lb", false)) {
             ds_put_cstr(&ctx->output, " [after-lb]");
         }
