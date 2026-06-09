@@ -1,5 +1,7 @@
 Post v26.03.0
 -------------
+   - Added "ttl" option to the DNS table to allow configuring the
+     Time to Live value in DNS replies.  Defaults to 3600 seconds.
    - Added ability to set any "ipsec_*" NB_Global option to configure the
      IPsec backend.
    - Documented missing ovn-nbctl commands: "mirror-rule-add",

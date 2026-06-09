@@ -12499,6 +12499,132 @@ reset_pcap_file hv1-vif2 hv1/vif2
 rm -f 1.expected
 rm -f 2.expected
 
+AS_BOX([Test custom DNS TTL])
+# Restore vm1.ovn.org with both IPv4 and IPv6 addresses for TTL testing.
+check ovn-nbctl set DNS $DNS1 records:vm1.ovn.org="10.0.0.4 aef0::4"
+check ovn-nbctl remove DNS $DNS1 options ovn-owned
+
+# Set a custom TTL of 5 seconds.
+check ovn-nbctl --wait=hv set DNS $DNS1 options:ttl=5
+
+reset_pcap_file hv1-vif1 hv1/vif1
+reset_pcap_file hv1-vif2 hv1/vif2
+rm -f 1.expected 2.expected
+
+# Build expected response manually with TTL=5 (00000005).
+local_ttl=00000005
+query_name=03766d31036f766e036f726700
+dns_req_header=010201200001000000000000
+dns_resp_header=010281200001000100000000
+type=0001
+dns_req_data=${dns_req_header}${query_name}${type}0001
+expected_dns_answer=${query_name}00010001${local_ttl}00040a000004
+dns_resp_data=${dns_resp_header}${query_name}${type}0001${expected_dns_answer}
+
+src_ip=`ip_to_hex 10 0 0 6`
+dst_ip=`ip_to_hex 10 0 0 1`
+dns_reply=1
+test_dns 2 f00000000002 f000000000f0 $src_ip $dst_ip $dns_reply $dns_req_data $dns_resp_data
+
+# NXT_RESUMEs should be 15.
+OVS_WAIT_UNTIL([test 15 = `cat ofctl_monitor*.log | grep -c NXT_RESUME`])
+
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c -48"])
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c 53-"])
+
+reset_pcap_file hv1-vif1 hv1/vif1
+reset_pcap_file hv1-vif2 hv1/vif2
+rm -f 1.expected 2.expected
+
+
+AS_BOX([Test DNS TTL=0])
+check ovn-nbctl --wait=hv set DNS $DNS1 options:ttl=0
+
+local_ttl=00000000
+query_name=03766d31036f766e036f726700
+dns_req_header=010201200001000000000000
+dns_resp_header=010281200001000100000000
+type=0001
+dns_req_data=${dns_req_header}${query_name}${type}0001
+expected_dns_answer=${query_name}00010001${local_ttl}00040a000004
+dns_resp_data=${dns_resp_header}${query_name}${type}0001${expected_dns_answer}
+
+src_ip=`ip_to_hex 10 0 0 6`
+dst_ip=`ip_to_hex 10 0 0 1`
+dns_reply=1
+test_dns 2 f00000000002 f000000000f0 $src_ip $dst_ip $dns_reply $dns_req_data $dns_resp_data
+
+# NXT_RESUMEs should be 16.
+OVS_WAIT_UNTIL([test 16 = `cat ofctl_monitor*.log | grep -c NXT_RESUME`])
+
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c -48"])
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c 53-"])
+
+reset_pcap_file hv1-vif1 hv1/vif1
+reset_pcap_file hv1-vif2 hv1/vif2
+rm -f 1.expected 2.expected
+
+
+AS_BOX([Test DNS TTL removal restores default])
+check ovn-nbctl --wait=hv remove DNS $DNS1 options ttl
+
+# Use default TTL=3600 (00000e10).
+local_ttl=00000e10
+query_name=03766d31036f766e036f726700
+dns_req_header=010201200001000000000000
+dns_resp_header=010281200001000100000000
+type=0001
+dns_req_data=${dns_req_header}${query_name}${type}0001
+expected_dns_answer=${query_name}00010001${local_ttl}00040a000004
+dns_resp_data=${dns_resp_header}${query_name}${type}0001${expected_dns_answer}
+
+src_ip=`ip_to_hex 10 0 0 6`
+dst_ip=`ip_to_hex 10 0 0 1`
+dns_reply=1
+test_dns 2 f00000000002 f000000000f0 $src_ip $dst_ip $dns_reply $dns_req_data $dns_resp_data
+
+# NXT_RESUMEs should be 17.
+OVS_WAIT_UNTIL([test 17 = `cat ofctl_monitor*.log | grep -c NXT_RESUME`])
+
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c -48"])
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c 53-"])
+
+reset_pcap_file hv1-vif1 hv1/vif1
+reset_pcap_file hv1-vif2 hv1/vif2
+rm -f 1.expected 2.expected
+
+
+AS_BOX([Test invalid DNS TTL falls back to default])
+check ovn-nbctl --wait=hv set DNS $DNS1 options:ttl=garbage
+
+# Invalid TTL should be rejected by northd, so the default TTL=3600 is used.
+local_ttl=00000e10
+query_name=03766d31036f766e036f726700
+dns_req_header=010201200001000000000000
+dns_resp_header=010281200001000100000000
+type=0001
+dns_req_data=${dns_req_header}${query_name}${type}0001
+expected_dns_answer=${query_name}00010001${local_ttl}00040a000004
+dns_resp_data=${dns_resp_header}${query_name}${type}0001${expected_dns_answer}
+
+src_ip=`ip_to_hex 10 0 0 6`
+dst_ip=`ip_to_hex 10 0 0 1`
+dns_reply=1
+test_dns 2 f00000000002 f000000000f0 $src_ip $dst_ip $dns_reply $dns_req_data $dns_resp_data
+
+# NXT_RESUMEs should be 18.
+OVS_WAIT_UNTIL([test 18 = `cat ofctl_monitor*.log | grep -c NXT_RESUME`])
+
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c -48"])
+OVN_CHECK_PACKETS([hv1/vif2-tx.pcap], [2.expected], ["cut -c 53-"])
+
+reset_pcap_file hv1-vif1 hv1/vif1
+reset_pcap_file hv1-vif2 hv1/vif2
+rm -f 1.expected 2.expected
+
+# Clean up the invalid TTL option.
+check ovn-nbctl --wait=hv remove DNS $DNS1 options ttl
+
 AS_BOX([Verify DNS coverage counters])
 # The test has sent multiple DNS queries of various types, verify counters
 # Total queries should be > 0

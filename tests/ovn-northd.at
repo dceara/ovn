@@ -20933,3 +20933,71 @@ check_column "$global_svc_mon_mac" sb:Service_Monitor src_mac port=2
 OVN_CLEANUP_NORTHD
 AT_CLEANUP
 ])
+
+OVN_FOR_EACH_NORTHD_NO_HV([
+AT_SETUP([ovn-northd - DNS TTL options sync])
+AT_KEYWORDS([ovn])
+ovn_start
+
+check ovn-nbctl ls-add ls0
+dns_uuid=$(ovn-nbctl create DNS records:vm1.ovn.org="10.0.0.1")
+check ovn-nbctl set Logical_Switch ls0 dns_records="$dns_uuid"
+
+dnl Wait for the DNS entry to appear in SB.
+OVS_WAIT_UNTIL([test "$(ovn-sbctl --no-leader-only --columns=_uuid list DNS | wc -l)" != "0"])
+sb_dns_uuid=$(ovn-sbctl --bare --columns=_uuid list DNS | head -1)
+
+AS_BOX([Valid TTL=5 propagated to SB])
+check ovn-nbctl --wait=sb set DNS $dns_uuid options:ttl=5
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [0], [dnl
+"5"
+])
+
+AS_BOX([TTL=0 is valid and propagated])
+check ovn-nbctl --wait=sb set DNS $dns_uuid options:ttl=0
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [0], [dnl
+"0"
+])
+
+AS_BOX([Maximum valid TTL propagated])
+check ovn-nbctl --wait=sb set DNS $dns_uuid options:ttl=2147483647
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [0], [dnl
+"2147483647"
+])
+
+AS_BOX([Invalid garbage TTL not propagated])
+check ovn-nbctl set DNS $dns_uuid options:ttl=garbage
+check ovn-nbctl --wait=sb sync
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [1], [], [ignore])
+
+AS_BOX([Negative TTL not propagated])
+check ovn-nbctl set DNS $dns_uuid options:ttl=-1
+check ovn-nbctl --wait=sb sync
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [1], [], [ignore])
+
+AS_BOX([TTL exceeding max not propagated])
+check ovn-nbctl set DNS $dns_uuid options:ttl=2147483648
+check ovn-nbctl --wait=sb sync
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [1], [], [ignore])
+
+AS_BOX([TTL removal from NB removes from SB])
+check ovn-nbctl --wait=sb set DNS $dns_uuid options:ttl=300
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [0], [dnl
+"300"
+])
+check ovn-nbctl remove DNS $dns_uuid options ttl
+check ovn-nbctl --wait=sb sync
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [1], [], [ignore])
+
+AS_BOX([Invalid TTL replaced by valid TTL])
+check ovn-nbctl set DNS $dns_uuid options:ttl=garbage
+check ovn-nbctl --wait=sb sync
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [1], [], [ignore])
+check ovn-nbctl --wait=sb set DNS $dns_uuid options:ttl=60
+AT_CHECK([ovn-sbctl get DNS $sb_dns_uuid options:ttl], [0], [dnl
+"60"
+])
+
+OVN_CLEANUP_NORTHD
+AT_CLEANUP
+])

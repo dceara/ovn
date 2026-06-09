@@ -4754,6 +4754,15 @@ tcp.flags = RST;
       will be answered locally by either an IP address or
       <code>DNS rejection</code>.
 </column>
+
+    <column name="options" key="ttl"
+            type='{"type": "integer", "minInteger": 0, "maxInteger": 2147483647}'>
+      Time to live (TTL) value, in seconds, to use in DNS replies for
+      records in this row.  Set by <code>ovn-northd</code> based on the
+      corresponding value in the <ref table="DNS" db="OVN_Northbound"/> table.
+      Defaults to <code>3600</code>.
+    </column>
+
     <group title="Common Columns">
       <column name="external_ids">
         See <em>External IDs</em> at the beginning of this document.

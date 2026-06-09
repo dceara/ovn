@@ -6226,6 +6226,14 @@ or
       </p>
     </column>
 
+    <column name="options" key="ttl"
+            type='{"type": "integer", "minInteger": 0, "maxInteger": 2147483647}'>
+      Time to live (TTL) value, in seconds, to use in DNS replies for
+      records in this row.  The value must be in the range
+      <code>0</code> to <code>2147483647</code>.  If not set or
+      invalid, defaults to <code>3600</code>.
+    </column>
+
     <column name="external_ids">
       See <em>External IDs</em> at the beginning of this document.
     </column>
