@@ -1,5 +1,8 @@
 Post v26.03.0
 -------------
+   - Added configurable TTL for native DNS responses via the new
+     "ttl" option in the DNS table (e.g., options:ttl=300).
+     Defaults to 3600 seconds when not set.
    - Added ability to set any "ipsec_*" NB_Global option to configure the
      IPsec backend.
    - Documented missing ovn-nbctl commands: "mirror-rule-add",

@@ -4753,7 +4753,14 @@ tcp.flags = RST;
       are owned by OVN, and all <code>DNS queries</code> for those domains
       will be answered locally by either an IP address or
       <code>DNS rejection</code>.
-</column>
+    </column>
+
+    <column name="options" key="ttl">
+      Copied from the <ref db="OVN_Northbound" table="DNS"
+      column="options" key="ttl"/> column in the OVN Northbound
+      database.  Used by <code>ovn-controller</code> when constructing
+      DNS responses.
+    </column>
     <group title="Common Columns">
       <column name="external_ids">
         See <em>External IDs</em> at the beginning of this document.

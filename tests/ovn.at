@@ -12593,6 +12593,139 @@ AT_CLEANUP
 ])
 
 OVN_FOR_EACH_NORTHD([
+AT_SETUP([dns lookup : configurable TTL])
+AT_SKIP_IF([test $HAVE_SCAPY = no])
+ovn_start
+
+check ovn-nbctl ls-add ls \
+    -- lsp-add ls lsp \
+    -- lsp-set-addresses lsp "00:00:00:00:00:01 10.0.0.1 aef0::4"
+
+d=$(ovn-nbctl create dns records={})
+
+check ovn-nbctl set dns $d records:vm1.ovn.org="10.0.0.42 aef0::4"
+check ovn-nbctl set dns $d records:4.0.0.10.in-addr.arpa="vm1.ovn.org"
+check ovn-nbctl set Logical_switch ls dns_records="$d"
+
+net_add n1
+sim_add hv1
+
+as hv1
+ovs-vsctl add-br br-phys
+ovn_attach n1 br-phys 192.168.0.1
+check ovs-vsctl add-port br-int hv1-vif1 -- \
+    set interface hv1-vif1 external-ids:iface-id=lsp \
+    options:tx_pcap=hv1/vif1-tx.pcap \
+    options:rxq_pcap=hv1/vif1-rx.pcap
+
+OVN_POPULATE_ARP
+wait_for_ports_up
+check ovn-nbctl --wait=hv sync
+
+dnl Set custom TTL=300 on the DNS record.
+check ovn-nbctl set dns $d options:ttl=300
+check ovn-nbctl --wait=hv sync
+
+AS_BOX([A record with TTL=300])
+
+dns_req=$(fmt_pkt "Ether(dst='00:00:00:00:00:02', src='00:00:00:00:00:01') / \
+                   IP(dst='10.0.0.254', src='10.0.0.1') / \
+                   UDP(sport=42424, dport=53) / \
+                   DNS(rd=1, qd=DNSQR(qname='vm1.ovn.org'))")
+dns_reply=$(fmt_pkt "Ether(dst='00:00:00:00:00:01', src='00:00:00:00:00:02') / \
+                     IP(dst='10.0.0.1', src='10.0.0.254') / \
+                     UDP(sport=53, dport=42424, chksum=0) / \
+                     DNS(qr=1, qd=DNSQR(qname='vm1.ovn.org'), \
+                         an=DNSRR(rrname='vm1.ovn.org', type='A', ttl=300, \
+                                  rdata='10.0.0.42'))")
+echo ${dns_reply} > expected
+
+as hv1 ovs-appctl netdev-dummy/receive hv1-vif1 ${dns_req}
+OVN_CHECK_PACKETS_REMOVE_BROADCAST([hv1/vif1-tx.pcap], [expected])
+
+AS_BOX([AAAA record with TTL=300])
+as hv1 reset_pcap_file hv1-vif1 hv1/vif1
+
+dns_req=$(fmt_pkt "Ether(dst='00:00:00:00:00:02', src='00:00:00:00:00:01') / \
+                   IP(dst='10.0.0.254', src='10.0.0.1') / \
+                   UDP(sport=42424, dport=53) / \
+                   DNS(rd=1, qd=DNSQR(qname='vm1.ovn.org', qtype='AAAA'))")
+dns_reply=$(fmt_pkt "Ether(dst='00:00:00:00:00:01', src='00:00:00:00:00:02') / \
+                     IP(dst='10.0.0.1', src='10.0.0.254') / \
+                     UDP(sport=53, dport=42424, chksum=0) / \
+                     DNS(qr=1, qd=DNSQR(qname='vm1.ovn.org', qtype='AAAA'), \
+                         an=DNSRR(rrname='vm1.ovn.org', type='AAAA', ttl=300, \
+                                  rdata='aef0::4'))")
+echo ${dns_reply} > expected
+
+as hv1 ovs-appctl netdev-dummy/receive hv1-vif1 ${dns_req}
+OVN_CHECK_PACKETS_REMOVE_BROADCAST([hv1/vif1-tx.pcap], [expected])
+
+AS_BOX([PTR record with TTL=300])
+as hv1 reset_pcap_file hv1-vif1 hv1/vif1
+
+dns_req=$(fmt_pkt "Ether(dst='00:00:00:00:00:02', src='00:00:00:00:00:01') / \
+                   IP(dst='10.0.0.254', src='10.0.0.1') / \
+                   UDP(sport=42424, dport=53) / \
+                   DNS(rd=1, qd=DNSQR(qname='4.0.0.10.in-addr.arpa', qtype='PTR'))")
+dns_reply=$(fmt_pkt "Ether(dst='00:00:00:00:00:01', src='00:00:00:00:00:02') / \
+                     IP(dst='10.0.0.1', src='10.0.0.254') / \
+                     UDP(sport=53, dport=42424, chksum=0) / \
+                     DNS(qr=1, qd=DNSQR(qname='4.0.0.10.in-addr.arpa', qtype='PTR'), \
+                         an=DNSRR(rrname='4.0.0.10.in-addr.arpa', type='PTR', ttl=300, \
+                                  rdata='vm1.ovn.org'))")
+echo ${dns_reply} > expected
+
+as hv1 ovs-appctl netdev-dummy/receive hv1-vif1 ${dns_req}
+OVN_CHECK_PACKETS_REMOVE_BROADCAST([hv1/vif1-tx.pcap], [expected])
+
+AS_BOX([Default TTL when option is removed])
+as hv1 reset_pcap_file hv1-vif1 hv1/vif1
+
+check ovn-nbctl remove dns $d options ttl
+check ovn-nbctl --wait=hv sync
+
+dns_req=$(fmt_pkt "Ether(dst='00:00:00:00:00:02', src='00:00:00:00:00:01') / \
+                   IP(dst='10.0.0.254', src='10.0.0.1') / \
+                   UDP(sport=42424, dport=53) / \
+                   DNS(rd=1, qd=DNSQR(qname='vm1.ovn.org'))")
+dns_reply=$(fmt_pkt "Ether(dst='00:00:00:00:00:01', src='00:00:00:00:00:02') / \
+                     IP(dst='10.0.0.1', src='10.0.0.254') / \
+                     UDP(sport=53, dport=42424, chksum=0) / \
+                     DNS(qr=1, qd=DNSQR(qname='vm1.ovn.org'), \
+                         an=DNSRR(rrname='vm1.ovn.org', type='A', ttl=3600, \
+                                  rdata='10.0.0.42'))")
+echo ${dns_reply} > expected
+
+as hv1 ovs-appctl netdev-dummy/receive hv1-vif1 ${dns_req}
+OVN_CHECK_PACKETS_REMOVE_BROADCAST([hv1/vif1-tx.pcap], [expected])
+
+AS_BOX([TTL=0 means do not cache])
+as hv1 reset_pcap_file hv1-vif1 hv1/vif1
+
+check ovn-nbctl set dns $d options:ttl=0
+check ovn-nbctl --wait=hv sync
+
+dns_req=$(fmt_pkt "Ether(dst='00:00:00:00:00:02', src='00:00:00:00:00:01') / \
+                   IP(dst='10.0.0.254', src='10.0.0.1') / \
+                   UDP(sport=42424, dport=53) / \
+                   DNS(rd=1, qd=DNSQR(qname='vm1.ovn.org'))")
+dns_reply=$(fmt_pkt "Ether(dst='00:00:00:00:00:01', src='00:00:00:00:00:02') / \
+                     IP(dst='10.0.0.1', src='10.0.0.254') / \
+                     UDP(sport=53, dport=42424, chksum=0) / \
+                     DNS(qr=1, qd=DNSQR(qname='vm1.ovn.org'), \
+                         an=DNSRR(rrname='vm1.ovn.org', type='A', ttl=0, \
+                                  rdata='10.0.0.42'))")
+echo ${dns_reply} > expected
+
+as hv1 ovs-appctl netdev-dummy/receive hv1-vif1 ${dns_req}
+OVN_CHECK_PACKETS_REMOVE_BROADCAST([hv1/vif1-tx.pcap], [expected])
+
+OVN_CLEANUP([hv1])
+AT_CLEANUP
+])
+
+OVN_FOR_EACH_NORTHD([
 AT_SETUP([4 HV, 1 LS, 1 LR, packet test with HA distributed router gateway port])
 ovn_start
 
