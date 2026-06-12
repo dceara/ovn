@@ -12117,77 +12117,6 @@ find_static_route_outport(const struct ovn_datapath *od,
  * Otherwise return NULL. */
 
 static struct parsed_route *
-parsed_route_lookup(struct hmap *routes, size_t hash,
-                    struct parsed_route *new_pr)
-{
-    struct parsed_route *pr;
-    HMAP_FOR_EACH_WITH_HASH (pr, key_node, hash, routes) {
-        if (pr->plen != new_pr->plen) {
-            continue;
-        }
-
-        if (pr->source != new_pr->source) {
-            continue;
-        }
-
-        /* Check if both parsed_route have nexthop set to NULL or non-NULL. */
-        if ((pr->nexthop == NULL && new_pr->nexthop != NULL)
-            || (pr->nexthop != NULL && new_pr->nexthop == NULL)) {
-            continue;
-        }
-
-        if (pr->nexthop && ipv6_addr_equals(pr->nexthop, new_pr->nexthop)) {
-            continue;
-        }
-
-        if (memcmp(&pr->prefix, &new_pr->prefix, sizeof(struct in6_addr))) {
-            continue;
-        }
-
-        if (pr->is_src_route != new_pr->is_src_route) {
-            continue;
-        }
-
-        if (pr->route_table_id != new_pr->route_table_id) {
-            continue;
-        }
-
-        if (pr->source_hint != new_pr->source_hint) {
-            continue;
-        }
-
-        if (pr->ecmp_symmetric_reply != new_pr->ecmp_symmetric_reply) {
-            continue;
-        }
-
-        if (pr->override_connected != new_pr->override_connected) {
-            continue;
-        }
-
-        if (pr->is_discard_route != new_pr->is_discard_route) {
-            continue;
-        }
-
-        if (pr->out_port != new_pr->out_port) {
-            continue;
-        }
-
-        if (!nullable_string_is_equal(pr->lrp_addr_s,
-                                      new_pr->lrp_addr_s)) {
-            continue;
-        }
-
-        if (pr->od != new_pr->od) {
-            continue;
-        }
-
-        return pr;
-    }
-
-    return NULL;
-}
-
-static struct parsed_route *
 parsed_route_init(const struct ovn_datapath *od,
                   struct in6_addr *nexthop,
                   const struct in6_addr prefix,
@@ -12273,7 +12202,7 @@ parsed_route_lookup_by_source(enum route_source source,
 }
 
 /* This hash needs to be equal to the one used in
- * build_route_flows_for_lrouter to iterate over all routes of a datapath.
+ * parsed_route_lookup_by_source to search for a route for a given datapath.
  * This is distinct from route_hash which is stored in parsed_route->hash. */
 size_t
 parsed_route_hash(const struct parsed_route *pr) {
@@ -12291,8 +12220,7 @@ parsed_route_free(struct parsed_route *pr) {
     free(pr);
 }
 
-/* Adds a parsed_route to the provided routes hmap if it is not already
- * in there.
+/* Adds a parsed_route to the provided routes hmap.
  * Takes ownership of the provided nexthop. All other parameters are cloned.
  * Elements of the routes hmap need to be freed using parsed_route_free. */
 struct parsed_route *
@@ -12324,17 +12252,8 @@ parsed_route_add(const struct ovn_datapath *od,
                             tracked_port, source_hint);
 
     new_pr->hash = route_hash(new_pr);
-
-    size_t hash = parsed_route_hash(new_pr);
-    struct parsed_route *pr = parsed_route_lookup(routes, hash, new_pr);
-    if (!pr) {
-        hmap_insert(routes, &new_pr->key_node, hash);
-        return new_pr;
-    } else {
-        pr->stale = false;
-        parsed_route_free(new_pr);
-        return pr;
-    }
+    hmap_insert(routes, &new_pr->key_node, parsed_route_hash(new_pr));
+    return new_pr;
 }
 
 static void
@@ -12505,13 +12424,6 @@ build_parsed_routes(const struct ovn_datapath *od, const struct hmap *lr_ports,
                     struct simap *route_tables,
                     struct hmap *bfd_active_connections)
 {
-    struct parsed_route *pr;
-    HMAP_FOR_EACH (pr, key_node, routes) {
-        if (pr->od == od) {
-            pr->stale = true;
-        }
-    }
-
     for (size_t i = 0; i < od->nbr->n_static_routes; i++) {
         parsed_routes_add_static(od, lr_ports, od->nbr->static_routes[i],
                                  bfd_connections, routes, route_tables,
@@ -12521,15 +12433,6 @@ build_parsed_routes(const struct ovn_datapath *od, const struct hmap *lr_ports,
     const struct ovn_port *op;
     HMAP_FOR_EACH (op, dp_node, &od->ports) {
         parsed_routes_add_connected(od, op, routes);
-    }
-
-    HMAP_FOR_EACH_SAFE (pr, key_node, routes) {
-        if (!pr->stale) {
-            continue;
-        }
-
-        hmap_remove(routes, &pr->key_node);
-        parsed_route_free(pr);
     }
 }
 
