@@ -4723,16 +4723,15 @@ void
 pinctrl_wait(struct ovsdb_idl_txn *ovnsb_idl_txn)
 {
     ovs_mutex_lock(&pinctrl_mutex);
-    if (ovnsb_idl_txn) {
-        wait_controller_event();
-        wait_put_vport_bindings();
-        seq_wait(pinctrl_main_seq, main_seq);
-    }
+    wait_controller_event();
+    wait_put_vport_bindings();
     wait_activated_ports();
     ovs_mutex_unlock(&pinctrl_mutex);
 
     wait_put_mac_bindings();
     wait_put_fdbs();
+
+    seq_wait(pinctrl_main_seq, main_seq);
 }
 
 #define PINCTRL_CFG_INTERVAL 100
