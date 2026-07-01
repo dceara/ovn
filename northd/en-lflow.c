@@ -269,21 +269,6 @@ lflow_multicast_igmp_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-lflow_group_route_change_handler(struct engine_node *node,
-                                 void *data OVS_UNUSED)
-{
-    struct routes_data *route_data =
-        engine_get_input_data("routes", node);
-
-    /* If we do not have tracked data we need to recompute. */
-    if (!route_data->tracked) {
-        return EN_UNHANDLED;
-    }
-
-    return EN_HANDLED_UNCHANGED;
-}
-
-enum engine_input_handler_result
 lflow_group_ecmp_route_change_handler(struct engine_node *node,
                                       void *data OVS_UNUSED)
 {
@@ -322,11 +307,12 @@ lflow_group_ecmp_route_change_handler(struct engine_node *node,
         }
     }
 
-    struct ds match =  DS_EMPTY_INITIALIZER;
-    struct ds actions = DS_EMPTY_INITIALIZER;
     /* Now we handle created or updated route nodes. */
     struct hmapx *crupdated_datapath_routes =
         &group_ecmp_route_data->trk_data.crupdated_datapath_routes;
+    struct ds actions = DS_EMPTY_INITIALIZER;
+    struct ds match = DS_EMPTY_INITIALIZER;
+
     HMAPX_FOR_EACH (hmapx_node, crupdated_datapath_routes) {
         route_node = hmapx_node->data;
         lflow_ref_unlink_lflows(route_node->lflow_ref);
@@ -347,14 +333,14 @@ lflow_group_ecmp_route_change_handler(struct engine_node *node,
             lflow_input.sbrec_logical_flow_table,
             lflow_input.sbrec_logical_dp_group_table);
         if (!handled) {
-            ds_destroy(&match);
             ds_destroy(&actions);
+            ds_destroy(&match);
             return EN_UNHANDLED;
         }
     }
 
-    ds_destroy(&match);
     ds_destroy(&actions);
+    ds_destroy(&match);
     return EN_HANDLED_UPDATED;
 }
 

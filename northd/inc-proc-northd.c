@@ -380,7 +380,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
                      learned_route_sync_northd_change_handler);
 
     engine_add_input(&en_group_ecmp_route, &en_routes,
-                     group_ecmp_static_route_change_handler);
+                     group_ecmp_route_routes_change_handler);
     engine_add_input(&en_group_ecmp_route, &en_learned_route_sync,
                      group_ecmp_route_learned_route_change_handler);
 
@@ -399,9 +399,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     engine_add_input(&en_lflow, &en_sb_logical_dp_group, NULL);
     engine_add_input(&en_lflow, &en_bfd_sync, NULL);
     engine_add_input(&en_lflow, &en_route_policies, NULL);
-    engine_add_input(&en_lflow, &en_routes, lflow_group_route_change_handler);
-    /* XXX: The incremental processing only supports changes to learned routes.
-     * All other changes trigger a full recompute. */
+    engine_add_input(&en_lflow, &en_routes, engine_noop_handler);
     engine_add_input(&en_lflow, &en_group_ecmp_route,
                      lflow_group_ecmp_route_change_handler);
     engine_add_input(&en_lflow, &en_global_config,

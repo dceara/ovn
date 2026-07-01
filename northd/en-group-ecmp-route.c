@@ -521,7 +521,7 @@ group_ecmp_route_learned_route_change_handler(struct engine_node *eng_node,
 }
 
 enum engine_input_handler_result
-group_ecmp_static_route_change_handler(struct engine_node *eng_node,
+group_ecmp_route_routes_change_handler(struct engine_node *eng_node,
                                        void *_data)
 {
     struct routes_data *routes_data

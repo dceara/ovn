@@ -220,13 +220,7 @@ struct route_policy {
 };
 
 struct route_tracked_data {
-    /* Contains references to group_ecmp_route_node. Each of the referenced
-     * datapaths contains at least one route. */
     struct hmapx trk_crupdated_parsed_route;
-
-    /* Contains references to group_ecmp_route_node. Each of the referenced
-     * datapath previously had some routes. The datapath now no longer
-     * contains any route.*/
     struct hmapx trk_deleted_parsed_route;
 };
 
