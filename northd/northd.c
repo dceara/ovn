@@ -695,26 +695,6 @@ ovn_datapath_find_by_key(struct hmap *datapaths, uint32_t dp_key)
 }
 
 struct ovn_datapath *
-ovn_datapath_find_by_static_route(struct hmapx *datapaths,
-                                  const struct uuid *route_uuid)
-{
-
-    struct hmapx_node *hmapx_node;
-    HMAPX_FOR_EACH (hmapx_node, datapaths) {
-        struct ovn_datapath *od = hmapx_node->data;
-        if (od->nbr) {
-            for (int i = 0; i < od->nbr->n_static_routes; i++) {
-                struct nbrec_logical_router_static_route *static_route =
-                    od->nbr->static_routes[i];
-                if (uuid_equals(route_uuid, &static_route->header_.uuid)) {
-                    return od;
-                }
-            }
-        }
-    }
-    return NULL;
-}
-struct ovn_datapath *
 ovn_datapath_from_sbrec_(const struct hmap *datapaths,
                          const struct sbrec_datapath_binding *sb)
 {
@@ -5511,7 +5491,8 @@ is_lr_static_routes_seqno_changed(const struct nbrec_logical_router *nbr)
 }
 
 static bool
-is_lr_static_routes_changed(const struct nbrec_logical_router *nbr) {
+is_lr_static_routes_changed(const struct nbrec_logical_router *nbr)
+{
     return nbrec_logical_router_is_updated(nbr,
                                    NBREC_LOGICAL_ROUTER_COL_STATIC_ROUTES)
            || is_lr_static_routes_seqno_changed(nbr);
@@ -12597,8 +12578,8 @@ parsed_routes_add_static(const struct ovn_datapath *od,
         }
 
         if (!strcmp(bfd_sr->status, "down")) {
-           free(nexthop);
-           return NULL;
+            free(nexthop);
+            return NULL;
         }
     }
 

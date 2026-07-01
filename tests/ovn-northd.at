@@ -4434,8 +4434,8 @@ AT_CHECK([ovn-nbctl list logical_router_policy | grep -q $bfd_route_policy_uuid]
 
 check_engine_stats northd recompute incremental
 check_engine_stats bfd recompute nocompute
-check_engine_stats routes recompute nocompute
-check_engine_stats lflow recompute nocompute
+check_engine_stats routes recompute compute
+check_engine_stats lflow recompute compute
 check_engine_stats northd_output norecompute compute
 CHECK_NO_CHANGE_AFTER_RECOMPUTE
 check as northd ovn-appctl -t ovn-northd inc-engine/clear-stats

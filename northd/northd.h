@@ -110,9 +110,6 @@ ods_size(const struct ovn_datapaths *datapaths)
 struct ovn_datapath *
 ovn_datapath_find_by_key(struct hmap *datapaths, uint32_t dp_key);
 
-struct ovn_datapath *
-ovn_datapath_find_by_static_route(struct hmapx *, const struct uuid *);
-
 bool od_has_lb_vip(const struct ovn_datapath *od);
 
 /* List of routing and routing-related protocols which
@@ -915,7 +912,7 @@ struct parsed_route *parsed_route_add(
     const struct ovn_port *tracked_port,
     struct hmap *routes);
 
-struct  parsed_route * parsed_routes_add_static(
+struct parsed_route *parsed_routes_add_static(
     const struct ovn_datapath *od,
     const struct hmap *lr_ports,
     const struct nbrec_logical_router_static_route *route,
