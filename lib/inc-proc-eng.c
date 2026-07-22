@@ -455,8 +455,10 @@ static enum engine_node_state
 run_recompute_callback(struct engine_node *node)
 {
     enum engine_node_state ret;
+    if (false)
     stopwatch_start(node->name, time_msec());
     ret = node->run(node, node->data);
+    if (false)
     stopwatch_stop(node->name, time_msec());
     return ret;
 }
@@ -465,8 +467,10 @@ static enum engine_input_handler_result
 run_change_handler(struct engine_node *node, struct engine_node_input *input)
 {
     enum engine_input_handler_result ret;
+    if (false)
     stopwatch_start(input->change_handler_name, time_msec());
     ret = input->change_handler(node, node->data);
+    if (false)
     stopwatch_stop(input->change_handler_name, time_msec());
     return ret;
 }
@@ -498,11 +502,13 @@ engine_recompute(struct engine_node *node, bool allowed,
     }
 
     /* Run the node handler which might change state. */
-    long long int now = time_msec();
+    // long long int now = time_msec();
+    long long int now = 0;
     engine_set_node_state(node, run_recompute_callback(node),
                           "recompute run() result");
     node->stats.recompute++;
-    long long int delta_time = time_msec() - now;
+    // long long int delta_time = time_msec() - now;
+    long long int delta_time = 0 - now;
     if (delta_time > engine_compute_log_timeout_msec) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(20, 10);
         VLOG_INFO_RL(&rl, "node: %s, recompute (%s) took %lldms", node->name,
@@ -527,10 +533,12 @@ engine_compute(struct engine_node *node, bool recompute_allowed)
             /* If the input change can't be handled incrementally, run
              * the node handler.
              */
-            long long int now = time_msec();
+            // long long int now = time_msec();
+            long long int now = 0;
             enum engine_input_handler_result handled;
             handled = run_change_handler(node, &node->inputs[i]);
-            long long int delta_time = time_msec() - now;
+            // long long int delta_time = time_msec() - now;
+            long long int delta_time = 0 - now;
             if (delta_time > engine_compute_log_timeout_msec) {
                 static struct vlog_rate_limit rl =
                     VLOG_RATE_LIMIT_INIT(20, 10);
