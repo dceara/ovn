@@ -153,10 +153,7 @@ multicast_igmp_northd_handler(struct engine_node *node, void *data OVS_UNUSED)
         return EN_UNHANDLED;
     }
 
-    struct tracked_ovn_ports *trk_lsps = &northd_data->trk_data.trk_lsps;
-    if (hmapx_count(&trk_lsps->created) ||
-        hmapx_count(&trk_lsps->updated) ||
-        hmapx_count(&trk_lsps->deleted)) {
+    if (hmapx_count(&northd_data->trk_data.trk_switches.deleted)) {
         return EN_UNHANDLED;
     }
 
@@ -174,7 +171,7 @@ multicast_igmp_northd_handler(struct engine_node *node, void *data OVS_UNUSED)
      *      This node also accesses the router ports of the logical router
      *      (od->ports).  When these logical router ports gets updated,
      *      en_northd engine recomputes and so does this node.
-     *      Note: When we add I-P to handle router port changes, we
+     *      Note: When we add I-P to handle switch/router port changes, we
      *      need to revisit this handler.
      *
      * */
