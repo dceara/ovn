@@ -265,24 +265,27 @@ engine_get_input_data(const char *input_name, struct engine_node *node)
 }
 
 void
-engine_add_input(struct engine_node *node, struct engine_node *input,
+engine_add_input_impl(struct engine_node *node, struct engine_node *input,
                  enum engine_input_handler_result (*change_handler)
-                     (struct engine_node *, void *))
+                     (struct engine_node *, void *),
+                 const char *change_handler_name)
 {
     ovs_assert(node->n_inputs < ENGINE_MAX_INPUT);
     node->inputs[node->n_inputs].node = input;
     node->inputs[node->n_inputs].change_handler = change_handler;
+    node->inputs[node->n_inputs].change_handler_name = change_handler_name;
     node->n_inputs ++;
 }
 
 void
-engine_add_input_with_compute_debug(
+engine_add_input_with_compute_debug_impl(
         struct engine_node *node, struct engine_node *input,
         enum engine_input_handler_result (*change_handler)
             (struct engine_node *, void *),
-        void (*get_compute_failure_info)(struct engine_node *))
+        void (*get_compute_failure_info)(struct engine_node *),
+        const char *change_handler_name)
 {
-    engine_add_input(node, input, change_handler);
+    engine_add_input_impl(node, input, change_handler, change_handler_name);
     node->get_compute_failure_info = get_compute_failure_info;
 }
 

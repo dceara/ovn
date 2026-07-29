@@ -207,6 +207,7 @@ struct engine_node_input {
      * handler needs to use the txn pointers returned by engine_get_context(),
      * and the pointers are NULL, the change handler MUST return EN_UNHANDLED.
      */
+    const char *change_handler_name;
     enum engine_input_handler_result (*change_handler)
         (struct engine_node *node, void *data);
 };
@@ -310,14 +311,26 @@ void *engine_get_input_data(const char *input_name, struct engine_node *);
  * which can be NULL. If the change_handler is NULL, the engine will not
  * be able to process the change incrementally, and will fall back to call
  * the run method to recompute. */
-void engine_add_input(struct engine_node *node, struct engine_node *input,
+void engine_add_input_impl(struct engine_node *node, struct engine_node *input,
                       enum engine_input_handler_result (*change_handler)
-                          (struct engine_node *, void *));
-void engine_add_input_with_compute_debug(
+                          (struct engine_node *, void *),
+                      const char *change_handler_name);
+
+#define engine_add_input(node, input, change_handler) \
+    engine_add_input_impl(node, input, change_handler, #change_handler)
+
+void engine_add_input_with_compute_debug_impl(
         struct engine_node *node, struct engine_node *input,
         enum engine_input_handler_result (*change_handler)
             (struct engine_node *, void *),
-        void (*get_compute_failure_info)(struct engine_node *));
+        void (*get_compute_failure_info)(struct engine_node *),
+        const char *change_handler_name);
+
+#define engine_add_input_with_compute_debug(node, input, change_handler, \
+                                            get_failure_info) \
+    engine_add_input_with_compute_debug_impl(node, input, change_handler, \
+                                             get_failure_info,            \
+                                             #change_handler)
 
 /* Force the engine to recompute everything. It is used
  * in circumstances when we are not sure there is change or not, or
