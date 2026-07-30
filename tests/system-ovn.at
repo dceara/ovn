@@ -275,13 +275,13 @@ check ovn-nbctl --wait=hv sync
 OVS_WAIT_UNTIL([ovs-ofctl dump-flows br-int | grep 'nat(src=fd30::1)'])
 
 # 'alice1' should be able to ping 'foo1' directly.
-NS_CHECK_EXEC([alice1], [ping6 -q -c 3 -i 0.3 -w 2 fd11::2 | FORMAT_PING], \
+NS_CHECK_EXEC([alice1], [ping -6 -q -c 3 -i 0.3 -w 2 fd11::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
 
 # North-South DNAT: 'alice1' should also be able to ping 'foo1' via fd30::2
-NS_CHECK_EXEC([alice1], [ping6 -q -c 3 -i 0.3 -w 2 fd30::2 | FORMAT_PING], \
+NS_CHECK_EXEC([alice1], [ping -6 -q -c 3 -i 0.3 -w 2 fd30::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -295,7 +295,7 @@ icmpv6,orig=(src=fd21::2,dst=fd30::2,id=<cleared>,type=128,code=0),reply=(src=fd
 
 # South-North SNAT: 'bar1' pings 'alice1'. But 'alice1' receives traffic
 # from fd30::1
-NS_CHECK_EXEC([bar1], [ping6 -q -c 3 -i 0.3 -w 2 fd21::2 | FORMAT_PING], \
+NS_CHECK_EXEC([bar1], [ping -6 -q -c 3 -i 0.3 -w 2 fd21::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -316,7 +316,7 @@ check ovn-nbctl --wait=hv sync
 AT_CHECK([ovs-appctl dpctl/flush-conntrack])
 
 # East-west DNAT and SNAT: 'bar1' pings fd30::2. 'foo1' receives it.
-NS_CHECK_EXEC([bar1], [ping6 -q -c 3 -i 0.3 -w 2 fd30::2 | FORMAT_PING], \
+NS_CHECK_EXEC([bar1], [ping -6 -q -c 3 -i 0.3 -w 2 fd30::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -918,7 +918,7 @@ check ovn-nbctl --wait=hv sync
 OVS_WAIT_UNTIL([ovs-ofctl dump-flows br-int | grep 'nat(src=fd40::4)'])
 
 # North-South DNAT: 'alice1' should be able to ping 'foo1' via fd30::2
-NS_CHECK_EXEC([alice1], [ping6 -q -c 3 -i 0.3 -w 2 fd40::2 | FORMAT_PING], \
+NS_CHECK_EXEC([alice1], [ping -6 -q -c 3 -i 0.3 -w 2 fd40::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -936,7 +936,7 @@ icmpv6,orig=(src=fd30::3,dst=fd11::2,id=<cleared>,type=128,code=0),reply=(src=fd
 ])
 
 # North-South DNAT: 'bob1' should be able to ping 'foo1' via fd40::3
-NS_CHECK_EXEC([bob1], [ping6 -q -c 3 -i 0.3 -w 2 fd40::3 | FORMAT_PING], \
+NS_CHECK_EXEC([bob1], [ping -6 -q -c 3 -i 0.3 -w 2 fd40::3 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -955,7 +955,7 @@ icmpv6,orig=(src=fd30::4,dst=fd11::2,id=<cleared>,type=128,code=0),reply=(src=fd
 
 # South-North SNAT: 'bar1' pings 'bob1'. But 'bob1' receives traffic
 # from fd40::4
-NS_CHECK_EXEC([bar1], [ping6 -q -c 3 -i 0.3 -w 2 fd30::4 | FORMAT_PING], \
+NS_CHECK_EXEC([bar1], [ping -6 -q -c 3 -i 0.3 -w 2 fd30::4 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -968,7 +968,7 @@ icmpv6,orig=(src=fd12::2,dst=fd30::4,id=<cleared>,type=128,code=0),reply=(src=fd
 
 # South-North SNAT: 'foo1' pings 'alice1'. But 'alice1' receives traffic
 # from fd40::1
-NS_CHECK_EXEC([foo1], [ping6 -q -c 3 -i 0.3 -w 2 fd30::3 | FORMAT_PING], \
+NS_CHECK_EXEC([foo1], [ping -6 -q -c 3 -i 0.3 -w 2 fd30::3 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -1179,7 +1179,7 @@ NS_CHECK_EXEC([alice1], [ping -q -c 3 -i 0.3 -w 2 30.0.0.2 | FORMAT_PING], \
 ])
 
 # North-South DNAT: 'alice16' should be able to ping 'foo16' via fd30::2
-NS_CHECK_EXEC([alice16], [ping6 -q -c 3 -i 0.3 -w 2 fd40::2 | FORMAT_PING], \
+NS_CHECK_EXEC([alice16], [ping -6 -q -c 3 -i 0.3 -w 2 fd40::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -1212,7 +1212,7 @@ NS_CHECK_EXEC([bob1], [ping -q -c 3 -i 0.3 -w 2 30.0.0.3 | FORMAT_PING], \
 ])
 
 # North-South DNAT: 'bob16' should be able to ping 'foo16' via fd40::3
-NS_CHECK_EXEC([bob16], [ping6 -q -c 3 -i 0.3 -w 2 fd40::3 | FORMAT_PING], \
+NS_CHECK_EXEC([bob16], [ping -6 -q -c 3 -i 0.3 -w 2 fd40::3 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -1247,7 +1247,7 @@ NS_CHECK_EXEC([bar1], [ping -q -c 3 -i 0.3 -w 2 172.16.1.4 | FORMAT_PING], \
 ])
 # South-North SNAT: 'bar16' pings 'bob16'. But 'bob16' receives traffic
 # from fd40::4
-NS_CHECK_EXEC([bar16], [ping6 -q -c 3 -i 0.3 -w 2 fd30::4 | FORMAT_PING], \
+NS_CHECK_EXEC([bar16], [ping -6 -q -c 3 -i 0.3 -w 2 fd30::4 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -1271,7 +1271,7 @@ NS_CHECK_EXEC([foo1], [ping -q -c 3 -i 0.3 -w 2 172.16.1.3 | FORMAT_PING], \
 
 # South-North SNAT: 'foo16' pings 'alice16'. But 'alice16' receives traffic
 # from fd40::1
-NS_CHECK_EXEC([foo16], [ping6 -q -c 3 -i 0.3 -w 2 fd30::3 | FORMAT_PING], \
+NS_CHECK_EXEC([foo16], [ping -6 -q -c 3 -i 0.3 -w 2 fd30::3 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -1400,7 +1400,7 @@ check ovn-nbctl --wait=hv sync
 
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.1) | \
       sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -1419,7 +1419,7 @@ dnl in 0.3% of cases, so run a few times.
 
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.1) | \
       sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -1432,7 +1432,7 @@ dnl Should work with the virtual IP 30.0.0.3 address through NAT
 dnl Each server should have at least one connection.
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.3 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.3 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.3) | \
       sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -1445,7 +1445,7 @@ dnl Test load-balancing that includes L4 ports in NAT.
 dnl Each server should have at least one connection.
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.2) | \
       sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -1467,7 +1467,7 @@ dnl Test load-balancing that includes L4 ports in NAT.
 dnl Each server should have at least one connection.
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.2) | \
       sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -1894,7 +1894,7 @@ dnl Test load-balancing that includes L4 ports in NAT.
 dnl Each server should have at least one connection.
 OVS_WAIT_FOR_OUTPUT([
     for i in $(seq 1 20); do
-        NS_EXEC([foo1], [wget 30.0.0.1:8080 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+        NS_EXEC([foo1], [wget http://30.0.0.1:8080 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.1) | \
       sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -1929,7 +1929,7 @@ AT_CHECK([ovs-appctl dpctl/flush-conntrack])
 # Each server should have at least one connection.
 OVS_WAIT_FOR_OUTPUT([
     for i in $(seq 1 20); do
-        NS_EXEC([foo1], [wget 30.0.0.1:8080 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+        NS_EXEC([foo1], [wget http://30.0.0.1:8080 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.1) | \
       sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -2093,7 +2093,7 @@ OVS_START_L7([foo4], [http])
 dnl Should work with the virtual IP address through NAT
 OVS_WAIT_FOR_OUTPUT([
 for i in `seq 1 10`; do
-    NS_EXEC([foo1], [wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([foo1], [wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -2107,7 +2107,7 @@ tcp,orig=(src=192.168.1.2,dst=30.0.0.1,sport=<cleared>,dport=<cleared>),reply=(s
 dnl Test load-balancing that includes L4 ports in NAT.
 OVS_WAIT_FOR_OUTPUT([
 for i in `seq 1 10`; do
-    NS_EXEC([foo1], [wget 30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([foo1], [wget http://30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -2347,7 +2347,7 @@ check ovs-appctl dpctl/flush-conntrack
 dnl Should work with the virtual IP address through NAT
 OVS_WAIT_FOR_OUTPUT([
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -2361,7 +2361,7 @@ check ovs-appctl dpctl/flush-conntrack
 OVS_WAIT_FOR_OUTPUT([
 dnl Test load-balancing that includes L4 ports in NAT.
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -2410,7 +2410,7 @@ tcp,orig=(src=172.16.1.2,dst=192.168.2.2,sport=<cleared>,dport=<cleared>),reply=
 dnl Test load-balancing that includes L4 ports in NAT.
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -2451,7 +2451,7 @@ tcp,orig=(src=172.16.1.2,dst=192.168.2.2,sport=<cleared>,dport=<cleared>),reply=
 
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -2536,7 +2536,7 @@ check ovn-nbctl --wait=hv sync
 
 for i in $(seq 1 5); do
     echo Request $i
-    NS_CHECK_EXEC([client], [wget 172.16.1.100 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_CHECK_EXEC([client], [wget http://172.16.1.100 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 # Now send the traffic from client to the VIP - 172.16.1.150
@@ -2545,7 +2545,7 @@ check ovn-nbctl --wait=hv sync
 
 for i in $(seq 1 5); do
     echo Request $i
-    NS_CHECK_EXEC([client], [wget 172.16.1.150 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_CHECK_EXEC([client], [wget http://172.16.1.150 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 OVS_APP_EXIT_AND_WAIT([ovn-controller])
@@ -2851,7 +2851,7 @@ tcp,orig=(src=172.16.1.3,dst=192.168.2.2,sport=<cleared>,dport=<cleared>),reply=
 
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -3227,7 +3227,7 @@ tcp,orig=(src=fd72::3,dst=fd12::2,sport=<cleared>,dport=<cleared>),reply=(src=fd
 
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
     NS_EXEC([alice16], [wget http://[[fd30::1]] -t 5 -T 1 --retry-connrefused -v -o wget${i}_6.log])
 done
 
@@ -3355,7 +3355,7 @@ OVS_START_L7([bar1], [http])
 dnl Should work with the virtual IP address through NAT
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 172.16.1.10 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://172.16.1.10 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -3368,7 +3368,7 @@ tcp,orig=(src=172.16.1.2,dst=172.16.1.10,sport=<cleared>,dport=<cleared>),reply=
 dnl Test load-balancing that includes L4 ports in NAT.
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([
 for i in `seq 1 10`; do
-    NS_EXEC([alice1], [wget 172.16.1.11:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_EXEC([alice1], [wget http://172.16.1.11:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 dnl Each server should have at least one connection.
@@ -4536,7 +4536,7 @@ OVS_WAIT_UNTIL(
 #dnl Each server should have at least one connection.
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 10`; do
-        NS_EXEC([sw0-p2], [wget 10.0.0.10 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+        NS_EXEC([sw0-p2], [wget http://10.0.0.10 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
     done
 
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(10.0.0.10) | \
@@ -4561,7 +4561,7 @@ ovs-appctl dpctl/flush-conntrack
 # From sw0-p2 send traffic to vip - 10.0.0.10
 for i in `seq 1 20`; do
     echo Request $i
-    NS_CHECK_EXEC([sw0-p2], [wget 10.0.0.10 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_CHECK_EXEC([sw0-p2], [wget http://10.0.0.10 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 AT_CHECK([ovs-appctl dpctl/dump-conntrack | FORMAT_CT(10.0.0.10) | \
@@ -7331,8 +7331,9 @@ reject: acl-meter
 ])
 
 ip netns exec sw01 scapy -H <<-EOF
-p = IP(src="192.168.1.2", dst="192.168.1.1") / UDP(dport = 12345) / Raw(b"X"*64)
-send (p, iface='sw01', loop = 0, verbose = 0, count = 20)
+p = Ether(src="f0:00:00:01:02:03", dst="00:00:01:01:02:03") / \
+    IP(src="192.168.1.2", dst="192.168.1.1") / UDP(dport = 12345) / Raw(b"X"*64)
+sendp(p, iface='sw01', loop = 0, verbose = 0, count = 20)
 EOF
 
 # 1pps
@@ -7348,8 +7349,9 @@ NETNS_START_TCPDUMP([sw01], [-n -i sw01 icmp -Q in], [reject])
 check ovn-nbctl --may-exist --wait=hv meter-add acl-meter drop 5 pktps 0
 OVS_WAIT_UNTIL([ovs-ofctl -O OpenFlow15 meter-stats br-int | grep -q packet_count:0])
 ip netns exec sw01 scapy -H <<-EOF
-p = IP(src="192.168.1.2", dst="192.168.1.1") / UDP(dport = 12345) / Raw(b"X"*64)
-send (p, iface='sw01', loop = 0, verbose = 0, count = 40)
+p = Ether(src="f0:00:00:01:02:03", dst="00:00:01:01:02:03") / \
+    IP(src="192.168.1.2", dst="192.168.1.1") / UDP(dport = 12345) / Raw(b"X"*64)
+sendp(p, iface='sw01', loop = 0, verbose = 0, count = 40)
 EOF
 
 # 10pps
@@ -7365,8 +7367,9 @@ NETNS_START_TCPDUMP([sw01], [-n -i sw01 icmp -Q in], [reject])
 check ovn-nbctl --wait=hv copp-del copp0 reject
 
 ip netns exec sw01 scapy -H <<-EOF
-p = IP(src="192.168.1.2", dst="192.168.1.1") / UDP(dport = 12345) / Raw(b"X"*64)
-send (p, iface='sw01', loop = 0, verbose = 0, count = 20)
+p = Ether(src="f0:00:00:01:02:03", dst="00:00:01:01:02:03") / \
+    IP(src="192.168.1.2", dst="192.168.1.1") / UDP(dport = 12345) / Raw(b"X"*64)
+sendp(p, iface='sw01', loop = 0, verbose = 0, count = 20)
 EOF
 
 OVS_WAIT_UNTIL([
@@ -7383,8 +7386,9 @@ arp-resolve: arp-meter
 ])
 
 ip netns exec sw01 scapy -H <<-EOF
-p = IP(src="192.168.1.2", dst="172.16.1.100") / TCP(dport = 80, flags="S") / Raw(b"X"*64)
-send (p, iface='sw01', loop = 0, verbose = 0, count = 100)
+p = Ether(src="f0:00:00:01:02:03", dst="00:00:01:01:02:03") / \
+    IP(src="192.168.1.2", dst="172.16.1.100") / TCP(dport = 80, flags="S") / Raw(b"X"*64)
+sendp(p, iface='sw01', loop = 0, verbose = 0, count = 100)
 EOF
 
 # 1pps
@@ -7402,8 +7406,9 @@ icmp4-error: icmp-meter
 
 NETNS_START_TCPDUMP([sw01], [-n -i sw01 icmp], [icmp])
 ip netns exec sw01 scapy -H <<-EOF
-p = IP(src="192.168.1.2", dst="172.16.1.100", ttl=1) / TCP(dport = 8080, flags="S") / Raw(b"X"*64)
-send (p, iface='sw01', loop = 0, verbose = 0, count = 100)
+p = Ether(src="f0:00:00:01:02:03", dst="00:00:01:01:02:03") / \
+    IP(src="192.168.1.2", dst="172.16.1.100", ttl=1) / TCP(dport = 8080, flags="S") / Raw(b"X"*64)
+sendp(p, iface='sw01', loop = 0, verbose = 0, count = 100)
 EOF
 
 # 1pps
@@ -7994,7 +7999,7 @@ wait_for_ports_up
 # Start webservers in 'sw1-p1'
 OVS_START_L7([sw1p1], [http])
 
-AT_CHECK([ip netns exec sw0p1 wget 20.0.0.3 -t 3 -T 1], [0], [ignore], [ignore])
+AT_CHECK([ip netns exec sw0p1 wget http://20.0.0.3 -t 3 -T 1], [0], [ignore], [ignore])
 
 # Clear the apply-after-lb option for the ACL
 check ovn-nbctl acl-del sw1 from-lport 1001 'inport == "sw1p1" && ip4'
@@ -8002,7 +8007,7 @@ check ovn-nbctl acl-add sw1 from-lport 1001 'inport == "sw1p1" && ip4' drop
 
 check ovn-nbctl --wait=hv sync
 
-AT_CHECK([ip netns exec sw0p1 wget 20.0.0.3 -t 3 -T 1], [0], [ignore], [ignore])
+AT_CHECK([ip netns exec sw0p1 wget http://20.0.0.3 -t 3 -T 1], [0], [ignore], [ignore])
 
 OVS_APP_EXIT_AND_WAIT([ovn-controller])
 
@@ -8622,7 +8627,7 @@ NS_CHECK_EXEC([ls1p1], [ping -q -c 3 -i 0.3 -w 2  172.16.1.1 | FORMAT_PING], \
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
 
-NS_CHECK_EXEC([ls1p1], [ping6 -q -c 3 -i 0.3 -w 2 1711::1  | FORMAT_PING], \
+NS_CHECK_EXEC([ls1p1], [ping -6 -q -c 3 -i 0.3 -w 2 1711::1  | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -9463,7 +9468,7 @@ zone_id=$(ovn-appctl -t ovn-controller ct-zone-list | grep foo1 | cut -d ' ' -f2
 
 OVS_START_L7([bar1], [http])
 
-AT_CHECK([ip netns exec foo1 wget   192.168.2.2 -t 3 -T 1], [0], [ignore], [ignore])
+AT_CHECK([ip netns exec foo1 wget   http://192.168.2.2 -t 3 -T 1], [0], [ignore], [ignore])
 
 # check conntrack zone has tcp entry
 AT_CHECK([ovs-appctl dpctl/dump-conntrack zone=$zone_id | \
@@ -9475,7 +9480,7 @@ tcp,orig=(src=192.168.1.2,dst=192.168.2.2,sport=<cleared>,dport=<cleared>),reply
 AT_CHECK([ovs-appctl dpctl/flush-conntrack])
 
 # now check with VIP
-AT_CHECK([ip netns exec foo1 wget   30.30.30.30  -t 3 -T 1], [0], [ignore], [ignore])
+AT_CHECK([ip netns exec foo1 wget   http://30.30.30.30  -t 3 -T 1], [0], [ignore], [ignore])
 
 # check conntrack zone has tcp entry
 AT_CHECK([ovs-appctl dpctl/dump-conntrack zone=$zone_id | \
@@ -9493,7 +9498,7 @@ check ovn-nbctl ls-lb-del foo lb1
 check ovn-nbctl acl-add foo from-lport 1 1 allow-stateless
 check ovn-nbctl --wait=hv acl-add foo to-lport 1 1 allow-stateless
 
-AT_CHECK([ip netns exec foo1 wget   192.168.2.2 -t 3 -T 1], [0], [ignore], [ignore])
+AT_CHECK([ip netns exec foo1 wget   http://192.168.2.2 -t 3 -T 1], [0], [ignore], [ignore])
 
 # check conntrack zone has no tcp entry
 AT_CHECK([ovs-appctl dpctl/dump-conntrack zone=$zone_id | \
@@ -9994,13 +9999,13 @@ tcp,orig=(src=192.168.1.2,dst=30.0.0.1,sport=<cleared>,dport=<cleared>),reply=(s
 
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.1) | sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [LB1_CT_ENTRIES])
 
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.2:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.2) | sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
 tcp,orig=(src=192.168.1.2,dst=30.0.0.2,sport=<cleared>,dport=<cleared>),reply=(src=172.16.1.2,dst=192.168.1.2,sport=<cleared>,dport=<cleared>),zone=<cleared>,mark=2,protoinfo=(state=<cleared>)
@@ -10010,7 +10015,7 @@ tcp,orig=(src=192.168.1.2,dst=30.0.0.2,sport=<cleared>,dport=<cleared>),reply=(s
 
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.3 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.3 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.3) | sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
 tcp,orig=(src=192.168.1.2,dst=30.0.0.3,sport=<cleared>,dport=<cleared>),reply=(src=172.16.1.2,dst=192.168.1.2,sport=<cleared>,dport=<cleared>),zone=<cleared>,mark=2,protoinfo=(state=<cleared>)
@@ -10077,7 +10082,7 @@ check ovn-nbctl ls-lb-add foo lb1
 
 OVS_WAIT_FOR_OUTPUT([
     for i in `seq 1 20`; do
-        ip netns exec foo1 wget 30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
+        ip netns exec foo1 wget http://30.0.0.1 -t 5 -T 1 --retry-connrefused -v -o wget$i.log;
     done
     ovs-appctl dpctl/dump-conntrack | FORMAT_CT(30.0.0.1) | sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [LB1_CT_ENTRIES])
 
@@ -10615,12 +10620,12 @@ check ovn-nbctl lsp-add bar bar1 \
 check ovn-nbctl --wait=hv sync
 
 # Force ipv6 nd neighbour solicitation
-NS_EXEC([foo1], [ping6 -c 1 fd12::2])
+NS_EXEC([foo1], [ping -6 -c 1 fd12::2])
 
 NETNS_START_TCPDUMP([foo1], [-vvvv -ttt -nn -e -i foo1 'ether dst 0a:58:a9:fe:01:01 and icmp6'], [foo1-icmp6])
 
 # 'foo1' should be able to ping 'bar1'
-NS_CHECK_EXEC([foo1], [ping6 -q -c 3 -i 0.3 -w 2 fd12::2 | FORMAT_PING], \
+NS_CHECK_EXEC([foo1], [ping -6 -q -c 3 -i 0.3 -w 2 fd12::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -10630,12 +10635,12 @@ OVS_WAIT_UNTIL([
 ])
 
 # Force ipv6 nd neighbour solicitation
-NS_EXEC([foo2], [ping6 -c 1 fd12::2])
+NS_EXEC([foo2], [ping -6 -c 1 fd12::2])
 
 NETNS_START_TCPDUMP([foo2], [-vvvv -ttt -nn -e -i foo2 'ether dst 0a:58:a9:fe:01:01 and icmp6'], [foo2-icmp6])
 
 # 'foo2' should be able to ping 'bar1'
-NS_CHECK_EXEC([foo2], [ping6 -q -c 3 -i 0.3 -w 2 fd12::2 | FORMAT_PING], \
+NS_CHECK_EXEC([foo2], [ping -6 -q -c 3 -i 0.3 -w 2 fd12::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -10645,12 +10650,12 @@ OVS_WAIT_UNTIL([
 ])
 
 # Force ipv6 nd neighbour solicitation
-NS_EXEC([foo3], [ping6 -c 1 fd12::2])
+NS_EXEC([foo3], [ping -6 -c 1 fd12::2])
 
 NETNS_START_TCPDUMP([foo3], [-vvvv -ttt -nn -e -i foo3 'ether dst 0a:58:a9:fe:01:01 and icmp6'], [foo3-icmp6])
 
 # 'foo3' should be able to ping 'bar1'
-NS_CHECK_EXEC([foo3], [ping6 -q -c 3 -i 0.3 -w 2 fd12::2 | FORMAT_PING], \
+NS_CHECK_EXEC([foo3], [ping -6 -q -c 3 -i 0.3 -w 2 fd12::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -11083,7 +11088,7 @@ check ovn-nbctl --wait=hv lsp-attach-mirror bar1 mirror1
 
 NETNS_START_TCPDUMP([mirror], [-c 3 -neei mirror proto GRE], [gre_mirror6])
 
-NS_CHECK_EXEC([foo1], [ping6 -q -c 3 -i 0.3 -w 2 2002::2 | FORMAT_PING], \
+NS_CHECK_EXEC([foo1], [ping -6 -q -c 3 -i 0.3 -w 2 2002::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -11114,7 +11119,7 @@ check ovn-nbctl --wait=hv lsp-attach-mirror bar1 mirror3
 
 NETNS_START_TCPDUMP([mirror], [-c 3 -neei mirror ip6[[42:2]]=0x88be], [erspan_mirror6])
 
-NS_CHECK_EXEC([foo1], [ping6 -q -c 3 -i 0.3 -w 2 2002::2 | FORMAT_PING], \
+NS_CHECK_EXEC([foo1], [ping -6 -q -c 3 -i 0.3 -w 2 2002::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -11128,7 +11133,7 @@ check ovn-nbctl --wait=hv set mirror $uuid type=gre
 
 NETNS_START_TCPDUMP([mirror], [-c 3 -neei mirror proto GRE], [gre2_mirror6])
 
-NS_CHECK_EXEC([foo1], [ping6 -q -c 3 -i 0.3 -w 2 2002::2 | FORMAT_PING], \
+NS_CHECK_EXEC([foo1], [ping -6 -q -c 3 -i 0.3 -w 2 2002::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -11339,7 +11344,7 @@ NS_CHECK_EXEC([ln], [ip route add 192.168.0.0/24 via 10.0.0.1])
 
 OVS_START_L7([sw-vm1], [http])
 
-NS_CHECK_EXEC([ln], [wget 172.16.0.1 -t 5 -T 1 --retry-connrefused -v -o wget.log])
+NS_CHECK_EXEC([ln], [wget http://172.16.0.1 -t 5 -T 1 --retry-connrefused -v -o wget.log])
 
 AT_CHECK([ovs-appctl dpctl/dump-conntrack | FORMAT_CT(172.16.0.1) | \
 sed -e 's/zone=[[0-9]]*/zone=<cleared>/'], [0], [dnl
@@ -11483,7 +11488,7 @@ check ovn-nbctl --wait=hv sync
 
 for i in $(seq 1 5); do
     echo Request $i
-    NS_CHECK_EXEC([public-vm], [wget 172.16.1.150 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_CHECK_EXEC([public-vm], [wget http://172.16.1.150 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 OVS_WAIT_FOR_OUTPUT([ovs-appctl dpctl/dump-conntrack | FORMAT_CT(172.16.1.150) | wc -l ], [0], [dnl
@@ -11503,7 +11508,7 @@ check ovn-nbctl --wait=hv sync
 
 for i in $(seq 1 5); do
     echo Request $i
-    NS_CHECK_EXEC([public-vm], [wget 172.16.1.151 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_CHECK_EXEC([public-vm], [wget http://172.16.1.151 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 OVS_WAIT_FOR_OUTPUT([ovs-appctl dpctl/dump-conntrack | FORMAT_CT(172.16.1.151) | wc -l ], [0], [dnl
@@ -12584,15 +12589,19 @@ sock.close()
 ])
 
 AT_DATA([server.py], [dnl
+import socket
 import sys
 import time
 
-line = sys.stdin.readline()
-if "bye" in line:
-    time.sleep(1)
+port = int(sys.argv[[1]])
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind(("0.0.0.0", port))
 
-sys.stdout.write(line)
-sys.stdout.flush()
+while True:
+    data, addr = sock.recvfrom(65535)
+    if b"bye" in data:
+        time.sleep(1)
+    sock.sendto(data, addr)
 ])
 
 dnl Wait for ovn-controller to catch up.
@@ -12615,12 +12624,12 @@ dnl And wait for it to be up and running.
 OVS_WAIT_UNTIL([ovs-ofctl dump-ipfix-flow br-int | grep -q '1 ids'])
 
 dnl Start UDP echo server on vm2.
-NETNS_DAEMONIZE([vm2], [nc -e "$PYTHON ./server.py" -k -u -v -l -m 1 1000], [nc-vm2-1000.pid])
-NETNS_DAEMONIZE([vm2], [nc -e "$PYTHON ./server.py" -k -u -v -l -m 1 1010], [nc-vm2-1010.pid])
-NETNS_DAEMONIZE([vm2], [nc -e "$PYTHON ./server.py" -k -u -v -l -m 1 2000], [nc-vm2-2000.pid])
-NETNS_DAEMONIZE([vm2], [nc -e "$PYTHON ./server.py" -k -u -v -l -m 1 2010], [nc-vm2-2010.pid])
-NETNS_DAEMONIZE([vm2], [nc -e "$PYTHON ./server.py" -k -u -v -l -m 1 3000], [nc-vm2-3000.pid])
-NETNS_DAEMONIZE([vm2], [nc -e "$PYTHON ./server.py" -k -u -v -l -m 1 3010], [nc-vm2-3010.pid])
+NETNS_DAEMONIZE([vm2], [$PYTHON3 ./server.py 1000], [server-vm2-1000.pid])
+NETNS_DAEMONIZE([vm2], [$PYTHON3 ./server.py 1010], [server-vm2-1010.pid])
+NETNS_DAEMONIZE([vm2], [$PYTHON3 ./server.py 2000], [server-vm2-2000.pid])
+NETNS_DAEMONIZE([vm2], [$PYTHON3 ./server.py 2010], [server-vm2-2010.pid])
+NETNS_DAEMONIZE([vm2], [$PYTHON3 ./server.py 3000], [server-vm2-3000.pid])
+NETNS_DAEMONIZE([vm2], [$PYTHON3 ./server.py 3010], [server-vm2-3010.pid])
 NETNS_START_TCPDUMP([vm2], [-i vm2 -vnne], [vm2])
 
 dnl Send traffic (2 packets) to the UDP LB1 (hits the from-lport ACL).
@@ -12778,7 +12787,7 @@ dnl And wait for it to be up and running.
 OVS_WAIT_UNTIL([ovs-ofctl dump-ipfix-flow br-int | grep -q '1 ids'])
 
 dnl Start UDP echo server on vm2.
-NETNS_DAEMONIZE([vm2], [nc -e /bin/cat -k -u -v -l -m 1 1000], [nc-vm2-1000.pid])
+NETNS_DAEMONIZE([vm2], [nc -e "$(command -v cat)" -k -u -v -l -m 1 1000], [nc-vm2-1000.pid])
 
 dnl Send traffic to the UDP server (hits both ACL tiers).
 NS_CHECK_EXEC([vm1], [echo a | nc --send-only -u 42.42.42.3 1000])
@@ -12896,7 +12905,7 @@ dnl And wait for it to be up and running.
 OVS_WAIT_UNTIL([ovs-ofctl dump-ipfix-flow br-int | grep -q '1 ids'])
 
 dnl Start UDP echo server on vm2.
-NETNS_DAEMONIZE([vm2], [nc -e /bin/cat -k -u -v -l -m 1 1000], [nc-vm2-1000.pid])
+NETNS_DAEMONIZE([vm2], [nc -e "$(command -v cat)" -k -u -v -l -m 1 1000], [nc-vm2-1000.pid])
 
 dnl Send traffic to the UDP server (hits both ACL tiers).
 NS_CHECK_EXEC([vm1], [echo a | nc --send-only -u 42.42.42.3 1000])
@@ -14701,7 +14710,7 @@ check ovn-nbctl --wait=hv sync
 NETNS_DAEMONIZE([alice], [nc -6 -l -k 80], [alice.pid])
 NETNS_DAEMONIZE([peter], [nc -6 -l -k 80], [peter.pid])
 
-NS_CHECK_EXEC([bob], [ping6 -q -c 3 -i 0.3 -w 2 fd11::2 | FORMAT_PING], \
+NS_CHECK_EXEC([bob], [ping -6 -q -c 3 -i 0.3 -w 2 fd11::2 | FORMAT_PING], \
 [0], [dnl
 3 packets transmitted, 3 received, 0% packet loss, time 0ms
 ])
@@ -17130,7 +17139,7 @@ NETNS_START_TCPDUMP([bar1], [-neei bar1 src 20.0.0.2 and tcp], [bar1])
 
 check ovs-appctl dpctl/flush-conntrack
 for i in $(seq 10); do
-    NS_CHECK_EXEC([alice1], [wget 172.16.1.1:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
+    NS_CHECK_EXEC([alice1], [wget http://172.16.1.1:8000 -t 5 -T 1 --retry-connrefused -v -o wget$i.log])
 done
 
 OVS_WAIT_UNTIL([
