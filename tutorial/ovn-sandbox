@@ -648,7 +648,7 @@ run ovs-vsctl --no-wait -- init
 
 # Start ovs-vswitchd.
 rungdb $gdb_vswitchd $gdb_vswitchd_ex ovs-vswitchd --detach --no-chdir --pidfile -vconsole:off --log-file -vsyslog:off \
-    --enable-dummy=$dummy -vvconn -vnetdev_dummy
+    -vvconn -vnetdev_dummy
 
 run ovn-nbctl init
 run ovn-sbctl init
