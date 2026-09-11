@@ -347,7 +347,7 @@ void
 mac_binding_stats_process_flow_stats(struct vector *stats_vec,
                                      struct ofputil_flow_stats *ofp_stats)
 {
-    if (ofp_stats->idle_age == ofp_stats->duration_sec) {
+    if (!ofp_stats->packet_count) {
         return;
     }
 
@@ -452,7 +452,7 @@ void
 fdb_stats_process_flow_stats(struct vector *stats_vec,
                              struct ofputil_flow_stats *ofp_stats)
 {
-    if (ofp_stats->idle_age == ofp_stats->duration_sec) {
+    if (!ofp_stats->packet_count) {
         return;
     }
 
