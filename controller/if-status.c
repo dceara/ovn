@@ -24,6 +24,7 @@
 #include "lib/hmapx.h"
 #include "lib/util.h"
 #include "timeval.h"
+#include "openvswitch/dynamic-string.h"
 #include "openvswitch/vlog.h"
 #include "lib/vswitch-idl.h"
 #include "lib/ovn-sb-idl.h"
@@ -615,6 +616,7 @@ if_status_mgr_update(struct if_status_mgr *mgr,
     /* Move newly claimed interfaces from OIF_CLAIMED to OIF_INSTALL_FLOWS.
      */
     bool new_ifaces = false;
+    struct ds ifaces_label = DS_EMPTY_INITIALIZER;
     if (!sb_readonly) {
         HMAPX_FOR_EACH_SAFE (node, &mgr->ifaces_per_state[OIF_CLAIMED]) {
             struct ovs_iface *iface = node->data;
@@ -625,6 +627,10 @@ if_status_mgr_update(struct if_status_mgr *mgr,
                 ovs_iface_set_state(mgr, iface, OIF_INSTALL_FLOWS);
                 iface->install_seqno = mgr->iface_seqno + 1;
                 new_ifaces = true;
+                if (ds_last(&ifaces_label) != EOF) {
+                    ds_put_char(&ifaces_label, ',');
+                }
+                ds_put_cstr(&ifaces_label, iface->id);
             } else {
                 ovs_iface_set_state(mgr, iface, OIF_MARK_UP);
             }
@@ -662,9 +668,12 @@ if_status_mgr_update(struct if_status_mgr *mgr,
     if (new_ifaces) {
         mgr->iface_seqno++;
         ofctrl_seqno_update_create(mgr->iface_seq_type_pb_cfg,
-                                   mgr->iface_seqno);
-        VLOG_DBG("Seqno requested: %"PRIu32, mgr->iface_seqno);
+                                   mgr->iface_seqno,
+                                   ds_cstr(&ifaces_label));
+        VLOG_INFO("DEBUG DCEARA Seqno requested: %"PRIu32" ifaces: [%s]",
+                  mgr->iface_seqno, ds_cstr(&ifaces_label));
     }
+    ds_destroy(&ifaces_label);
 }
 
 void
@@ -793,8 +802,8 @@ ovs_iface_create(struct if_status_mgr *mgr, const char *iface_id,
 {
     struct ovs_iface *iface = xzalloc(sizeof *iface);
 
-    VLOG_DBG("Interface %s create for iface %s.", iface_id,
-             iface_rec ? iface_rec->name : "");
+    VLOG_INFO("DEBUG DCEARA Interface %s create for iface %s.", iface_id,
+              iface_rec ? iface_rec->name : "");
     iface->id = xstrdup(iface_id);
     shash_add_nocopy(&mgr->ifaces, iface->id, iface);
     ovs_iface_set_state(mgr, iface, state);
@@ -821,8 +830,8 @@ add_to_ovn_uninstall_hash(struct if_status_mgr *mgr, const char *name,
 static void
 ovs_iface_destroy(struct if_status_mgr *mgr, struct ovs_iface *iface)
 {
-    VLOG_DBG("Interface %s destroy: state %s", iface->id,
-             if_state_names[iface->state]);
+    VLOG_INFO("DEBUG DCEARA Interface %s destroy: state %s", iface->id,
+              if_state_names[iface->state]);
     hmapx_find_and_delete(&mgr->ifaces_per_state[iface->state], iface);
     struct shash_node *node = shash_find(&mgr->ifaces, iface->id);
     if (node) {
@@ -848,9 +857,9 @@ static void
 ovs_iface_set_state(struct if_status_mgr *mgr, struct ovs_iface *iface,
                     enum if_state state)
 {
-    VLOG_DBG("Interface %s set state: old %s, new %s", iface->id,
-             if_state_names[iface->state],
-             if_state_names[state]);
+    VLOG_INFO("DEBUG DCEARA Interface %s set state: old %s, new %s",
+              iface->id, if_state_names[iface->state],
+              if_state_names[state]);
 
     hmapx_find_and_delete(&mgr->ifaces_per_state[iface->state], iface);
     iface->state = state;

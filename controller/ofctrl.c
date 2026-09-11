@@ -326,6 +326,13 @@ enum ofctrl_state {
 #undef STATE
 };
 
+/* Human-readable state names for debug logging. */
+static const char *ofctrl_state_names[] = {
+#define STATE(NAME) [NAME] = #NAME,
+    STATES
+#undef STATE
+};
+
 /* An in-flight update to the switch's flow table.
  *
  * When we receive a barrier reply from the switch with the given 'xid', we
@@ -738,6 +745,11 @@ flow_updates_handle_barrier_reply(const struct ofp_header *oh,
     struct ofctrl_flow_update *fup = ofctrl_flow_update_from_list_node(
         ovs_list_front(&flow_updates));
     if (fup->xid == oh->xid) {
+        VLOG_INFO("DEBUG DCEARA barrier reply received: xid=%#"PRIx32
+                  ", cur_cfg=%"PRIu64" -> %"PRIu64
+                  ", pending_barriers=%"PRIuSIZE,
+                  ntohl(oh->xid), cur_cfg, fup->req_cfg,
+                  ovs_list_size(&flow_updates) - 1);
         if (fup->req_cfg >= cur_cfg) {
             cur_cfg = fup->req_cfg;
         }
@@ -2775,6 +2787,16 @@ ofctrl_put(struct ovn_desired_flow_table *lflow_table,
     static uint64_t old_req_cfg = 0;
     bool need_put = false;
 
+    unsigned int txq_len = rconn_count_txqlen(swconn);
+    unsigned int tx_packets = rconn_packet_counter_n_packets(tx_counter);
+    unsigned int tx_bytes = rconn_packet_counter_n_bytes(tx_counter);
+    size_t n_flow_updates = ovs_list_size(&flow_updates);
+    if (txq_len > 0 || tx_packets > 0 || n_flow_updates > 0) {
+        VLOG_INFO("DEBUG DCEARA ofctrl_put: rconn txq_len=%u, tx_counter: "
+                  "packets=%u bytes=%u, pending_barriers=%"PRIuSIZE,
+                  txq_len, tx_packets, tx_bytes, n_flow_updates);
+    }
+
     if (state == S_WAIT_BEFORE_CLEAR) {
         /* If no more monitored condition changes expected, release wait
          * before clear stage and skip over poll wait. */
@@ -2820,7 +2842,11 @@ ofctrl_put(struct ovn_desired_flow_table *lflow_table,
         return;
     }
     if (!ofctrl_can_put()) {
-        VLOG_DBG("ofctrl_put can't be performed");
+        VLOG_INFO("DEBUG DCEARA ofctrl_put: can't send, state=%s, "
+                  "tx_counter=%u, txq_len=%u",
+                  ofctrl_state_names[state],
+                  rconn_packet_counter_n_packets(tx_counter),
+                  rconn_count_txqlen(swconn));
 
         struct ofpbuf *msg;
         LIST_FOR_EACH_POP (msg, list_node, &msgs) {
@@ -3076,6 +3102,9 @@ ofctrl_put(struct ovn_desired_flow_table *lflow_table,
         fup->xid = xid_;
         fup->req_cfg = req_cfg;
         mem_stats.oflow_update_usage += ofctrl_flow_update_size(fup);
+        VLOG_INFO("DEBUG DCEARA barrier request sent: xid=%#"PRIx32
+                  ", req_cfg=%"PRIu64", pending_barriers=%"PRIuSIZE,
+                  ntohl(xid_), req_cfg, ovs_list_size(&flow_updates));
     } else if (!ovs_list_is_empty(&flow_updates)) {
         /* Getting up-to-date with 'req_cfg' didn't require any extra flow
          * table changes, so whenever we get up-to-date with the most recent

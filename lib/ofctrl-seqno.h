@@ -35,7 +35,8 @@ bool ofctrl_acked_seqnos_contains(const struct ofctrl_acked_seqnos *seqnos,
                                   uint64_t val);
 
 size_t ofctrl_seqno_add_type(void);
-void ofctrl_seqno_update_create(size_t seqno_type, uint64_t new_cfg);
+void ofctrl_seqno_update_create(size_t seqno_type, uint64_t new_cfg,
+                                const char *debug_label);
 void ofctrl_seqno_run(uint64_t flow_cfg);
 uint64_t ofctrl_seqno_get_req_cfg(void);
 void ofctrl_seqno_flush(void);
