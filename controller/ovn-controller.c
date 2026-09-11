@@ -8136,7 +8136,8 @@ main(int argc, char *argv[])
                         get_nb_cfg(sbrec_sb_global_table_get(
                                                        ovnsb_idl_loop.idl),
                                               ovnsb_cond_seqno,
-                                              ovnsb_expected_cond_seqno));
+                                              ovnsb_expected_cond_seqno),
+                        NULL);
 
                     struct local_binding_data *binding_data =
                         runtime_data ? &runtime_data->lbinding_data : NULL;

@@ -21,6 +21,10 @@
 #include "util.h"
 #include "vec.h"
 
+#include "openvswitch/vlog.h"
+
+VLOG_DEFINE_THIS_MODULE(ofctrl_seqno);
+
 #define VECTOR_THRESHOLD 1024
 
 /* A sequence number update request, i.e., when the barrier corresponding to
@@ -36,6 +40,7 @@ struct ofctrl_seqno_update {
                                 * application.
                                 */
     uint64_t req_cfg;          /* Application specific seqno. */
+    char *debug_label;         /* Optional debug label for tracing. */
 };
 
 /* List of in flight sequence number updates. */
@@ -151,7 +156,8 @@ ofctrl_seqno_add_type(void)
  * 'seqno_type'.
  */
 void
-ofctrl_seqno_update_create(size_t seqno_type, uint64_t new_cfg)
+ofctrl_seqno_update_create(size_t seqno_type, uint64_t new_cfg,
+                           const char *debug_label)
 {
     struct ofctrl_seqno_state *state = ofctrl_seqno_state_get(seqno_type);
 
@@ -169,8 +175,13 @@ ofctrl_seqno_update_create(size_t seqno_type, uint64_t new_cfg)
         .seqno_type = seqno_type,
         .flow_cfg = ofctrl_req_seqno,
         .req_cfg = new_cfg,
+        .debug_label = debug_label ? xstrdup(debug_label) : NULL,
     };
     vector_push(&ofctrl_seqno_updates, &update);
+    VLOG_INFO("DEBUG DCEARA ofctrl seqno update created: type=%"PRIuSIZE
+              " flow_cfg=%"PRIu64" req_cfg=%"PRIu64" (%s)",
+              seqno_type, ofctrl_req_seqno, new_cfg,
+              debug_label ? debug_label : "");
 }
 
 /* Should be called when the application is certain that all OVS flow updates
@@ -191,6 +202,13 @@ ofctrl_seqno_run(uint64_t flow_cfg)
             ofctrl_seqno_state_get(update->seqno_type);
         state->cur_cfg = update->req_cfg;
         vector_push(&state->acked_cfgs, &update->req_cfg);
+
+        VLOG_INFO("DEBUG DCEARA ofctrl seqno acked: type=%"PRIuSIZE
+                  " flow_cfg=%"PRIu64" req_cfg=%"PRIu64" (%s)",
+                  update->seqno_type, update->flow_cfg, update->req_cfg,
+                  update->debug_label ? update->debug_label : "");
+        free(update->debug_label);
+        update->debug_label = NULL;
 
         index++;
     }
@@ -215,6 +233,10 @@ ofctrl_seqno_get_req_cfg(void)
 void
 ofctrl_seqno_flush(void)
 {
+    struct ofctrl_seqno_update *update;
+    VECTOR_FOR_EACH_PTR (&ofctrl_seqno_updates, update) {
+        free(update->debug_label);
+    }
     vector_clear(&ofctrl_seqno_updates);
 
     struct ofctrl_seqno_state *state;
@@ -228,6 +250,10 @@ ofctrl_seqno_flush(void)
 void
 ofctrl_seqno_destroy(void)
 {
+    struct ofctrl_seqno_update *update;
+    VECTOR_FOR_EACH_PTR (&ofctrl_seqno_updates, update) {
+        free(update->debug_label);
+    }
     vector_destroy(&ofctrl_seqno_updates);
 
     struct ofctrl_seqno_state *state;
