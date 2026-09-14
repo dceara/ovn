@@ -21608,7 +21608,7 @@ sync_dns_entries(struct ovsdb_idl_txn *ovnsb_txn,
                 ovnsb_txn, &dns_info->nb_dns->header_.uuid);
         }
 
-        /* Copy DNS options to SB*/
+        /* Copy DNS options to SB. */
         struct smap options = SMAP_INITIALIZER(&options);
         if (!smap_is_empty(&dns_info->sb_dns->options)) {
             smap_clone(&options, &dns_info->sb_dns->options);
@@ -21618,6 +21618,22 @@ sync_dns_entries(struct ovsdb_idl_txn *ovnsb_txn,
                                        "ovn-owned", false);
         smap_replace(&options, "ovn-owned",
                  ovn_owned? "true" : "false");
+
+        const char *ttl_str = smap_get(&dns_info->nb_dns->options, "ttl");
+        if (ttl_str) {
+            unsigned int ttl;
+            if (str_to_uint(ttl_str, 10, &ttl) && ttl <= DNS_MAX_RR_TTL) {
+                smap_replace(&options, "ttl", ttl_str);
+            } else {
+                static struct vlog_rate_limit rl
+                    = VLOG_RATE_LIMIT_INIT(5, 1);
+                VLOG_WARN_RL(&rl, "invalid DNS TTL value: %s", ttl_str);
+                smap_remove(&options, "ttl");
+            }
+        } else {
+            smap_remove(&options, "ttl");
+        }
+
         sbrec_dns_set_options(dns_info->sb_dns, &options);
         smap_destroy(&options);
 

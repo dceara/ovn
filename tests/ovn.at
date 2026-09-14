@@ -12583,6 +12583,37 @@ reset_pcap_file hv1-vif2 hv1/vif2
 rm -f 1.expected
 rm -f 2.expected
 
+AS_BOX([Verify configurable DNS TTL])
+dnl Set a custom TTL of 30 seconds on the DNS record and verify
+dnl the response uses that TTL instead of the default 3600.
+check ovn-nbctl --wait=hv set DNS $DNS1 options:ttl=30
+
+set_dns_params vm1
+src_ip=`ip_to_hex 10 0 0 6`
+dst_ip=`ip_to_hex 10 0 0 1`
+dns_reply=1
+
+dnl Rebuild expected data with TTL=30 (0x1e = 0000001e).
+query_name=03766d31036f766e036f726700
+ttl_custom=0000001e
+expected_dns_answer=${query_name}00010001${ttl_custom}00040a000004
+an_count=0001
+dns_req_header=010201200001000000000000
+dns_resp_header=010281200001${an_count}00000000
+dns_req_data=${dns_req_header}${query_name}00010001
+dns_resp_data=${dns_resp_header}${query_name}00010001${expected_dns_answer}
+
+test_dns 2 f00000000002 f000000000f0 $src_ip $dst_ip $dns_reply $dns_req_data $dns_resp_data
+
+dnl Remove the custom TTL and verify the default 3600 (0xe10 = 00000e10).
+check ovn-nbctl --wait=hv remove DNS $DNS1 options ttl
+
+set_dns_params vm1
+src_ip=`ip_to_hex 10 0 0 6`
+dst_ip=`ip_to_hex 10 0 0 1`
+dns_reply=1
+test_dns 2 f00000000002 f000000000f0 $src_ip $dst_ip $dns_reply $dns_req_data $dns_resp_data
+
 AS_BOX([Verify DNS coverage counters])
 # The test has sent multiple DNS queries of various types, verify counters
 # Total queries should be > 0

@@ -1,5 +1,8 @@
 Post v26.09.0
 --------------
+   - Added "ttl" option to the DNS table to configure the TTL value
+     (in seconds) used in DNS responses.  The valid range is 0 to
+     2147483647 (per RFC 2181).  Defaults to 3600 when unset.
    - Removed implementations of the commit_ecmp_nh, chk_ecmp_nh, and
      chk_ecmp_nh_mac actions from the code.
    - Mark tunnel ports as transient (other_config:transient=true) when the

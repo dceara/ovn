@@ -5014,7 +5014,19 @@ tcp.flags = RST;
       are owned by OVN, and all <code>DNS queries</code> for those domains
       will be answered locally by either an IP address or
       <code>DNS rejection</code>.
-</column>
+    </column>
+
+    <column name="options" key="ttl"
+            type='{"type": "integer", "minInteger": 0,
+                   "maxInteger": 2147483647}'>
+      The Time To Live (TTL) value, in seconds, used in DNS
+      response records.  Set by <code>ovn-northd</code> from
+      the corresponding
+      <ref table="DNS" column="options" key="ttl" db="OVN_Northbound"/>
+      option in the OVN Northbound database.  If unset or invalid,
+      the default value of <code>3600</code> seconds is used.
+    </column>
+
     <group title="Common Columns">
       <column name="external_ids">
         See <em>External IDs</em> at the beginning of this document.
