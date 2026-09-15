@@ -31201,7 +31201,7 @@ OVN_CHECK_PACKETS([hv2/vif1-tx.pcap], [expected])
 as hv1 ovs-appctl ofproto/trace br-int in_port=1 $packet
 
 # MAC binding entry should have generated
-AT_CHECK([ovn-sbctl find mac ip=10.0.0.2 mac='"00:00:00:00:03:02"' logical_port=lrp-r1-join | grep 10\.0\.0\.2], [0], [ignore], [])
+AT_CHECK([ovn-sbctl find mac_binding ip=10.0.0.2 mac='"00:00:00:00:03:02"' logical_port=lrp-r1-join | grep 10\.0\.0\.2], [0], [ignore], [])
 
 OVN_CLEANUP([hv1],[hv2])
 
@@ -36417,6 +36417,148 @@ OVN_CLEANUP([hv1])
 AT_CLEANUP
 
 OVN_FOR_EACH_NORTHD([
+AT_SETUP([ovn -- shared MAC binding scopes])
+AT_KEYWORDS([mac_binding])
+ovn_start
+
+net_add n1
+sim_add hv1
+as hv1
+check ovs-vsctl add-br br-phys
+ovn_attach n1 br-phys 192.168.0.1
+check ovs-vsctl set open . \
+    external-ids:ovn-bridge-mappings=phys:br-phys
+check ovs-vsctl -- add-port br-phys ext0 -- \
+    set Interface ext0 options:tx_pcap=hv1/ext0-tx.pcap \
+    options:rxq_pcap=hv1/ext0-rx.pcap
+
+check ovn-nbctl ls-add public
+check ovn-nbctl lsp-add-localnet-port public ln phys
+
+check ovn-nbctl lr-add lr0
+check ovn-nbctl lrp-add lr0 lr0-public \
+    00:00:00:00:10:00 192.168.10.1/24
+check ovn-nbctl lsp-add-router-port public public-lr0 lr0-public
+check ovn-nbctl lrp-set-gateway-chassis lr0-public hv1
+
+scope=$(ovn-nbctl create MAC_Binding_Scope name=scope0 \
+    always_learn_from_arp_request=true)
+check ovn-nbctl set Logical_Router_Port lr0-public \
+    mac_binding_scope=$scope
+
+wait_for_ports_up
+wait_row_count Chassis 1 name=hv1 other_config:shared-mac-binding=true
+
+dnl Missing feature flags on an existing chassis must be restored.
+check ovn-sbctl remove Chassis hv1 other_config shared-mac-binding
+wait_row_count Chassis 1 name=hv1 other_config:shared-mac-binding=true
+
+dnl Unrelated scoped port updates must not recompute the MAC cache.
+check as hv1 ovn-appctl -t ovn-controller inc-engine/clear-stats
+check ovn-sbctl set Port_Binding lr0-public external_ids:unrelated=true
+check ovn-nbctl --wait=hv sync
+check_controller_engine_stats hv1 mac_cache norecompute nocompute
+
+sb_scope=$(fetch_column sb:MAC_Binding_Scope _uuid name=scope0)
+scope_key=$(printf "0x%x" \
+    $(fetch_column sb:MAC_Binding_Scope binding_key name=scope0))
+check_column "$sb_scope" Port_Binding mac_binding_scope \
+    logical_port=lr0-public
+
+dnl A GARP learned through a scope member creates one shared row.
+garp=ffffffffffff0000000010fe08060001080006040001
+garp=${garp}0000000010fec0a80afe000000000000c0a80afe
+check as hv1 ovs-appctl netdev-dummy/receive ext0 $garp
+wait_row_count Shared_MAC_Binding 1 ip=192.168.10.254 \
+    mac='"00:00:00:00:10:fe"'
+check_row_count MAC_Binding 0 ip=192.168.10.254
+
+dnl The controller renders the row once in the shared namespace.
+OVS_WAIT_UNTIL([
+    test $(as hv1 ovs-ofctl dump-flows br-int \
+        table=OFTABLE_SHARED_MAC_BINDING | \
+        grep "metadata=${scope_key}" | grep "reg0=0xc0a80afe" | \
+        grep -c "actions=mod_dl_dst:00:00:00:00:10:fe") -eq 1
+])
+OVS_WAIT_UNTIL([
+    test $(as hv1 ovs-ofctl dump-flows br-int \
+        table=OFTABLE_SHARED_MAC_LOOKUP | \
+        grep "metadata=${scope_key}" | grep "reg0=0xc0a80afe" | \
+        grep -c "dl_src=00:00:00:00:10:fe") -eq 1
+])
+
+dnl A regular static binding is a fallback, while an override is applied
+dnl after the shared lookup and remains local to its router port.
+check ovn-nbctl static-mac-binding-add lr0-public 192.168.10.254 \
+    00:00:00:00:10:aa
+OVS_WAIT_UNTIL([
+    test $(as hv1 ovs-ofctl dump-flows br-int \
+        table=OFTABLE_MAC_BINDING | grep "reg0=0xc0a80afe" | \
+        grep -c "actions=mod_dl_dst:00:00:00:00:10:aa") -eq 1
+])
+check ovn-nbctl --may-exist static-mac-binding-add lr0-public \
+    192.168.10.254 00:00:00:00:10:bb
+smb=$(fetch_column nb:Static_MAC_Binding _uuid ip=192.168.10.254)
+check ovn-nbctl set Static_MAC_Binding $smb override_dynamic_mac=true
+OVS_WAIT_UNTIL([
+    test $(as hv1 ovs-ofctl dump-flows br-int \
+        table=OFTABLE_MAC_BINDING_OVERRIDE | \
+        grep "reg0=0xc0a80afe" | \
+        grep -c "actions=mod_dl_dst:00:00:00:00:10:bb") -eq 1
+])
+
+dnl A scope on a remote gateway is still local when its router datapath is
+dnl local.  Its shared bindings must be included by conditional monitoring.
+check ovn-sbctl chassis-add hv2 geneve 192.168.0.2 \
+    -- set Chassis hv2 other_config:shared-mac-binding=true
+
+check ovn-nbctl ls-add internal
+check ovn-nbctl lsp-add internal vif1
+check ovn-nbctl lsp-set-addresses vif1 \
+    "00:00:00:00:20:10 10.0.0.10"
+
+check ovn-nbctl lr-add lr1
+check ovn-nbctl lrp-add lr1 lr1-internal \
+    00:00:00:00:20:01 10.0.0.1/24
+check ovn-nbctl lsp-add-router-port internal internal-lr1 lr1-internal
+check ovn-nbctl lrp-add lr1 lr1-public \
+    00:00:00:00:30:01 192.168.20.1/24
+check ovn-nbctl lsp-add-router-port public public-lr1 lr1-public
+check ovn-nbctl lrp-set-gateway-chassis lr1-public hv2
+
+remote_scope=$(ovn-nbctl create MAC_Binding_Scope name=remote-scope \
+    mac_binding_age_threshold=300)
+check ovn-nbctl set Logical_Router_Port lr1-public \
+    mac_binding_scope=$remote_scope
+check ovn-nbctl --wait=sb sync
+
+remote_sb_scope=$(fetch_column sb:MAC_Binding_Scope _uuid \
+    name=remote-scope)
+remote_scope_key=$(printf "0x%x" \
+    $(fetch_column sb:MAC_Binding_Scope binding_key name=remote-scope))
+hv1_chassis=$(fetch_column Chassis _uuid name=hv1)
+check_row_count Port_Binding 0 mac_binding_scope=$remote_sb_scope \
+    chassis=$hv1_chassis
+
+check as hv1 ovs-vsctl add-port br-int vif1 -- \
+    set Interface vif1 external-ids:iface-id=vif1
+wait_for_ports_up vif1
+check ovn-nbctl --wait=hv sync
+now=$(date +%s)000
+check_uuid ovn-sbctl create Shared_MAC_Binding scope=$remote_sb_scope \
+    ip=192.168.20.254 mac="00\:00\:00\:00\:20\:fe" timestamp=$now
+OVS_WAIT_UNTIL([
+    test $(as hv1 ovs-ofctl dump-flows br-int \
+        table=OFTABLE_SHARED_MAC_BINDING | \
+        grep "metadata=${remote_scope_key}" | grep "reg0=0xc0a814fe" | \
+        grep -c "actions=mod_dl_dst:00:00:00:00:20:fe") -eq 1
+])
+
+OVN_CLEANUP([hv1])
+AT_CLEANUP
+])
+
+OVN_FOR_EACH_NORTHD([
 AT_SETUP([ovn -- lr mac_binding I-P update])
 AT_KEYWORDS([mac_binding])
 ovn_start
@@ -37248,7 +37390,7 @@ lr_key=$(fetch_column datapath_binding tunnel_key external_ids:name=lr)
 cookie=$(fetch_column mac_binding _uuid logical_port=lr-ls1 | cut -d'-' -f1)
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([as hv1 ovn-appctl -t ovn-controller debug/dump-mac-bindings], [0], [dnl
 Local MAC bindings:
-cookie: 0x$cookie, datapath-key: $lr_key, port-key: 0, ip: 192.168.10.10, mac: 00:00:00:00:10:10
+cookie: 0x$cookie, namespace: datapath, datapath-key: $lr_key, port-key: 0, ip: 192.168.10.10, mac: 00:00:00:00:10:10
 ])
 
 dnl Remove router port.  This deletes the mac binding in the same transaction.
@@ -37274,7 +37416,7 @@ dnl Check local mac binding cache.
 cookie=$(fetch_column mac_binding _uuid logical_port=lr-ls2 | cut -d'-' -f1)
 OVS_WAIT_FOR_OUTPUT_UNQUOTED([as hv1 ovn-appctl -t ovn-controller debug/dump-mac-bindings], [0], [dnl
 Local MAC bindings:
-cookie: 0x$cookie, datapath-key: $lr_key, port-key: 0, ip: 192.168.20.10, mac: 00:00:00:00:20:10
+cookie: 0x$cookie, namespace: datapath, datapath-key: $lr_key, port-key: 0, ip: 192.168.20.10, mac: 00:00:00:00:20:10
 ])
 
 dnl Change LRP tunnel key.
