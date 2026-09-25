@@ -2750,8 +2750,7 @@ ofctrl_has_backlog(void)
 static bool
 ofctrl_can_put(void)
 {
-    if (state != S_UPDATE_FLOWS
-        || ofctrl_has_backlog()) {
+    if (state != S_UPDATE_FLOWS || rconn_get_version(swconn) < 0) {
         return false;
     }
     return true;
