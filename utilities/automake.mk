@@ -126,4 +126,9 @@ utilities_ovn_brctl_SOURCES = \
     utilities/ovn-brctl.c
 utilities_ovn_brctl_LDADD = lib/libovn.la $(OVSDB_LIBDIR)/libovsdb.la $(OVS_LIBDIR)/libopenvswitch.la
 
+# ovsdb-replay
+bin_PROGRAMS += utilities/ovsdb-replay
+utilities_ovsdb_replay_SOURCES = utilities/ovsdb-replay.c
+utilities_ovsdb_replay_LDADD = lib/libovn.la $(OVSDB_LIBDIR)/libovsdb.la $(OVS_LIBDIR)/libopenvswitch.la
+
 include utilities/bugtool/automake.mk
