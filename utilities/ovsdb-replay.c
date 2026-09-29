@@ -36,6 +36,7 @@
 #include "ovsdb/transaction.h"
 #include "socket-util.h"
 #include "stream.h"
+#include "sset.h"
 #include "svec.h"
 #include "timeval.h"
 #include "util.h"
@@ -43,6 +44,16 @@
 #include "lib/ovn-util.h"
 
 VLOG_DEFINE_THIS_MODULE(ovsdb_replay);
+
+/* Maps "TABLE_NAME.COLUMN_NAME" -> struct sset * of map keys to skip
+ * when building wire-format operations.  Entries here are stripped
+ * from INSERT rows and from INSERT/DELETE mutations so that the
+ * replayed transactions never set these keys on the remote server.
+ *
+ * The shadow database is intentionally NOT filtered: it must track
+ * the exact on-disk state so that subsequent transaction diffs are
+ * computed correctly. */
+static struct shash ignore_map_keys = SHASH_INITIALIZER(&ignore_map_keys);
 
 /* One database being replayed. */
 struct replay_db {
@@ -132,6 +143,106 @@ row_has_iface_id(const struct ovsdb_row *row)
     return NULL;
 }
 
+/* Registers a map key to ignore during replay for a given table and
+ * column.  Creates the per-column sset on first use. */
+static void
+add_ignore_map_key(const char *table, const char *column, const char *key)
+{
+    char *lookup = xasprintf("%s.%s", table, column);
+    struct sset *keys = shash_find_data(&ignore_map_keys, lookup);
+    if (!keys) {
+        keys = xmalloc(sizeof *keys);
+        sset_init(keys);
+        shash_add(&ignore_map_keys, lookup, keys);
+    }
+    sset_add(keys, key);
+    free(lookup);
+}
+
+/* Parses a "TABLE,COLUMN,KEY" spec from --ignore-map-key and
+ * registers it. */
+static void
+parse_ignore_map_key(const char *spec)
+{
+    char *copy = xstrdup(spec);
+    char *save = NULL;
+    char *table = strtok_r(copy, ",", &save);
+    char *column = strtok_r(NULL, ",", &save);
+    char *key = strtok_r(NULL, ",", &save);
+
+    if (!table || !column || !key) {
+        ovs_fatal(0, "invalid --ignore-map-key spec \"%s\": "
+                  "expected TABLE,COLUMN,KEY", spec);
+    }
+
+    add_ignore_map_key(table, column, key);
+    free(copy);
+}
+
+/* Returns the set of map keys to ignore for the given table and
+ * column, or NULL if no keys should be ignored. */
+static const struct sset *
+get_ignore_keys(const char *table_name, const char *col_name)
+{
+    char *lookup = xasprintf("%s.%s", table_name, col_name);
+    const struct sset *keys = shash_find_data(&ignore_map_keys, lookup);
+    free(lookup);
+    return keys;
+}
+
+/* Returns a new datum that is a copy of 'src' with map keys in
+ * 'ignore_keys' removed.  The caller must free the returned datum's
+ * keys and values arrays with free() but must NOT destroy the
+ * individual atoms (they point into 'src').
+ *
+ * If no keys are removed, sets '*any_removed' to false and the
+ * returned datum shares the same arrays as 'src' (caller must not
+ * free them).  Otherwise sets '*any_removed' to true. */
+static struct ovsdb_datum
+datum_without_keys(const struct ovsdb_datum *src,
+                   const struct ovsdb_type *type,
+                   const struct sset *ignore_keys,
+                   bool *any_removed)
+{
+    /* Only string-keyed maps can be filtered. */
+    if (type->key.type != OVSDB_TYPE_STRING) {
+        *any_removed = false;
+        return *src;
+    }
+
+    /* First pass: count how many keys survive. */
+    size_t n_keep = 0;
+    for (size_t i = 0; i < src->n; i++) {
+        if (!sset_contains(ignore_keys,
+                           json_string(src->keys[i].s))) {
+            n_keep++;
+        }
+    }
+
+    if (n_keep == src->n) {
+        *any_removed = false;
+        return *src;
+    }
+
+    *any_removed = true;
+    struct ovsdb_datum dst;
+    dst.n = n_keep;
+    dst.keys = xmalloc(n_keep * sizeof *dst.keys);
+    dst.values = xmalloc(n_keep * sizeof *dst.values);
+
+    size_t j = 0;
+    for (size_t i = 0; i < src->n; i++) {
+        if (!sset_contains(ignore_keys,
+                           json_string(src->keys[i].s))) {
+            dst.keys[j] = src->keys[i];
+            dst.values[j] = src->values[i];
+            j++;
+        }
+    }
+    ovs_assert(j == n_keep);
+    return dst;
+}
+
 /* Computes the difference between 'old_datum' and 'new_datum' for a
  * non-scalar column 'col' and appends "insert" and/or "delete" mutations
  * to the 'mutations' JSON array.  Both datums must be sorted by key.
@@ -145,7 +256,8 @@ static void
 build_mutations_for_column(const struct ovsdb_datum *old_datum,
                            const struct ovsdb_datum *new_datum,
                            const struct ovsdb_column *col,
-                           struct json *mutations)
+                           struct json *mutations,
+                           const struct sset *ignore_keys)
 {
     bool is_map = ovsdb_type_is_map(&col->type);
     enum ovsdb_atomic_type key_type = col->type.key.type;
@@ -164,12 +276,24 @@ build_mutations_for_column(const struct ovsdb_datum *old_datum,
                                            key_type);
         if (cmp < 0) {
             /* In old but not new: deletion. */
+            if (ignore_keys && key_type == OVSDB_TYPE_STRING
+                && sset_contains(ignore_keys,
+                                 json_string(old_datum->keys[oi].s))) {
+                oi++;
+                continue;
+            }
             json_array_add(del_elems,
                            ovsdb_atom_to_json(&old_datum->keys[oi], key_type));
             any_del = true;
             oi++;
         } else if (cmp > 0) {
             /* In new but not old: insertion. */
+            if (ignore_keys && key_type == OVSDB_TYPE_STRING
+                && sset_contains(ignore_keys,
+                                 json_string(new_datum->keys[ni].s))) {
+                ni++;
+                continue;
+            }
             if (is_map) {
                 json_array_add(ins_elems, json_array_create_2(
                     ovsdb_atom_to_json(&new_datum->keys[ni], key_type),
@@ -177,7 +301,7 @@ build_mutations_for_column(const struct ovsdb_datum *old_datum,
             } else {
                 json_array_add(ins_elems,
                                ovsdb_atom_to_json(&new_datum->keys[ni],
-                                                   key_type));
+                                                    key_type));
             }
             any_ins = true;
             ni++;
@@ -187,12 +311,20 @@ build_mutations_for_column(const struct ovsdb_datum *old_datum,
                 && ovsdb_atom_compare_3way(&old_datum->values[oi],
                                             &new_datum->values[ni],
                                             value_type)) {
+                if (ignore_keys && key_type == OVSDB_TYPE_STRING
+                    && sset_contains(
+                           ignore_keys,
+                           json_string(old_datum->keys[oi].s))) {
+                    oi++;
+                    ni++;
+                    continue;
+                }
                 /* Value changed: delete old key then insert new key+value.
                  * The "insert" mutator skips existing keys, so we must
                  * delete first to allow the re-insertion. */
                 json_array_add(del_elems,
                                ovsdb_atom_to_json(&old_datum->keys[oi],
-                                                   key_type));
+                                                    key_type));
                 any_del = true;
                 json_array_add(ins_elems, json_array_create_2(
                     ovsdb_atom_to_json(&new_datum->keys[ni], key_type),
@@ -206,6 +338,11 @@ build_mutations_for_column(const struct ovsdb_datum *old_datum,
 
     /* Remaining old elements are deletions. */
     for (; oi < old_datum->n; oi++) {
+        if (ignore_keys && key_type == OVSDB_TYPE_STRING
+            && sset_contains(ignore_keys,
+                             json_string(old_datum->keys[oi].s))) {
+            continue;
+        }
         json_array_add(del_elems,
                        ovsdb_atom_to_json(&old_datum->keys[oi], key_type));
         any_del = true;
@@ -213,6 +350,11 @@ build_mutations_for_column(const struct ovsdb_datum *old_datum,
 
     /* Remaining new elements are insertions. */
     for (; ni < new_datum->n; ni++) {
+        if (ignore_keys && key_type == OVSDB_TYPE_STRING
+            && sset_contains(ignore_keys,
+                             json_string(new_datum->keys[ni].s))) {
+            continue;
+        }
         if (is_map) {
             json_array_add(ins_elems, json_array_create_2(
                 ovsdb_atom_to_json(&new_datum->keys[ni], key_type),
@@ -282,8 +424,31 @@ build_wire_ops_cb(const struct ovsdb_row *old,
             if (col->index >= OVSDB_N_STD_COLUMNS && col->persistent) {
                 const struct ovsdb_datum *datum = &new->fields[col->index];
                 if (!ovsdb_datum_is_default(datum, &col->type)) {
-                    json_object_put(row_json, col->name,
-                                    ovsdb_datum_to_json(datum, &col->type));
+                    const struct sset *ign =
+                        ovsdb_type_is_map(&col->type)
+                        ? get_ignore_keys(table_name, col->name)
+                        : NULL;
+                    if (ign) {
+                        bool removed;
+                        struct ovsdb_datum filtered =
+                            datum_without_keys(datum, &col->type,
+                                               ign, &removed);
+                        if (!ovsdb_datum_is_default(&filtered,
+                                                    &col->type)) {
+                            json_object_put(
+                                row_json, col->name,
+                                ovsdb_datum_to_json(&filtered,
+                                                    &col->type));
+                        }
+                        if (removed) {
+                            free(filtered.keys);
+                            free(filtered.values);
+                        }
+                    } else {
+                        json_object_put(
+                            row_json, col->name,
+                            ovsdb_datum_to_json(datum, &col->type));
+                    }
                 }
             }
         }
@@ -332,9 +497,11 @@ build_wire_ops_cb(const struct ovsdb_row *old,
                                             &col->type));
                     any_scalar = true;
                 } else {
+                    const struct sset *ign =
+                        get_ignore_keys(table_name, col->name);
                     build_mutations_for_column(&old->fields[col->index],
                                                &new->fields[col->index],
-                                               col, mutations);
+                                               col, mutations, ign);
                 }
             }
         }
@@ -637,6 +804,13 @@ usage(void)
            "  --start-txn N               start from transaction N "
            "(0-based, default 0)\n"
            "  --stop-txn N                stop after transaction N\n"
+           "  --ignore-map-key TABLE,COLUMN,KEY\n"
+           "                              ignore a map key during replay\n"
+           "                              (may repeat; Interface,"
+           "external_ids,\n"
+           "                              ovn-installed and "
+           "ovn-installed-ts\n"
+           "                              are always ignored)\n"
            "  --dry-run                   print wire-format JSON "
            "to stdout, don't send\n"
            "  --verbose                   log each transaction "
@@ -662,6 +836,10 @@ main(int argc, char *argv[])
     size_t n_dbs = 0;
     size_t allocated_dbs = 0;
 
+    /* Default map keys to ignore during replay. */
+    add_ignore_map_key("Interface", "external_ids", "ovn-installed");
+    add_ignore_map_key("Interface", "external_ids", "ovn-installed-ts");
+
     enum {
         OPT_DB = UCHAR_MAX + 1,
         OPT_SPEED,
@@ -669,6 +847,7 @@ main(int argc, char *argv[])
         OPT_VERBOSE,
         OPT_START_TXN,
         OPT_STOP_TXN,
+        OPT_IGNORE_MAP_KEY,
     };
 
     static const struct option long_options[] = {
@@ -678,6 +857,7 @@ main(int argc, char *argv[])
         {"verbose", no_argument, NULL, OPT_VERBOSE},
         {"start-txn", required_argument, NULL, OPT_START_TXN},
         {"stop-txn", required_argument, NULL, OPT_STOP_TXN},
+        {"ignore-map-key", required_argument, NULL, OPT_IGNORE_MAP_KEY},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
@@ -716,6 +896,10 @@ main(int argc, char *argv[])
 
         case OPT_STOP_TXN:
             stop_txn = strtoull(optarg, NULL, 10);
+            break;
+
+        case OPT_IGNORE_MAP_KEY:
+            parse_ignore_map_key(optarg);
             break;
 
         case 'h':
@@ -823,6 +1007,15 @@ main(int argc, char *argv[])
         free(dbs[i]);
     }
     free(dbs);
+
+    /* Clean up ignore_map_keys. */
+    struct shash_node *ign_node;
+    SHASH_FOR_EACH (ign_node, &ignore_map_keys) {
+        struct sset *ign_keys = ign_node->data;
+        sset_destroy(ign_keys);
+        free(ign_keys);
+    }
+    shash_destroy(&ignore_map_keys);
 
     return n_err ? EXIT_FAILURE : EXIT_SUCCESS;
 }
