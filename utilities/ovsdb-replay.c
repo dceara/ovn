@@ -36,6 +36,7 @@
 #include "ovsdb/transaction.h"
 #include "socket-util.h"
 #include "stream.h"
+#include "svec.h"
 #include "timeval.h"
 #include "util.h"
 
@@ -64,6 +65,8 @@ struct replay_txn {
 /* Accumulates wire-format ops during txn change traversal. */
 struct wire_ops {
     struct json *ops;              /* JSON array: [db_name, op1, op2, ...]. */
+    struct svec ifaces_to_add;     /* Interfaces to create before send. */
+    struct svec ifaces_to_del;     /* Interfaces to delete after send. */
 };
 
 /* Builds a where clause matching a row by UUID:
@@ -82,6 +85,39 @@ make_uuid_where(const struct uuid *uuid)
         json_string_create("=="),
         uuid_json);
     return json_array_create_1(condition);
+}
+
+/* Checks whether 'row' is in the "Interface" table and has an
+ * external_ids entry with key "iface-id".  If so, returns the
+ * interface name (from the "name" column).  Otherwise returns NULL. */
+static const char *
+row_has_iface_id(const struct ovsdb_row *row)
+{
+    const char *table_name = row->table->schema->name;
+    if (strcmp(table_name, "Interface")) {
+        return NULL;
+    }
+
+    const struct ovsdb_column *ext_ids_col =
+        ovsdb_table_schema_get_column(row->table->schema, "external_ids");
+    const struct ovsdb_column *name_col =
+        ovsdb_table_schema_get_column(row->table->schema, "name");
+    if (!ext_ids_col || !name_col) {
+        return NULL;
+    }
+
+    const struct ovsdb_datum *ext_ids = &row->fields[ext_ids_col->index];
+    for (unsigned int i = 0; i < ext_ids->n; i++) {
+        if (!strcmp(json_string(ext_ids->keys[i].s), "iface-id")) {
+            const struct ovsdb_datum *name_datum =
+                &row->fields[name_col->index];
+            if (name_datum->n > 0) {
+                return json_string(name_datum->keys[0].s);
+            }
+            return NULL;
+        }
+    }
+    return NULL;
 }
 
 /* Callback for ovsdb_txn_for_each_change().  Converts each row change
@@ -124,6 +160,11 @@ build_wire_ops_cb(const struct ovsdb_row *old,
         json_object_put(op, "row", row_json);
         json_array_add(w->ops, op);
 
+        const char *iface_name = row_has_iface_id(new);
+        if (iface_name) {
+            svec_add(&w->ifaces_to_add, iface_name);
+        }
+
     } else if (old && !new) {
         /* DELETE: use UUID-based where clause. */
         struct json *op = json_object_create();
@@ -131,6 +172,11 @@ build_wire_ops_cb(const struct ovsdb_row *old,
         json_object_put_string(op, "table", table_name);
         json_object_put(op, "where", make_uuid_where(row_uuid));
         json_array_add(w->ops, op);
+
+        const char *iface_name = row_has_iface_id(old);
+        if (iface_name) {
+            svec_add(&w->ifaces_to_del, iface_name);
+        }
 
     } else if (old && new) {
         /* UPDATE: compare columns manually since changed[] is all-zeros
@@ -187,6 +233,8 @@ replay_one_txn(struct replay_db *rdb, struct json *txn_json,
     /* Walk changes to build wire-format ops (before commit). */
     struct wire_ops w;
     w.ops = json_array_create_empty();
+    svec_init(&w.ifaces_to_add);
+    svec_init(&w.ifaces_to_del);
     json_array_add(w.ops, json_string_create(rdb->db_name));
     ovsdb_txn_for_each_change(txn, build_wire_ops_cb, &w);
 
@@ -197,6 +245,8 @@ replay_one_txn(struct replay_db *rdb, struct json *txn_json,
         VLOG_ERR("txn %"PRIuSIZE": shadow commit failed: %s", txn_num, msg);
         free(msg);
         json_destroy(w.ops);
+        svec_destroy(&w.ifaces_to_add);
+        svec_destroy(&w.ifaces_to_del);
         return false;
     }
 
@@ -205,21 +255,46 @@ replay_one_txn(struct replay_db *rdb, struct json *txn_json,
     if (n_ops <= 1) {
         /* No actual operations (empty txn). */
         json_destroy(w.ops);
+        svec_destroy(&w.ifaces_to_add);
+        svec_destroy(&w.ifaces_to_del);
         return true;
     }
 
     if (dry_run) {
+        for (size_t i = 0; i < w.ifaces_to_add.n; i++) {
+            VLOG_INFO("txn %"PRIuSIZE": would create dummy interface %s",
+                      txn_num, w.ifaces_to_add.names[i]);
+        }
         char *s = json_to_string(w.ops, JSSF_PRETTY);
         fputs(s, stdout);
         fputc('\n', stdout);
         free(s);
         json_destroy(w.ops);
+        svec_destroy(&w.ifaces_to_add);
+        svec_destroy(&w.ifaces_to_del);
         return true;
     }
 
     if (verbose) {
         VLOG_INFO("txn %"PRIuSIZE": sending %"PRIuSIZE" ops to %s",
                   txn_num, n_ops - 1, rdb->remote);
+    }
+
+    /* Create dummy interfaces before sending the transaction so that
+     * ovs-vswitchd finds the backing network devices. */
+    for (size_t i = 0; i < w.ifaces_to_add.n; i++) {
+        const char *name = w.ifaces_to_add.names[i];
+        char *cmd = xasprintf(
+            "ip link add %s type dummy && ip link set %s up", name, name);
+        int ret = system(cmd);
+        if (ret) {
+            VLOG_WARN("txn %"PRIuSIZE": failed to create dummy "
+                      "interface %s (exit %d)", txn_num, name, ret);
+        } else if (verbose) {
+            VLOG_INFO("txn %"PRIuSIZE": created dummy interface %s",
+                      txn_num, name);
+        }
+        free(cmd);
     }
 
     /* jsonrpc_create_request() takes ownership of w.ops. */
@@ -230,6 +305,8 @@ replay_one_txn(struct replay_db *rdb, struct json *txn_json,
     if (rpc_error) {
         VLOG_WARN("txn %"PRIuSIZE": JSON-RPC error: %s",
                   txn_num, ovs_retval_to_string(rpc_error));
+        svec_destroy(&w.ifaces_to_add);
+        svec_destroy(&w.ifaces_to_del);
         return false;
     }
 
@@ -250,6 +327,17 @@ replay_one_txn(struct replay_db *rdb, struct json *txn_json,
         }
     }
     jsonrpc_msg_destroy(reply);
+
+    /* Delete dummy interfaces after the transaction has been processed. */
+    for (size_t i = 0; i < w.ifaces_to_del.n; i++) {
+        const char *name = w.ifaces_to_del.names[i];
+        char *cmd = xasprintf("ip link del %s", name);
+        system(cmd);
+        free(cmd);
+    }
+
+    svec_destroy(&w.ifaces_to_add);
+    svec_destroy(&w.ifaces_to_del);
     return success;
 }
 
