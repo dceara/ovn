@@ -465,6 +465,14 @@ else
     exit 1
 fi
 
+#TODO: test specific
+(ip -br link show type dummy | awk '{print $1}' | xargs -r -I {} sudo ip link delete {}) || true
+SYSTEM_ID=b4249a3d-4026-49e7-89c3-c725816cd1e6
+OVN_HOSTNAME=ip-10-0-49-148.us-west-2.compute.internal
+HOSTIF=ens5
+mkdir -p /var/run/ovn/
+(ip link add $HOSTIF type dummy; ip link set dev $HOSTIF up) || true
+
 # Create sandbox.
 rm -rf sandbox
 mkdir sandbox
@@ -505,6 +513,7 @@ else
 fi
 ovsdb_server_args="vtep.db conf.db"
 
+HAVE_OPENSSL=no
 if [ "$HAVE_OPENSSL" = yes ]; then
     OVS_PKI="run ovs-pki --dir=$sandbox/pki --log=$sandbox/ovs-pki.log"
     $OVS_PKI init
@@ -590,7 +599,7 @@ ovn_start_db() {
                 esac
             done
             ovn_start_ovsdb_server 1
-            ovn_start_ovsdb_server 2 --sync-from=unix:${db}1.ovsdb
+            #ovn_start_ovsdb_server 2 --sync-from=unix:${db}1.ovsdb
             remote=unix:${db}1.ovsdb
             backup_note="$backup_note
 The backup server of OVN $DB can be accessed by:
@@ -648,7 +657,7 @@ run ovs-vsctl --no-wait -- init
 
 # Start ovs-vswitchd.
 rungdb $gdb_vswitchd $gdb_vswitchd_ex ovs-vswitchd --detach --no-chdir --pidfile -vconsole:off --log-file -vsyslog:off \
-    --enable-dummy=$dummy -vvconn -vnetdev_dummy
+    -vnetdev_dummy
 
 run ovn-nbctl init
 run ovn-sbctl init
@@ -656,8 +665,11 @@ run ovn-ic-nbctl init
 run ovn-ic-sbctl init
 run ovn-nbctl set NB_Global . name=az-1
 
-run ovs-vsctl set open . external-ids:system-id=chassis-1
-run ovs-vsctl set open . external-ids:hostname=sandbox
+# TODO: for testing
+run ovs-appctl route-table/filter-iface $HOSTIF
+
+run ovs-vsctl set open . external-ids:system-id=${SYSTEM_ID}
+run ovs-vsctl set open . external-ids:hostname=${OVN_HOSTNAME}
 run ovs-vsctl set open . external-ids:ovn-encap-type=geneve
 run ovs-vsctl set open . external-ids:ovn-encap-ip=127.0.0.1
 
