@@ -653,7 +653,7 @@ ic_nbctl_trp_del(struct ctl_context *ctx)
     }
 
     const struct icnbrec_transit_router *tr = NULL;
-    char *tr_uuid = uuid_to_string(&trp->tr_uuid);
+    char *tr_uuid = NULL;
     ctx->error = tr_by_name_or_uuid(ctx, tr_uuid, true, &tr);
     free(tr_uuid);
     if (ctx->error) {

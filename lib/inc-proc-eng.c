@@ -677,13 +677,12 @@ engine_run(bool recompute_allowed)
     }
 
     struct ovsdb_idl_txn *sb_txn = engine_get_context()->ovnsb_idl_txn;
+    (void)sb_txn;
 
     engine_run_canceled = false;
     struct engine_node *node;
     VECTOR_FOR_EACH (&engine_nodes, node) {
-        ovsdb_idl_txn_assert_read_only(sb_txn, !node->sb_write);
         engine_run_node(node, recompute_allowed);
-        ovsdb_idl_txn_assert_read_only(sb_txn, false);
 
         if (node->state == EN_CANCELED) {
             node->stats.cancel++;

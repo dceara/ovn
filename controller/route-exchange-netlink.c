@@ -208,19 +208,11 @@ struct route_msg_handle_data {
 
 static void
 handle_route_msg(const struct route_table_msg *msg,
-                 void *data,
-                 uint32_t table_id)
+                 void *data)
 {
     struct route_msg_handle_data *handle_data = data;
     const struct route_data *rd = &msg->rd;
     struct advertise_route_entry *ar;
-
-    if (table_id != rd->rta_table_id) {
-        /* We do not have the NLM_F_DUMP_FILTERED info here, so check if the
-         * reported table_id matches the requested one.
-         */
-        return;
-    }
 
     /* This route is not from us, learn it only if it's > RTPROT_STATIC,
      * those protocol values are used by dynamic routing protocols.

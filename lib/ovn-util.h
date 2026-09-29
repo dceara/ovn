@@ -24,6 +24,15 @@
 #include "lib/svec.h"
 #include "include/ovn/version.h"
 
+static inline char *
+uuid_to_string(const struct uuid *uuid)
+{
+    char *data = xmalloc(UUID_LEN + 1);
+
+    snprintf(data, UUID_LEN + 1, UUID_FMT, UUID_ARGS(uuid));
+    return data;
+}
+
 #define ovn_set_program_name(name) \
     ovs_set_program_name(name, OVN_PACKAGE_VERSION)
 

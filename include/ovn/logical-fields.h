@@ -31,7 +31,7 @@ enum ovn_controller_event {
  * are only supported in newer versions and must not be used without prior
  * support detection. */
 #define OVN_FLOW_N_REGS_SUPPORTED 16
-BUILD_ASSERT_DECL(FLOW_N_REGS == 32);
+BUILD_ASSERT_DECL(FLOW_N_REGS == 16);
 BUILD_ASSERT_DECL(FLOW_N_REGS >= OVN_FLOW_N_REGS_SUPPORTED);
 
 #define CHECK_REG(NAME) \

@@ -17,6 +17,7 @@
 #define EVPN_BINDING_H 1
 
 #include <stdint.h>
+#include <netinet/in.h>
 
 #include "hmapx.h"
 #include "openvswitch/hmap.h"
