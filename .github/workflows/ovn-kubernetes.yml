@@ -58,7 +58,7 @@ jobs:
         make -C src/github.com/ovn-kubernetes/ovn-kubernetes/dist/images \
           IMAGE=ovn-daemonset-f:dev \
           OVN_REPO=https://github.com/${{ github.repository }}.git \
-          OVN_GITREF=${{ github.ref_name }} fedora-image
+          OVN_GITREF=${{ github.sha }} fedora-image
         mkdir /tmp/_output
         docker save ovn-daemonset-f:dev > /tmp/_output/image.tar
 
