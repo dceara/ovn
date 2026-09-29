@@ -89,7 +89,9 @@ make_uuid_where(const struct uuid *uuid)
 
 /* Checks whether 'row' is in the "Interface" table and has an
  * external_ids entry with key "iface-id".  If so, returns the
- * interface name (from the "name" column).  Otherwise returns NULL. */
+ * interface name (from the "name" column).  Otherwise returns NULL.
+ * Internal interfaces (type "internal") are skipped because OVS
+ * creates them itself. */
 static const char *
 row_has_iface_id(const struct ovsdb_row *row)
 {
@@ -102,7 +104,17 @@ row_has_iface_id(const struct ovsdb_row *row)
         ovsdb_table_schema_get_column(row->table->schema, "external_ids");
     const struct ovsdb_column *name_col =
         ovsdb_table_schema_get_column(row->table->schema, "name");
-    if (!ext_ids_col || !name_col) {
+    const struct ovsdb_column *type_col =
+        ovsdb_table_schema_get_column(row->table->schema, "type");
+    if (!ext_ids_col || !name_col || !type_col) {
+        return NULL;
+    }
+
+    /* Internal interfaces are created by OVS itself; do not create
+     * dummy Linux interfaces for them. */
+    const struct ovsdb_datum *type_datum = &row->fields[type_col->index];
+    if (type_datum->n > 0
+        && !strcmp(json_string(type_datum->keys[0].s), "internal")) {
         return NULL;
     }
 
