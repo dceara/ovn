@@ -132,6 +132,124 @@ row_has_iface_id(const struct ovsdb_row *row)
     return NULL;
 }
 
+/* Computes the difference between 'old_datum' and 'new_datum' for a
+ * non-scalar column 'col' and appends "insert" and/or "delete" mutations
+ * to the 'mutations' JSON array.  Both datums must be sorted by key.
+ *
+ * For sets, insertions are elements in 'new_datum' but not 'old_datum'
+ * and deletions are the reverse.  For maps, a key present in both datums
+ * but with a different value is handled by first deleting the old key
+ * and then inserting the new key+value pair, because the OVSDB "insert"
+ * mutator skips existing keys rather than overwriting them. */
+static void
+build_mutations_for_column(const struct ovsdb_datum *old_datum,
+                           const struct ovsdb_datum *new_datum,
+                           const struct ovsdb_column *col,
+                           struct json *mutations)
+{
+    bool is_map = ovsdb_type_is_map(&col->type);
+    enum ovsdb_atomic_type key_type = col->type.key.type;
+    enum ovsdb_atomic_type value_type = col->type.value.type;
+
+    struct json *ins_elems = json_array_create_empty();
+    struct json *del_elems = json_array_create_empty();
+    bool any_ins = false;
+    bool any_del = false;
+
+    /* Merge-walk: both datums are sorted by key. */
+    size_t oi = 0, ni = 0;
+    while (oi < old_datum->n && ni < new_datum->n) {
+        int cmp = ovsdb_atom_compare_3way(&old_datum->keys[oi],
+                                           &new_datum->keys[ni],
+                                           key_type);
+        if (cmp < 0) {
+            /* In old but not new: deletion. */
+            json_array_add(del_elems,
+                           ovsdb_atom_to_json(&old_datum->keys[oi], key_type));
+            any_del = true;
+            oi++;
+        } else if (cmp > 0) {
+            /* In new but not old: insertion. */
+            if (is_map) {
+                json_array_add(ins_elems, json_array_create_2(
+                    ovsdb_atom_to_json(&new_datum->keys[ni], key_type),
+                    ovsdb_atom_to_json(&new_datum->values[ni], value_type)));
+            } else {
+                json_array_add(ins_elems,
+                               ovsdb_atom_to_json(&new_datum->keys[ni],
+                                                   key_type));
+            }
+            any_ins = true;
+            ni++;
+        } else {
+            /* Same key in both.  For maps, check if value changed. */
+            if (is_map
+                && ovsdb_atom_compare_3way(&old_datum->values[oi],
+                                            &new_datum->values[ni],
+                                            value_type)) {
+                /* Value changed: delete old key then insert new key+value.
+                 * The "insert" mutator skips existing keys, so we must
+                 * delete first to allow the re-insertion. */
+                json_array_add(del_elems,
+                               ovsdb_atom_to_json(&old_datum->keys[oi],
+                                                   key_type));
+                any_del = true;
+                json_array_add(ins_elems, json_array_create_2(
+                    ovsdb_atom_to_json(&new_datum->keys[ni], key_type),
+                    ovsdb_atom_to_json(&new_datum->values[ni], value_type)));
+                any_ins = true;
+            }
+            oi++;
+            ni++;
+        }
+    }
+
+    /* Remaining old elements are deletions. */
+    for (; oi < old_datum->n; oi++) {
+        json_array_add(del_elems,
+                       ovsdb_atom_to_json(&old_datum->keys[oi], key_type));
+        any_del = true;
+    }
+
+    /* Remaining new elements are insertions. */
+    for (; ni < new_datum->n; ni++) {
+        if (is_map) {
+            json_array_add(ins_elems, json_array_create_2(
+                ovsdb_atom_to_json(&new_datum->keys[ni], key_type),
+                ovsdb_atom_to_json(&new_datum->values[ni], value_type)));
+        } else {
+            json_array_add(ins_elems,
+                           ovsdb_atom_to_json(&new_datum->keys[ni], key_type));
+        }
+        any_ins = true;
+    }
+
+    /* Emit delete mutation: ["col", "delete", ["set", [keys...]]].
+     * Map deletions also use "set" format (delete by key only). */
+    if (any_del) {
+        struct json *mutation = json_array_create_3(
+            json_string_create(col->name),
+            json_string_create("delete"),
+            json_array_create_2(json_string_create("set"), del_elems));
+        json_array_add(mutations, mutation);
+    } else {
+        json_destroy(del_elems);
+    }
+
+    /* Emit insert mutation.  Sets use ["set", [elems...]]; maps use
+     * ["map", [[k,v], ...]]. */
+    if (any_ins) {
+        const char *wrapper = is_map ? "map" : "set";
+        struct json *mutation = json_array_create_3(
+            json_string_create(col->name),
+            json_string_create("insert"),
+            json_array_create_2(json_string_create(wrapper), ins_elems));
+        json_array_add(mutations, mutation);
+    } else {
+        json_destroy(ins_elems);
+    }
+}
+
 /* Callback for ovsdb_txn_for_each_change().  Converts each row change
  * (insert, update, or delete) into a wire-format transact operation
  * and appends it to the wire_ops array. */
@@ -192,9 +310,13 @@ build_wire_ops_cb(const struct ovsdb_row *old,
 
     } else if (old && new) {
         /* UPDATE: compare columns manually since changed[] is all-zeros
-         * before precommit. */
+         * before precommit.  Scalar columns go into an "update" op;
+         * set/map columns go into a "mutate" op with insert/delete
+         * mutations so that each transaction independently adds or
+         * removes its own entries. */
         struct json *row_json = json_object_create();
-        bool any_change = false;
+        struct json *mutations = json_array_create_empty();
+        bool any_scalar = false;
 
         struct shash_node *node;
         SHASH_FOR_EACH (node, &row->table->schema->columns) {
@@ -203,14 +325,21 @@ build_wire_ops_cb(const struct ovsdb_row *old,
                 && !ovsdb_datum_equals(&old->fields[col->index],
                                        &new->fields[col->index],
                                        &col->type)) {
-                json_object_put(row_json, col->name,
-                                ovsdb_datum_to_json(&new->fields[col->index],
-                                                    &col->type));
-                any_change = true;
+                if (ovsdb_type_is_scalar(&col->type)) {
+                    json_object_put(
+                        row_json, col->name,
+                        ovsdb_datum_to_json(&new->fields[col->index],
+                                            &col->type));
+                    any_scalar = true;
+                } else {
+                    build_mutations_for_column(&old->fields[col->index],
+                                               &new->fields[col->index],
+                                               col, mutations);
+                }
             }
         }
 
-        if (any_change) {
+        if (any_scalar) {
             struct json *op = json_object_create();
             json_object_put_string(op, "op", "update");
             json_object_put_string(op, "table", table_name);
@@ -219,6 +348,17 @@ build_wire_ops_cb(const struct ovsdb_row *old,
             json_array_add(w->ops, op);
         } else {
             json_destroy(row_json);
+        }
+
+        if (json_array_size(mutations) > 0) {
+            struct json *op = json_object_create();
+            json_object_put_string(op, "op", "mutate");
+            json_object_put_string(op, "table", table_name);
+            json_object_put(op, "where", make_uuid_where(row_uuid));
+            json_object_put(op, "mutations", mutations);
+            json_array_add(w->ops, op);
+        } else {
+            json_destroy(mutations);
         }
     }
     return true;
