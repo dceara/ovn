@@ -413,9 +413,10 @@ replay_one_txn(struct replay_db *rdb, struct json *txn_json,
     }
 
     if (dry_run) {
+        VLOG_INFO("txn %"PRIuSIZE, txn_num);
         for (size_t i = 0; i < w.ifaces_to_add.n; i++) {
-            VLOG_INFO("txn %"PRIuSIZE": would create dummy interface %s",
-                      txn_num, w.ifaces_to_add.names[i]);
+            VLOG_INFO("would create dummy interface %s",
+                      w.ifaces_to_add.names[i]);
         }
         char *s = json_to_string(w.ops, JSSF_PRETTY);
         fputs(s, stdout);
