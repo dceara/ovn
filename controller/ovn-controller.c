@@ -586,8 +586,7 @@ update_flow_table_prefixes(struct ovsdb_idl_txn *ovs_idl_txn,
         ARRAY_SIZE(prefixes) <=
         ovsrec_flow_table_columns[OVSREC_FLOW_TABLE_COL_PREFIXES].type.n_max);
 
-    server_type = ovsrec_flow_table_prefixes_server_type(
-                                ovsdb_idl_txn_get_idl(ovs_idl_txn));
+    server_type = NULL;
     if (!server_type) {
         /* Not connected or not in the server's schema somehow. */
         return;
@@ -8526,10 +8525,6 @@ parse_options(int argc, char *argv[])
 
         case OPT_SSL_CIPHERSUITES:
             stream_ssl_set_ciphersuites(optarg);
-            break;
-
-        case OPT_SSL_SERVER_NAME:
-            stream_ssl_set_server_name(optarg);
             break;
 
         case OPT_PEER_CA_CERT:
