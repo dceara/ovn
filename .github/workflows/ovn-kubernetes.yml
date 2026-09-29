@@ -55,6 +55,8 @@ jobs:
 
     - name: Build ovn-kubernetes container
       run: |
+        FOOBAR=${{ github.sha }}
+        echo "DEBUG DCEARA $FOOBAR"
         make -C src/github.com/ovn-kubernetes/ovn-kubernetes/dist/images \
           IMAGE=ovn-daemonset-f:dev \
           OVN_REPO=https://github.com/${{ github.repository }}.git \
