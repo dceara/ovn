@@ -1,11 +1,18 @@
 #!/bin/bash
 
 dest="$1"
+ofctrl_backoff="$2"
 
 # Check if the user provided an argument
 if [ -z "$dest" ]; then
     echo "Error: No destination directory provided." >&2
-    echo "Usage: $0 <destination_directory>" >&2
+    echo "Usage: $0 <destination_directory> <ofctrl_backoff_ms>" >&2
+    exit 1
+fi
+
+if [ -z "$ofctrl_backoff" ]; then
+    echo "Error: No ofctrl_backoff provided." >&2
+    echo "Usage: $0 <destination_directory> <ofctrl_backoff_ms>" >&2
     exit 1
 fi
 
@@ -16,6 +23,8 @@ if [ -d "$dest" ]; then
 fi
 
 mkdir $dest
+
+ovn-appctl -t ovn-controller ofctrl/set_put_backoff_ms ${ofctrl_backoff}
 
 # Base network (as fast as possible).
 ovsdb-replay --db /tmp/collected-dbs/ovnnb_db.db,$OVN_NB_DB --db /tmp/collected-dbs/conf.db,unix:db.sock --speed 0 --verbose  --stop-txn 94900
@@ -52,8 +61,9 @@ sleep 30
 touch $dest/config
 echo "OVN: " > $dest/config
 git rev-parse HEAD >> $dest/config
-echo "OVS: " > $dest/config
+echo "OVS: " >> $dest/config
 (cd ../ovs/ && git rev-parse HEAD >> $dest/config)
+echo "ofctrl_backoff_ms: ${ofctrl_backoff}" >> $dest/config
 
 cp sandbox/ovn-controller.log $dest/
 cp sandbox/ovn-northd.log $dest/

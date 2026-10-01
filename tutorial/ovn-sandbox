@@ -666,7 +666,7 @@ run ovn-ic-sbctl init
 run ovn-nbctl set NB_Global . name=az-1
 
 # TODO: for testing
-run ovs-appctl route-table/filter-iface $HOSTIF
+#run ovs-appctl route-table/filter-iface $HOSTIF
 
 run ovs-vsctl set open . external-ids:system-id=${SYSTEM_ID}
 run ovs-vsctl set open . external-ids:hostname=${OVN_HOSTNAME}
