@@ -51,6 +51,7 @@
 #include "socket-util.h"
 #include "timeval.h"
 #include "util.h"
+#include "unixctl.h"
 #include "vswitch-idl.h"
 #include "ovn-sb-idl.h"
 #include "ct-zone.h"
@@ -60,6 +61,8 @@
 VLOG_DEFINE_THIS_MODULE(ofctrl);
 
 COVERAGE_DEFINE(ofctrl_msg_too_long);
+
+static unixctl_cb_func ofctrl_set_put_backoff_ms;
 
 /* An OpenFlow flow. */
 struct ovn_flow {
@@ -425,6 +428,10 @@ static void ovn_installed_flow_table_destroy(void);
 
 static void ofctrl_recv(const struct ofp_header *, enum ofptype);
 
+
+static int64_t ofctrl_next_put_time_ms = INT64_MAX;
+static unsigned int ofctrl_put_backoff_ms = 50;
+
 void
 ofctrl_init(struct ovn_extend_table *group_table,
             struct ovn_extend_table *meter_table)
@@ -439,7 +446,28 @@ ofctrl_init(struct ovn_extend_table *group_table,
     groups = group_table;
     meters = meter_table;
     shash_init(&meter_bands);
+
+    unixctl_command_register("ofctrl/set_put_backoff_ms", "", 1, 1,
+                             ofctrl_set_put_backoff_ms,
+                             NULL);
 }
+
+static void
+ofctrl_set_put_backoff_ms(struct unixctl_conn *conn, int argc OVS_UNUSED,
+                          const char *argv[], void *arg OVS_UNUSED)
+{
+    if (!str_to_uint(argv[1], 10, &ofctrl_put_backoff_ms)) {
+        unixctl_command_reply_error(conn, "unsigned integer required");
+        return;
+    }
+
+    char *msg = xasprintf("ofctrl_put_backoff_ms set to %"PRIu32"ms",
+                          ofctrl_put_backoff_ms);
+    unixctl_command_reply(conn, msg);
+    VLOG_INFO("DEBUG DCEARA %s", msg);
+    free(msg);
+}
+
 
 /* S_NEW, for a new connection.
  *
@@ -2738,10 +2766,21 @@ ofctrl_has_backlog(void)
 static bool
 ofctrl_can_put(void)
 {
+    long long now = time_msec();
+
     if (state != S_UPDATE_FLOWS
         || ofctrl_has_backlog()) {
+        ofctrl_next_put_time_ms = now + ofctrl_put_backoff_ms;
         return false;
     }
+
+    /* If we can put, but we should be backing off, do that. */
+    if (ofctrl_next_put_time_ms != INT64_MAX && now < ofctrl_next_put_time_ms) {
+        VLOG_INFO("DEBUG DCEARA ofctrl backing off for another %lldms", ofctrl_next_put_time_ms - now);
+        poll_timer_wait_until(ofctrl_next_put_time_ms);
+        return false;
+    }
+    ofctrl_next_put_time_ms = INT64_MAX;
     return true;
 }
 
