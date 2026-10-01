@@ -2,17 +2,24 @@
 
 dest="$1"
 ofctrl_backoff="$2"
+ovs_rconn_rcv_limit="$3"
 
 # Check if the user provided an argument
 if [ -z "$dest" ]; then
     echo "Error: No destination directory provided." >&2
-    echo "Usage: $0 <destination_directory> <ofctrl_backoff_ms>" >&2
+    echo "Usage: $0 <destination_directory> <ofctrl_backoff_ms> <ovs_rconn_rcv_limit>" >&2
     exit 1
 fi
 
 if [ -z "$ofctrl_backoff" ]; then
     echo "Error: No ofctrl_backoff provided." >&2
-    echo "Usage: $0 <destination_directory> <ofctrl_backoff_ms>" >&2
+    echo "Usage: $0 <destination_directory> <ofctrl_backoff_ms> <ovs_rconn_rcv_limit>" >&2
+    exit 1
+fi
+
+if [ -z "$ovs_rconn_rcv_limit" ]; then
+    echo "Error: No ovs_rconn_rcv_limit provided." >&2
+    echo "Usage: $0 <destination_directory> <ofctrl_backoff_ms> <ovs_rconn_rcv_limit>" >&2
     exit 1
 fi
 
@@ -24,6 +31,7 @@ fi
 
 mkdir $dest
 
+ovs-appctl connmgr/set-rconn-rcv-limit ${ovs_rconn_rcv_limit}
 ovn-appctl -t ovn-controller ofctrl/set_put_backoff_ms ${ofctrl_backoff}
 
 # Base network (as fast as possible).
@@ -64,6 +72,7 @@ git rev-parse HEAD >> $dest/config
 echo "OVS: " >> $dest/config
 (cd ../ovs/ && git rev-parse HEAD >> $dest/config)
 echo "ofctrl_backoff_ms: ${ofctrl_backoff}" >> $dest/config
+echo "ovs_rconn_rcv_limit: ${ovs_rconn_rcv_limit}" >> $dest/config
 
 cp sandbox/ovn-controller.log $dest/
 cp sandbox/ovn-northd.log $dest/
