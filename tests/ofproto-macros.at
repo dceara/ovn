@@ -133,8 +133,8 @@ sim_add () {
    as $1 ovs-vsctl --no-wait -- init || return 1
 
    # Start ovs-vswitchd
-   as $1 start_daemon ovs-vswitchd --enable-dummy=system -vvconn -vofproto_dpif -vunixctl
-   as $1 ovs-appctl vlog/disable-rate-limit vconn
+   as $1 start_daemon ovs-vswitchd --enable-dummy=system -vvconn -vofproto_dpif -vunixctl -vdbg
+   as $1 ovs-appctl vlog/disable-rate-limit
    if test X$HAVE_OPENSSL = Xyes; then
       if test -f $PKIDIR/testpki-$1-privkey.pem; then
          as $1 ovs-vsctl set-ssl \

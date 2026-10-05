@@ -851,7 +851,7 @@ ovn_az_attach() {
         ovs-vsctl set open . external_ids:ovn-enable-flow-based-tunnels=false
     fi
 
-    start_daemon ovn-controller --enable-dummy-vif-plug ${cli_args} || return 1
+    start_daemon ovn-controller --enable-dummy-vif-plug ${cli_args} -vdbg || return 1
     if test X"$az" = XNONE; then
         ovn_wait_for_encaps $expected_encap_id
     else
