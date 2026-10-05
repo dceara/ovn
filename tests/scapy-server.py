@@ -30,7 +30,9 @@ def process(data):
     vlog.info(f"received payload request: {data}")
     try:
         data = data.replace('\n', '')
-        return binascii.hexlify(raw(eval(data))).decode()
+        result = binascii.hexlify(raw(eval(data))).decode()
+        vlog.info(f"replying with result: {result}")
+        return result
     except Exception as e:
         vlog.exception(f"failed to process payload request: {e}")
         return ""
