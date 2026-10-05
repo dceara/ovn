@@ -6057,19 +6057,25 @@ pinctrl_ip_mcast_handle_igmp(struct rconn *swconn,
     ovs_rwlock_wrlock(&ip_ms->ms->rwlock);
     switch (ntohs(ip_flow->tp_src)) {
     case IGMP_HOST_MEMBERSHIP_REPORT:
+        VLOG_INFO("DEBUG DCEARA processing v1 REPORT IP "IP_FMT, IP_ARGS(ip4));
         group_change =
             mcast_snooping_add_group4(ip_ms->ms, ip4, IP_MCAST_VLAN,
                                       port_key_data, MCAST_GROUP_IGMPV1);
+        VLOG_INFO("DEBUG DCEARA processed v1 REPORT IP "IP_FMT" result: %d", IP_ARGS(ip4), group_change);
         break;
     case IGMPV2_HOST_MEMBERSHIP_REPORT:
+        VLOG_INFO("DEBUG DCEARA processing v2 REPORT IP "IP_FMT, IP_ARGS(ip4));
         group_change =
             mcast_snooping_add_group4(ip_ms->ms, ip4, IP_MCAST_VLAN,
                                       port_key_data, MCAST_GROUP_IGMPV2);
+        VLOG_INFO("DEBUG DCEARA processed v2 REPORT IP "IP_FMT" result: %d", IP_ARGS(ip4), group_change);
         break;
     case IGMP_HOST_LEAVE_MESSAGE:
+        VLOG_INFO("DEBUG DCEARA processing LEAVE IP "IP_FMT, IP_ARGS(ip4));
         group_change =
             mcast_snooping_leave_group4(ip_ms->ms, ip4, IP_MCAST_VLAN,
                                         port_key_data);
+        VLOG_INFO("DEBUG DCEARA processed LEAVE IP "IP_FMT" result: %d", IP_ARGS(ip4), group_change);
         break;
     case IGMP_HOST_MEMBERSHIP_QUERY:
         group_change =
@@ -6077,9 +6083,11 @@ pinctrl_ip_mcast_handle_igmp(struct rconn *swconn,
                                        port_key_data);
         break;
     case IGMPV3_HOST_MEMBERSHIP_REPORT:
+        VLOG_INFO("DEBUG DCEARA processing v3 REPORT IP "IP_FMT, IP_ARGS(ip4));
         group_change =
             mcast_snooping_add_report(ip_ms->ms, pkt_in, IP_MCAST_VLAN,
                                       port_key_data);
+        VLOG_INFO("DEBUG DCEARA processed v3 REPORT IP "IP_FMT" result: %d", IP_ARGS(ip4), group_change);
         break;
     }
     ovs_rwlock_unlock(&ip_ms->ms->rwlock);
