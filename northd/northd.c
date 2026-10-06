@@ -1235,8 +1235,6 @@ ovn_port_cleanup(struct ovn_port *port)
         port->peer->peer = NULL;
     }
 
-    port->lsp_has_port_sec = false;
-
     destroy_lport_addresses(&port->lrp_networks);
     destroy_lport_addresses(&port->proxy_arp_addrs);
 }
@@ -2051,15 +2049,6 @@ parse_lsp_addrs(struct ovn_port *op)
     }
     op->n_lsp_non_router_addrs = op->n_lsp_addrs;
 
-    struct eth_addr mac;
-    for (size_t j = 0; j < nbsp->n_port_security; j++) {
-        int n = !strncmp(nbsp->port_security[j], "VRRPv3", 6) ? 7 : 0;
-        if (ovs_scan_len(nbsp->port_security[j], &n, ETH_ADDR_SCAN_FMT,
-                         ETH_ADDR_SCAN_ARGS(mac))) {
-            op->lsp_has_port_sec = true;
-            break;
-        }
-    }
 }
 
 static struct ovn_port *
@@ -2187,7 +2176,7 @@ join_logical_ports(const struct sbrec_port_binding_table *sbrec_pb_table,
 
                     /* This port exists due to a SB binding, but should
                      * not have been initialized fully. */
-                    ovs_assert(!op->n_lsp_addrs && !op->lsp_has_port_sec);
+                    ovs_assert(!op->n_lsp_addrs);
                 }
             } else {
                 op = ovn_port_create(ports, nbsp->name, nbsp, NULL, NULL);
@@ -5978,7 +5967,7 @@ build_lswitch_learn_fdb_op(
 {
     ovs_assert(op->nbsp);
 
-    if (!op->lsp_has_port_sec && op->has_unknown &&
+    if (op->has_unknown &&
         (!strcmp(op->nbsp->type, "") || (lsp_is_localnet(op->nbsp) &&
         localnet_can_learn_mac(op->nbsp)))) {
 
