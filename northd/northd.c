@@ -126,6 +126,7 @@ static bool default_acl_drop;
 #define REGBIT_ACL_HINT_ALLOW_REL "reg0[17]"
 #define REGBIT_FROM_ROUTER_PORT   "reg0[18]"
 #define REGBIT_IP_FRAG            "reg0[19]"
+#define REGBIT_LKUP_FDB_DL_INNER  "reg0[22]"
 
 #define REG_ORIG_DIP_IPV4         "reg1"
 #define REG_ORIG_DIP_IPV6         "xxreg1"
@@ -5980,12 +5981,208 @@ build_lswitch_learn_fdb_op(
     if (!op->lsp_has_port_sec && op->has_unknown &&
         (!strcmp(op->nbsp->type, "") || (lsp_is_localnet(op->nbsp) &&
         localnet_can_learn_mac(op->nbsp)))) {
+
+        /* For non-ARP, non-ND Ethernet packets lookup their eth.src and learn
+         * it if not already known.
+         *
+         * For ARP packets, also look up arp.sha in the FDB.  For ND packets,
+         * look up nd.tll (NA) or nd.sll (NS).  They may differ from eth.src
+         * in specific cases.
+         *
+         * ND packets may lack the optional SLLAO/TLLAO option, in which case
+         * nd.sll/nd.tll is all-zeros so they need even more special attention.
+         */
+
         ds_clear(match);
         ds_clear(actions);
         ds_put_format(match, "inport == %s", op->json_key);
         if (lsp_is_localnet(op->nbsp)) {
             ds_put_cstr(actions, "flags.localnet = 1; ");
         }
+        size_t match_len = match->length;
+        size_t actions_len = actions->length;
+
+        /* Lookup: Prio: 120, match: arp.sha == 0,
+         *                    action: REGBIT_LKUP_FDB = lookup_fdb(eth.src);
+         *                            REGBIT_LKUP_FDB_DL_INNER = 1;
+         * Put:    Prio: 120, match: arp.sha == 0 && REGBIT_LKUP_FDB == 0,
+         *                    action: put_fdb(eth.src).
+         */
+        ds_put_cstr(match, " && arp.sha == 00:00:00:00:00:00");
+        ds_put_format(actions,
+                      REGBIT_LKUP_FDB " = lookup_fdb(inport, eth.src); "
+                      REGBIT_LKUP_FDB_DL_INNER " = 1; next;");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_LOOKUP_FDB, 120,
+                                          ds_cstr(match), ds_cstr(actions),
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        ds_put_cstr(match, " && "REGBIT_LKUP_FDB" == 0");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_PUT_FDB, 120,
+                                          ds_cstr(match),
+                                          "put_fdb(inport, eth.src); next;",
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        /* Lookup: Prio: 110, match: arp (i.e, arp.sha != 0)
+         *                    action: REGBIT_LKUP_FDB = lookup_fdb(eth.src);
+         *                            REGBIT_LKUP_FDB_DL_INNER
+         *                              = lookup_fdb(arp.sha);
+         * Put:    Prio: 110, match: arp && (REGBIT_LKUP_FDB == 0
+         *                                   || REGBIT_LKUP_FDB_DL_INNER == 0)
+         *                    action: put_fdb(eth.src); put_fdb(arp.sha).
+         */
+        ds_truncate(match, match_len);
+        ds_truncate(actions, actions_len);
+        ds_put_cstr(match, " && arp");
+        ds_put_format(actions,
+                      REGBIT_LKUP_FDB " = lookup_fdb(inport, eth.src); "
+                      REGBIT_LKUP_FDB_DL_INNER
+                        " = lookup_fdb(inport, arp.sha); next;");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_LOOKUP_FDB, 110,
+                                          ds_cstr(match), ds_cstr(actions),
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        ds_put_cstr(match, " && ("REGBIT_LKUP_FDB" == 0 "
+                                 "|| " REGBIT_LKUP_FDB_DL_INNER " == 0)");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_PUT_FDB, 110,
+                                          ds_cstr(match),
+                                          "put_fdb(inport, eth.src); "
+                                          "put_fdb(inport, arp.sha); "
+                                          "next;",
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        /* Lookup: Prio: 120, match: nd.tll == 0,
+         *                    action: REGBIT_LKUP_FDB = lookup_fdb(eth.src).
+         *                            REGBIT_LKUP_FDB_DL_INNER = 1;
+         * Put:    Prio: 120, match: nd.tll == 0 && REGBIT_LKUP_FDB == 0,
+         *                    action: put_fdb(eth.src).
+         */
+        ds_truncate(match, match_len);
+        ds_truncate(actions, actions_len);
+        ds_put_cstr(match, " && nd.tll == 00:00:00:00:00:00");
+        ds_put_format(actions,
+                      REGBIT_LKUP_FDB " = lookup_fdb(inport, eth.src); "
+                      REGBIT_LKUP_FDB_DL_INNER " = 1; next;");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_LOOKUP_FDB, 120,
+                                          ds_cstr(match), ds_cstr(actions),
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        ds_put_cstr(match, " && "REGBIT_LKUP_FDB" == 0");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_PUT_FDB, 120,
+                                          ds_cstr(match),
+                                          "put_fdb(inport, eth.src); next;",
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        /* Lookup: Prio: 110, match: nd_na (i.e, nd_na.tll != 0)
+         *                    action: REGBIT_LKUP_FDB = lookup_fdb(eth.src);
+         *                            REGBIT_LKUP_FDB_DL_INNER
+         *                              = lookup_fdb(nd_na.tll);
+         * Put:    Prio: 110, match: nd_na
+         *                              && (REGBIT_LKUP_FDB == 0
+         *                                  || REGBIT_LKUP_FDB_DL_INNER == 0)
+         *                    action: put_fdb(eth.src); put_fdb(nd_na.tll).
+         */
+        ds_truncate(match, match_len);
+        ds_truncate(actions, actions_len);
+        ds_put_cstr(match, " && nd_na");
+        ds_put_format(actions,
+                      REGBIT_LKUP_FDB " = lookup_fdb(inport, eth.src); "
+                      REGBIT_LKUP_FDB_DL_INNER
+                        "= lookup_fdb(inport, nd.tll); next;");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_LOOKUP_FDB, 110,
+                                          ds_cstr(match), ds_cstr(actions),
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        ds_put_cstr(match, " && ("REGBIT_LKUP_FDB" == 0 "
+                                 "|| " REGBIT_LKUP_FDB_DL_INNER " == 0)");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_PUT_FDB, 110,
+                                          ds_cstr(match),
+                                          "put_fdb(inport, eth.src); "
+                                          "put_fdb(inport, nd.tll); "
+                                          "next;",
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        /* Lookup: Prio: 120, match: nd.sll == 0,
+         *                    action: REGBIT_LKUP_FDB = lookup_fdb(eth.src).
+         *                            REGBIT_LKUP_FDB_DL_INNER = 1;
+         * Put:    Prio: 120, match: nd.sll == 0 && REGBIT_LKUP_FDB == 0,
+         *                    action: put_fdb(eth.src).
+         */
+        ds_truncate(match, match_len);
+        ds_truncate(actions, actions_len);
+        ds_put_cstr(match, " && nd.sll == 00:00:00:00:00:00");
+        ds_put_format(actions,
+                      REGBIT_LKUP_FDB " = lookup_fdb(inport, eth.src); "
+                      REGBIT_LKUP_FDB_DL_INNER " = 1; next;");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_LOOKUP_FDB, 120,
+                                          ds_cstr(match), ds_cstr(actions),
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        ds_put_cstr(match, " && "REGBIT_LKUP_FDB" == 0");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_PUT_FDB, 120,
+                                          ds_cstr(match),
+                                          "put_fdb(inport, eth.src); next;",
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        /* Lookup: Prio: 110, match: nd_ns (i.e, nd.sll != 0)
+         *                    action: REGBIT_LKUP_FDB = lookup_fdb(eth.src);
+         *                            REGBIT_LKUP_FDB_DL_INNER
+         *                              = lookup_fdb(nd.sll);
+         * Put:    Prio: 110, match: nd_ns
+         *                              && (REGBIT_LKUP_FDB == 0
+         *                                  || REGBIT_LKUP_FDB_DL_INNER == 0)
+         *                    action: put_fdb(eth.src); put_fdb(nd.sll).
+         */
+        ds_truncate(match, match_len);
+        ds_truncate(actions, actions_len);
+        ds_put_cstr(match, " && nd_ns");
+        ds_put_format(actions,
+                      REGBIT_LKUP_FDB " = lookup_fdb(inport, eth.src); "
+                      REGBIT_LKUP_FDB_DL_INNER
+                        "= lookup_fdb(inport, nd.sll); next;");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_LOOKUP_FDB, 110,
+                                          ds_cstr(match), ds_cstr(actions),
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        ds_put_cstr(match, " && ("REGBIT_LKUP_FDB" == 0 "
+                                 "|| " REGBIT_LKUP_FDB_DL_INNER " == 0)");
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_PUT_FDB, 110,
+                                          ds_cstr(match),
+                                          "put_fdb(inport, eth.src); "
+                                          "put_fdb(inport, nd.sll); "
+                                          "next;",
+                                          op->key, &op->nbsp->header_,
+                                          op->lflow_ref);
+
+        /* Lookup: Prio: 100, match: any eth packet,
+         *                    action: REGBIT_LKUP_FDB = lookup_fdb(eth.src).
+         * Put:    Prio: 100, match: any eth packet && REGBIT_LKUP_FDB == 0,
+         *                    action: put_fdb(eth.src).
+         */
+        ds_truncate(match, match_len);
+        ds_truncate(actions, actions_len);
         ds_put_format(actions, REGBIT_LKUP_FDB
                       " = lookup_fdb(inport, eth.src); next;");
         ovn_lflow_add_with_lport_and_hint(lflows, op->od,
@@ -5995,12 +6192,11 @@ build_lswitch_learn_fdb_op(
                                           op->lflow_ref);
 
         ds_put_cstr(match, " && "REGBIT_LKUP_FDB" == 0");
-        ds_clear(actions);
-        ds_put_cstr(actions, "put_fdb(inport, eth.src); next;");
-        ovn_lflow_add_with_lport_and_hint(lflows, op->od, S_SWITCH_IN_PUT_FDB,
-                                          100, ds_cstr(match),
-                                          ds_cstr(actions), op->key,
-                                          &op->nbsp->header_,
+        ovn_lflow_add_with_lport_and_hint(lflows, op->od,
+                                          S_SWITCH_IN_PUT_FDB, 100,
+                                          ds_cstr(match),
+                                          "put_fdb(inport, eth.src); next;",
+                                          op->key, &op->nbsp->header_,
                                           op->lflow_ref);
     }
 }

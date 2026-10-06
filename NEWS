@@ -6,6 +6,11 @@ OVN v24.03.10 - xx xxx xxxx
     (e.g. via the ovs-delete-transient-ports.service on RHEL/Fedora) will
     automatically remove stale tunnel ports on reboot, preventing them from
     interfering with BFD and HA failover after a gateway chassis reboot.
+  - Learn ARP sender hardware address (arp.sha) and IPv6 Neighbor
+    Discovery link-layer addresses (nd.tll, nd.sll) into the FDB
+    table in addition to eth.src.  This allows VRRP virtual MACs to
+    be learned from gratuitous ARP packets and unsolicited Neighbor
+    Advertisements.
 
 OVN v24.03.9 - 16 Jun 2026
 --------------------------
