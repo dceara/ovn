@@ -2775,7 +2775,7 @@ ofctrl_can_put(void)
     }
 
     /* If we can put, but we should be backing off, do that. */
-    if (ofctrl_next_put_time_ms != INT64_MAX && now < ofctrl_next_put_time_ms) {
+    if (false && ofctrl_next_put_time_ms != INT64_MAX && now < ofctrl_next_put_time_ms) {
         VLOG_INFO("DEBUG DCEARA ofctrl backing off for another %lldms", ofctrl_next_put_time_ms - now);
         poll_timer_wait_until(ofctrl_next_put_time_ms);
         return false;

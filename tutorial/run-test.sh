@@ -31,8 +31,8 @@ fi
 
 mkdir $dest
 
-ovs-appctl connmgr/set-rconn-rcv-limit ${ovs_rconn_rcv_limit}
-ovn-appctl -t ovn-controller ofctrl/set_put_backoff_ms ${ofctrl_backoff}
+#ovs-appctl connmgr/set-rconn-rcv-limit ${ovs_rconn_rcv_limit}
+#ovn-appctl -t ovn-controller ofctrl/set_put_backoff_ms ${ofctrl_backoff}
 
 # Base network (as fast as possible).
 ovsdb-replay --db /tmp/collected-dbs/ovnnb_db.db,$OVN_NB_DB --db /tmp/collected-dbs/conf.db,unix:db.sock --speed 0 --verbose  --stop-txn 94900
