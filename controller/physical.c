@@ -2176,6 +2176,23 @@ mc_ofctrl_add_flow(const struct sbrec_multicast_group *mc,
     ofpbuf_clear(&ctx->ofpacts);
 }
 
+/* Appends (port_key, ct_zone) to 'flood_ports' ('flood_ports' must have room
+ * for one more entry; 'n_flood_ports' is the current count). */
+static void
+flood_querier_port_add(struct mcast_querier_port *flood_ports,
+                       size_t *n_flood_ports, uint32_t port_key,
+                       int zone_id)
+{
+    if (!flood_ports) {
+        return;
+    }
+    size_t i = *n_flood_ports;
+
+    flood_ports[i].port_key = port_key;
+    flood_ports[i].ct_zone = zone_id;
+    (*n_flood_ports)++;
+}
+
 static void
 consider_mc_group(const struct physical_ctx *ctx,
                   const struct sbrec_multicast_group *mc,
@@ -2184,11 +2201,30 @@ consider_mc_group(const struct physical_ctx *ctx,
     struct local_datapath *ldp = get_local_datapath(ctx->local_datapaths,
                                                     mc->datapath->tunnel_key);
     if (!ldp) {
+        /* The datapath has no ports local to this chassis, so its flood
+         * group would not deliver queries locally.  Publish an empty list
+         * so the querier can tell this apart from a list that has not been
+         * published yet. */
+        if (mc->tunnel_key == OVN_MCAST_FLOOD_TUNNEL_KEY) {
+            pinctrl_mcast_querier_set_ports(mc->datapath->tunnel_key, NULL,
+                                            0);
+        }
         return;
     }
 
     struct sset remote_chassis = SSET_INITIALIZER(&remote_chassis);
     struct sset vtep_chassis = SSET_INITIALIZER(&vtep_chassis);
+
+    /* The querier delivers the query to each local port of the flood group
+     * (in batches of up to MCAST_QUERIER_PORT_BATCH per OpenFlow message)
+     * instead of a single query that the flood group fans out per port (see
+     * pinctrl_mcast_querier_set_ports).  Collect the local ports of the flood
+     * group to publish them to the querier. */
+    struct mcast_querier_port *flood_ports = NULL;
+    size_t n_flood_ports = 0;
+    if (mc->tunnel_key == OVN_MCAST_FLOOD_TUNNEL_KEY) {
+        flood_ports = xzalloc(mc->n_ports * sizeof *flood_ports);
+    }
 
     /* Go through all of the ports in the multicast group:
      *
@@ -2261,6 +2297,8 @@ consider_mc_group(const struct physical_ctx *ctx,
         if (type == LP_PATCH) {
             if (ldp->is_transit_switch) {
                 local_output_pb(port->tunnel_key, &local_ctx->ofpacts);
+                flood_querier_port_add(flood_ports, &n_flood_ports,
+                                       port->tunnel_key, zone_id);
             } else {
                 local_output_pb(port->tunnel_key, &remote_ctx->ofpacts);
                 local_output_pb(port->tunnel_key, &ramp_ctx->ofpacts);
@@ -2281,8 +2319,12 @@ consider_mc_group(const struct physical_ctx *ctx,
                                                     lport_name)
                        || type == LP_L3GATEWAY)) {
             local_output_pb(port->tunnel_key, &local_ctx->ofpacts);
+            flood_querier_port_add(flood_ports, &n_flood_ports,
+                                   port->tunnel_key, zone_id);
         } else if (simap_contains(ctx->patch_ofports, port->logical_port)) {
             local_output_pb(port->tunnel_key, &local_ctx->ofpacts);
+            flood_querier_port_add(flood_ports, &n_flood_ports,
+                                   port->tunnel_key, zone_id);
         } else if (type == LP_CHASSISREDIRECT
                    && port->chassis == ctx->chassis) {
             const char *distributed_port = smap_get(&port->options,
@@ -2295,6 +2337,9 @@ consider_mc_group(const struct physical_ctx *ctx,
                     && port->datapath == distributed_binding->datapath) {
                     local_output_pb(distributed_binding->tunnel_key,
                                     &local_ctx->ofpacts);
+                    flood_querier_port_add(flood_ports, &n_flood_ports,
+                                           distributed_binding->tunnel_key,
+                                           zone_id);
                 }
             }
         } else if (!get_localnet_port(ctx->local_datapaths,
@@ -2319,6 +2364,12 @@ consider_mc_group(const struct physical_ctx *ctx,
                 }
             }
         }
+    }
+
+    if (flood_ports) {
+        pinctrl_mcast_querier_set_ports(mc->datapath->tunnel_key, flood_ports,
+                                        n_flood_ports);
+        free(flood_ports);
     }
 
     bool local_lports = local_ctx->ofpacts.size > 0;
