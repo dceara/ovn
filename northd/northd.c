@@ -6115,7 +6115,7 @@ build_lswitch_port_sec_op(struct ovn_port *op, struct lflow_table *lflows,
 
     ds_clear(match);
     ds_clear(actions);
-    ds_put_format(match, "inport == %s", op->json_key);
+    ds_put_format(match, "reg14 == %"PRIu32"", op->tunnel_key);
     if (!lsp_is_enabled(op->nbsp)) {
         /* Drop packets from disabled logical ports. */
         ovn_lflow_add(lflows, op->od, S_SWITCH_IN_CHECK_PORT_SEC,
@@ -6168,8 +6168,8 @@ build_lswitch_port_sec_op(struct ovn_port *op, struct lflow_table *lflows,
         } else if (ls_has_localnet_port(op->od)) {
             const struct ovn_port *lp = vector_get(&op->od->localnet_ports, 0,
                                                    struct ovn_port *);
-            ds_put_format(match, "outport == %s && inport == %s",
-                          lp->json_key, op->json_key);
+            ds_put_format(match, "outport == %s && reg14 == %"PRIu32"",
+                          lp->json_key, op->tunnel_key);
             ovn_lflow_add(lflows, op->od, S_SWITCH_OUT_APPLY_PORT_SEC, 110,
                           ds_cstr(match), ds_cstr(actions), op->lflow_ref,
                           WITH_IO_PORT(lp->key),
@@ -6215,7 +6215,7 @@ build_lswitch_learn_fdb_op(
         || (lsp_is_localnet(op->nbsp) && localnet_can_learn_mac(op->nbsp))) {
         ds_clear(match);
         ds_clear(actions);
-        ds_put_format(match, "inport == %s", op->json_key);
+        ds_put_format(match, "reg14 == %"PRIu32"", op->tunnel_key);
         if (lsp_is_localnet(op->nbsp)) {
             ds_put_cstr(actions, "flags.localnet = 1; ");
         }
@@ -6463,7 +6463,7 @@ skip_port_from_conntrack(const struct ovn_datapath *od, struct ovn_port *op,
                                 ? "next;"
                                 : "flags.pkt_sampled = 0; ct_clear; next;";
 
-    char *ingress_match = xasprintf("ip && inport == %s", op->json_key);
+    char *ingress_match = xasprintf("ip && reg14 == %"PRIu32"", op->tunnel_key);
     char *egress_match = xasprintf("ip && outport == %s", op->json_key);
 
     ovn_lflow_add(lflows, od, in_stage, priority, ingress_match,
@@ -6742,8 +6742,8 @@ build_interconn_mcast_snoop_flows(struct ovn_datapath *od,
             continue;
         }
         /* Punt IGMP traffic to controller. */
-        char *match = xasprintf("inport == %s && igmp && "
-                                "flags.igmp_loopback == 0", op->json_key);
+        char *match = xasprintf("reg14 == %"PRIu32" && igmp && "
+                                "flags.igmp_loopback == 0", op->tunnel_key);
         ovn_lflow_add(lflows, od, S_SWITCH_OUT_PRE_LB, 120, match,
                       "clone { igmp; }; next;", lflow_ref,
                       WITH_CTRL_METER(copp_meter_get(COPP_IGMP,
@@ -6752,8 +6752,8 @@ build_interconn_mcast_snoop_flows(struct ovn_datapath *od,
         free(match);
 
         /* Punt MLD traffic to controller. */
-        match = xasprintf("inport == %s && (mldv1 || mldv2) && "
-                          "flags.igmp_loopback == 0", op->json_key);
+        match = xasprintf("reg14 == %"PRIu32" && (mldv1 || mldv2) && "
+                          "flags.igmp_loopback == 0", op->tunnel_key);
         ovn_lflow_add(lflows, od, S_SWITCH_OUT_PRE_LB, 120, match,
                       "clone { igmp; }; next;", lflow_ref,
                       WITH_CTRL_METER(copp_meter_get(COPP_IGMP,
@@ -9075,8 +9075,8 @@ build_lb_health_check_response_lflows(
             struct ovn_port *lp;
             VECTOR_FOR_EACH (&peer_switch_od->localnet_ports, lp) {
                 ds_clear(match);
-                ds_put_format(match, "inport == %s && %s",
-                              lp->json_key, ds_cstr(&probe_match));
+                ds_put_format(match, "reg14 == %"PRIu32" && %s",
+                              lp->tunnel_key, ds_cstr(&probe_match));
                 ovn_lflow_add(lflows, peer_switch_od, S_SWITCH_IN_L2_LKUP, 110,
                               ds_cstr(match), ds_cstr(action),
                               lb_dps->lflow_ref, WITH_CTRL_METER(meter));
@@ -10004,9 +10004,9 @@ build_dhcpv4_options_flows(struct ovn_port *op,
              *     broadcasting the DHCPREQUEST.
              */
             ds_put_format(
-                &match, "inport == %s && eth.src == %s && "
+                &match, "reg14 == %"PRIu32" && eth.src == %s && "
                 "%s && udp.src == 68 && udp.dst == 67",
-                inport->json_key, lsp_addrs->ea_s, ds_cstr(&ipv4_addr_match));
+                inport->tunnel_key, lsp_addrs->ea_s, ds_cstr(&ipv4_addr_match));
 
             if (is_external) {
                 ds_put_format(&match, " && is_chassis_resident(%s)",
@@ -10025,10 +10025,10 @@ build_dhcpv4_options_flows(struct ovn_port *op,
             /* If REGBIT_DHCP_OPTS_RESULT is set, it means the
              * put_dhcp_opts action is successful. */
             ds_put_format(
-                &match, "inport == %s && eth.src == %s && "
+                &match, "reg14 == %"PRIu32" && eth.src == %s && "
                 "ip4 && udp.src == 68 && udp.dst == 67"
                 " && "REGBIT_DHCP_OPTS_RESULT,
-                inport->json_key, lsp_addrs->ea_s);
+                inport->tunnel_key, lsp_addrs->ea_s);
 
             if (is_external) {
                 ds_put_format(&match, " && is_chassis_resident(%s)",
@@ -10091,10 +10091,10 @@ build_dhcpv6_options_flows(struct ovn_port *op,
                 &options_action, &response_action)) {
             ds_clear(&match);
             ds_put_format(
-                &match, "inport == %s && eth.src == %s"
+                &match, "reg14 == %"PRIu32" && eth.src == %s"
                 " && ip6.mcast && ip6.dst == ff02::1:2"
                 " && udp.src == 546 && udp.dst == 547",
-                inport->json_key, lsp_addrs->ea_s);
+                inport->tunnel_key, lsp_addrs->ea_s);
 
             if (is_external) {
                 ds_put_format(&match, " && is_chassis_resident(%s)",
@@ -10218,10 +10218,10 @@ build_lswitch_dhcp_relay_flows(struct ovn_port *op,
     ds_clear(actions);
 
     ds_put_format(
-        match, "inport == %s && eth.src == %s && "
+        match, "reg14 == %"PRIu32" && eth.src == %s && "
         "ip4.src == 0.0.0.0 && ip4.dst == 255.255.255.255 && "
         "udp.src == 68 && udp.dst == 67",
-        op->json_key, op->lsp_addrs[0].ea_s);
+        op->tunnel_key, op->lsp_addrs[0].ea_s);
     ds_put_format(actions,
                   "eth.dst = %s; outport = %s; next; /* DHCP_RELAY_REQ */",
                   rp->lrp_networks.ea_s,sp->json_key);
@@ -10252,10 +10252,10 @@ build_drop_arp_nd_flows_for_unbound_router_ports(struct ovn_port *op,
                 for (size_t l = 0; l < rp->lsp_addrs[k].n_ipv4_addrs; l++) {
                     ds_clear(&match);
                     ds_put_format(
-                        &match, "inport == %s && eth.src == %s"
+                        &match, "reg14 == %"PRIu32" && eth.src == %s"
                         " && !is_chassis_resident(%s)"
                         " && arp.tpa == %s && arp.op == 1",
-                        port->json_key,
+                        port->tunnel_key,
                         op->lsp_addrs[i].ea_s, op->json_key,
                         rp->lsp_addrs[k].ipv4_addrs[l].addr_s);
                     ovn_lflow_add(lflows, op->od, S_SWITCH_IN_EXTERNAL_PORT,
@@ -10268,10 +10268,10 @@ build_drop_arp_nd_flows_for_unbound_router_ports(struct ovn_port *op,
                 for (size_t l = 0; l < rp->lsp_addrs[k].n_ipv6_addrs; l++) {
                     ds_clear(&match);
                     ds_put_format(
-                        &match, "inport == %s && eth.src == %s"
+                        &match, "reg14 == %"PRIu32" && eth.src == %s"
                         " && !is_chassis_resident(%s)"
                         " && nd_ns && ip6.dst == {%s, %s} && nd.target == %s",
-                        port->json_key,
+                        port->tunnel_key,
                         op->lsp_addrs[i].ea_s, op->json_key,
                         rp->lsp_addrs[k].ipv6_addrs[l].addr_s,
                         rp->lsp_addrs[k].ipv6_addrs[l].sn_addr_s,
@@ -10286,10 +10286,10 @@ build_drop_arp_nd_flows_for_unbound_router_ports(struct ovn_port *op,
 
                 ds_clear(&match);
                 ds_put_format(
-                    &match, "inport == %s && eth.src == %s"
+                    &match, "reg14 == %"PRIu32" && eth.src == %s"
                     " && eth.dst == %s"
                     " && !is_chassis_resident(%s)",
-                    port->json_key,
+                    port->tunnel_key,
                     op->lsp_addrs[i].ea_s, rp->lsp_addrs[k].ea_s,
                     op->json_key);
                 ovn_lflow_add(lflows, op->od, S_SWITCH_IN_EXTERNAL_PORT, 100,
@@ -10478,7 +10478,7 @@ build_lswitch_from_localnet_op(struct ovn_port *op,
         return;
     }
     ds_clear(match);
-    ds_put_format(match, "inport == %s", op->json_key);
+    ds_put_format(match, "reg14 == %"PRIu32"", op->tunnel_key);
     ovn_lflow_add(lflows, op->od, S_SWITCH_IN_LOOKUP_FDB, 50,
                   ds_cstr(match), "flags.localnet = 1; next;",
                   op->lflow_ref, WITH_IO_PORT(op->key),
@@ -10677,7 +10677,7 @@ build_lswitch_arp_nd_responder_known_ips(struct ovn_port *op,
                  * network is not working as configured, so dropping the
                  * request would frustrate that intent.) */
                 ds_truncate(match, match_arp_len);
-                ds_put_format(match, " && inport == %s", op->json_key);
+                ds_put_format(match, " && reg14 == %"PRIu32"", op->tunnel_key);
                 ovn_lflow_add(lflows, op->od, S_SWITCH_IN_ARP_ND_RSP, 100,
                               ds_cstr(match), "next;", op->lflow_ref,
                               WITH_IO_PORT(op->key),
@@ -10745,7 +10745,7 @@ build_lswitch_arp_nd_responder_known_ips(struct ovn_port *op,
                 /* Do not reply to a solicitation from the port that owns
                  * the address (otherwise DAD detection will fail). */
                 ds_truncate(match, match_nd_len);
-                ds_put_format(match, " && inport == %s", op->json_key);
+                ds_put_format(match, " && reg14 == %"PRIu32"", op->tunnel_key);
                 ovn_lflow_add(lflows, op->od, S_SWITCH_IN_ARP_ND_RSP, 100,
                               ds_cstr(match), "next;", op->lflow_ref,
                               WITH_IO_PORT(op->key),
@@ -12629,7 +12629,7 @@ build_route_match(const struct ovn_port *op_inport, uint32_t rtb_id,
     }
 
     if (op_inport) {
-        ds_put_format(match, "inport == %s && ", op_inport->json_key);
+        ds_put_format(match, "reg14 == %"PRIu32" && ", op_inport->tunnel_key);
     }
     if (rtb_id || source == ROUTE_SOURCE_STATIC ||
             source == ROUTE_SOURCE_LEARNED) {
@@ -12749,8 +12749,8 @@ add_ecmp_symmetric_reply_flows(struct lflow_table *lflows,
     /* If symmetric ECMP replies are enabled, then packets that arrive over
      * an ECMP route need to go through conntrack.
      */
-    ds_put_format(&match, "inport == %s && ip%s.%s == %s",
-                  out_port->json_key,
+    ds_put_format(&match, "reg14 == %"PRIu32" && ip%s.%s == %s",
+                  out_port->tunnel_key,
                   IN6_IS_ADDR_V4MAPPED(&route->prefix) ? "4" : "6",
                   route->is_src_route ? "dst" : "src",
                   cidr);
@@ -13030,7 +13030,7 @@ add_route(struct lflow_table *lflows, const struct ovn_datapath *od,
          * route to that port so LRPs sharing a connected prefix do not
          * generate conflicting flows with identical matches. */
         if (!op_inport) {
-            ds_put_format(&match, " && inport == %s", op->json_key);
+            ds_put_format(&match, " && reg14 == %"PRIu32"", op->tunnel_key);
         }
         ds_put_format(&match, " && udp.dst == 3784");
         ovn_lflow_add(lflows, op->od, S_ROUTER_IN_IP_ROUTING, priority + 1,
@@ -13234,9 +13234,9 @@ build_lrouter_flows_for_lb_stateless(struct lrouter_nat_lb_flows_ctx *ctx,
                   lflow_ref, WITH_HINT(&ctx->lb->nlb->header_));
     ds_truncate(ctx->undnat_match, undnat_match_len);
 
-    ds_put_format(ctx->undnat_match, ") && (inport == %s || outport == %s)"
+    ds_put_format(ctx->undnat_match, ") && (reg14 == %"PRIu32" || outport == %s)"
                                      " && is_chassis_resident(%s)",
-                  dgp->json_key, dgp->json_key,
+                  dgp->tunnel_key, dgp->json_key,
                   dgp->cr_port->json_key);
 
     /* Use the LB protocol as matching criteria for out undnat and snat when
@@ -13356,8 +13356,8 @@ build_distr_lrouter_nat_flows_for_lb(struct lrouter_nat_lb_flows_ctx *ctx,
                   lflow_ref, WITH_HINT(&ctx->lb->nlb->header_));
     ds_truncate(ctx->undnat_match, undnat_match_len);
 
-    ds_put_format(ctx->undnat_match, ") && (inport == %s || outport == %s)",
-                  dgp->json_key, dgp->json_key);
+    ds_put_format(ctx->undnat_match, ") && (reg14 == %"PRIu32" || outport == %s)",
+                  dgp->tunnel_key, dgp->json_key);
 
     if (lb_is_centralized) {
         ds_put_format(ctx->undnat_match, " && is_chassis_resident(%s)",
@@ -14047,7 +14047,7 @@ build_lrouter_arp_flow(const struct ovn_datapath *od, struct ovn_port *op,
     struct ds actions = DS_EMPTY_INITIALIZER;
 
     if (op) {
-        ds_put_format(&match, "inport == %s && ", op->json_key);
+        ds_put_format(&match, "reg14 == %"PRIu32" && ", op->tunnel_key);
     }
 
     ds_put_format(&match, "arp.op == 1 && arp.tpa == %s", ip_address);
@@ -14099,7 +14099,7 @@ build_lrouter_nd_flow(const struct ovn_datapath *od, struct ovn_port *op,
     struct ds actions = DS_EMPTY_INITIALIZER;
 
     if (op) {
-        ds_put_format(&match, "inport == %s && ", op->json_key);
+        ds_put_format(&match, "reg14 == %"PRIu32" && ", op->tunnel_key);
     }
 
     if (sn_ip_address) {
@@ -14454,8 +14454,8 @@ build_lrouter_force_snat_flows_op(struct ovn_port *op,
         ds_clear(match);
         ds_clear(actions);
 
-        ds_put_format(match, "inport == %s && ip4.dst == %s",
-                      op->json_key, op->lrp_networks.ipv4_addrs[i].addr_s);
+        ds_put_format(match, "reg14 == %"PRIu32" && ip4.dst == %s",
+                      op->tunnel_key, op->lrp_networks.ipv4_addrs[i].addr_s);
         ovn_lflow_add(lflows, op->od, S_ROUTER_IN_UNSNAT, 110,
                       ds_cstr(match), "ct_snat;", lflow_ref);
         ds_clear(match);
@@ -14494,8 +14494,8 @@ build_lrouter_force_snat_flows_op(struct ovn_port *op,
         ds_clear(match);
         ds_clear(actions);
 
-        ds_put_format(match, "inport == %s && ip6.dst == %s",
-                      op->json_key, op->lrp_networks.ipv6_addrs[i].addr_s);
+        ds_put_format(match, "reg14 == %"PRIu32" && ip6.dst == %s",
+                      op->tunnel_key, op->lrp_networks.ipv6_addrs[i].addr_s);
         ovn_lflow_add(lflows, op->od, S_ROUTER_IN_UNSNAT, 110,
                       ds_cstr(match), "ct_snat;", lflow_ref);
         ds_clear(match);
@@ -14761,7 +14761,7 @@ build_adm_ctrl_flows_for_lrouter_port(
      * the pipeline.
      */
     ds_clear(match);
-    ds_put_format(match, "eth.mcast && inport == %s", op->json_key);
+    ds_put_format(match, "eth.mcast && reg14 == %"PRIu32"", op->tunnel_key);
     ds_clear(actions);
     ds_put_format(actions, REG_INPORT_ETH_ADDR " = %s; next;",
                   op->lrp_networks.ea_s);
@@ -14778,7 +14778,7 @@ build_adm_ctrl_flows_for_lrouter_port(
     } else {
         ds_put_format(match, "%s", op->lrp_networks.ea_s);
     }
-    ds_put_format(match, " && inport == %s", op->json_key);
+    ds_put_format(match, " && reg14 == %"PRIu32"", op->tunnel_key);
     if (consider_l3dgw_port_is_centralized(op)) {
         ds_put_format(match, " && is_chassis_resident(%s)",
                       op->cr_port->json_key);
@@ -14965,9 +14965,9 @@ build_neigh_learning_flows_for_lrouter_port(
              * REGBIT_LOOKUP_NEIGHBOR_IP_RESULT to 1. */
             ds_clear(match);
             ds_put_format(match,
-                          "inport == %s && arp.spa == %s/%u && "
+                          "reg14 == %"PRIu32" && arp.spa == %s/%u && "
                           "arp.tpa == %s && arp.op == 1",
-                          op->json_key,
+                          op->tunnel_key,
                           op->lrp_networks.ipv4_addrs[i].network_s,
                           op->lrp_networks.ipv4_addrs[i].plen,
                           op->lrp_networks.ipv4_addrs[i].addr_s);
@@ -14985,8 +14985,8 @@ build_neigh_learning_flows_for_lrouter_port(
         }
         ds_clear(match);
         ds_put_format(match,
-                      "inport == %s && arp.spa == %s/%u && arp.op == 1",
-                      op->json_key,
+                      "reg14 == %"PRIu32" && arp.spa == %s/%u && arp.op == 1",
+                      op->tunnel_key,
                       op->lrp_networks.ipv4_addrs[i].network_s,
                       op->lrp_networks.ipv4_addrs[i].plen);
         if (lrp_is_l3dgw(op)) {
@@ -15016,9 +15016,9 @@ build_neigh_learning_flows_for_lrouter_port(
              * REGBIT_LOOKUP_NEIGHBOR_IP_RESULT to 1. */
             ds_clear(match);
             ds_put_format(match,
-                          "inport == %s && ip6.src == %s/%u && "
+                          "reg14 == %"PRIu32" && ip6.src == %s/%u && "
                           "nd.target == %s && nd_ns",
-                          op->json_key,
+                          op->tunnel_key,
                           op->lrp_networks.ipv6_addrs[i].network_s,
                           op->lrp_networks.ipv6_addrs[i].plen,
                           op->lrp_networks.ipv6_addrs[i].addr_s);
@@ -15036,8 +15036,8 @@ build_neigh_learning_flows_for_lrouter_port(
         }
         ds_clear(match);
         ds_put_format(match,
-                      "inport == %s && ip6.src == %s/%u && nd_ns",
-                      op->json_key,
+                      "reg14 == %"PRIu32" && ip6.src == %s/%u && nd_ns",
+                      op->tunnel_key,
                       op->lrp_networks.ipv6_addrs[i].network_s,
                       op->lrp_networks.ipv6_addrs[i].plen);
         if (lrp_is_l3dgw(op)) {
@@ -15057,9 +15057,9 @@ build_neigh_learning_flows_for_lrouter_port(
 
     if (lrp_is_l3dgw(op)) {
         ds_clear(match);
-        ds_put_format(match, "inport == %s && (nd_na || nd_ns) && "
+        ds_put_format(match, "reg14 == %"PRIu32" && (nd_na || nd_ns) && "
                              "eth.mcast && "
-                             "!is_chassis_resident(%s)", op->json_key,
+                             "!is_chassis_resident(%s)", op->tunnel_key,
                              op->cr_port->json_key);
         ovn_lflow_add(lflows, op->od, S_ROUTER_IN_LOOKUP_NEIGHBOR, 120,
                       ds_cstr(match), REGBIT_LOOKUP_NEIGHBOR_RESULT" = 1; "
@@ -15101,8 +15101,8 @@ build_ND_RA_flows_for_lrouter_port(
     }
 
     ds_clear(match);
-    ds_put_format(match, "inport == %s && ip6.dst == ff02::2 && nd_rs",
-                          op->json_key);
+    ds_put_format(match, "reg14 == %"PRIu32" && ip6.dst == ff02::2 && nd_rs",
+                          op->tunnel_key);
     ds_clear(actions);
 
     const char *mtu_s = smap_get(
@@ -15164,8 +15164,8 @@ build_ND_RA_flows_for_lrouter_port(
                       WITH_HINT(&op->nbrp->header_));
         ds_clear(actions);
         ds_clear(match);
-        ds_put_format(match, "inport == %s && ip6.dst == ff02::2 && "
-                      "nd_ra && "REGBIT_ND_RA_OPTS_RESULT, op->json_key);
+        ds_put_format(match, "reg14 == %"PRIu32" && ip6.dst == ff02::2 && "
+                      "nd_ra && "REGBIT_ND_RA_OPTS_RESULT, op->tunnel_key);
 
         char ip6_str[INET6_ADDRSTRLEN + 1];
         struct in6_addr lla;
@@ -16251,7 +16251,7 @@ build_icmperr_pkt_big_flows(struct ovn_port *op, int mtu,
                                             meter_groups);
 
     ds_clear(match);
-    ds_put_format(match, "inport == %s", op->json_key);
+    ds_put_format(match, "reg14 == %"PRIu32"", op->tunnel_key);
 
     if (outport) {
         ovs_assert(ct_state_match);
@@ -16847,10 +16847,10 @@ build_dhcp_relay_flows_for_lrouter_port(struct ovn_port *op,
     ds_clear(actions);
 
     ds_put_format(
-        match, "inport == %s && "
+        match, "reg14 == %"PRIu32" && "
         "ip4.src == 0.0.0.0 && ip4.dst == 255.255.255.255 && "
         "ip.frag == 0 && udp.src == 68 && udp.dst == 67",
-        op->json_key);
+        op->tunnel_key);
     ds_put_format(actions,
                   REGBIT_DHCP_RELAY_REQ_CHK
                   " = dhcp_relay_req_chk(%s, %s);"
@@ -16868,11 +16868,11 @@ build_dhcp_relay_flows_for_lrouter_port(struct ovn_port *op,
     ds_clear(actions);
 
     ds_put_format(
-        match, "inport == %s && "
+        match, "reg14 == %"PRIu32" && "
         "ip4.src == 0.0.0.0 && ip4.dst == 255.255.255.255 && "
         "udp.src == 68 && udp.dst == 67 && "
         REGBIT_DHCP_RELAY_REQ_CHK,
-        op->json_key);
+        op->tunnel_key);
     ds_put_format(actions,
                   "ip4.src = %s; ip4.dst = %s; udp.src = 67; next; "
                   "/* DHCP_RELAY_REQ */",
@@ -16886,11 +16886,11 @@ build_dhcp_relay_flows_for_lrouter_port(struct ovn_port *op,
     ds_clear(actions);
 
     ds_put_format(
-        match, "inport == %s && "
+        match, "reg14 == %"PRIu32" && "
         "ip4.src == 0.0.0.0 && ip4.dst == 255.255.255.255 && "
         "udp.src == 68 && udp.dst == 67 && "
         REGBIT_DHCP_RELAY_REQ_CHK" == 0",
-        op->json_key);
+        op->tunnel_key);
     ds_put_format(actions, "drop; /* DHCP_RELAY_REQ */");
 
     ovn_lflow_add(lflows, op->od, S_ROUTER_IN_DHCP_RELAY_REQ, 1,
@@ -16979,10 +16979,10 @@ build_lrouter_ipv4_default_ttl_expired_flows(
         ds_clear(match);
         ds_clear(actions);
         ds_put_format(match,
-                      "inport == %s && ip4 && "
+                      "reg14 == %"PRIu32" && ip4 && "
                       "ip4.src == %s/%d && "
                       "ip.ttl == {0, 1} && !ip.later_frag",
-                      op->json_key,
+                      op->tunnel_key,
                       op->lrp_networks.ipv4_addrs[i].network_s,
                       op->lrp_networks.ipv4_addrs[i].plen);
         if (lrp_is_l3dgw(op)) {
@@ -17014,9 +17014,9 @@ build_lrouter_ipv4_default_ttl_expired_flows(
      * Generate ICMPv4 Time Exceeded reply using the first IPv4 address
      * of the logical router port as source address. */
     ds_put_format(match,
-                  "inport == %s && ip4 && "
+                  "reg14 == %"PRIu32" && ip4 && "
                   "ip.ttl == {0, 1} && !ip.later_frag",
-                  op->json_key);
+                  op->tunnel_key);
     if (lrp_is_l3dgw(op)) {
         ds_put_format(match, " && is_chassis_resident(%s)",
                       op->cr_port->json_key);
@@ -17056,10 +17056,10 @@ build_lrouter_ipv6_default_ttl_expired_flows(
         ds_clear(match);
         ds_clear(actions);
         ds_put_format(match,
-                      "inport == %s && ip6 && "
+                      "reg14 == %"PRIu32" && ip6 && "
                       "ip6.src == %s/%d && "
                       "ip.ttl == {0, 1} && !ip.later_frag",
-                      op->json_key,
+                      op->tunnel_key,
                       op->lrp_networks.ipv6_addrs[i].network_s,
                       op->lrp_networks.ipv6_addrs[i].plen);
         if (lrp_is_l3dgw(op)) {
@@ -17090,9 +17090,9 @@ build_lrouter_ipv6_default_ttl_expired_flows(
      * Generate ICMPv6 Time Exceeded reply using the first IPv6 address
      * of the logical router port as source address. */
     ds_put_format(match,
-                  "inport == %s && ip6 && "
+                  "reg14 == %"PRIu32" && ip6 && "
                   "ip.ttl == {0, 1} && !ip.later_frag",
-                  op->json_key);
+                  op->tunnel_key);
     if (lrp_is_l3dgw(op)) {
         ds_put_format(match, " && is_chassis_resident(%s)",
                       op->cr_port->json_key);
@@ -17558,7 +17558,7 @@ build_lrouter_in_unsnat_match(const struct ovn_datapath *od,
         /* Distributed router. */
 
         /* Traffic received on l3dgw_port is subject to NAT. */
-        ds_put_format(match, " && inport == %s", l3dgw_port->json_key);
+        ds_put_format(match, " && reg14 == %"PRIu32"", l3dgw_port->tunnel_key);
 
         if (!distributed_nat && !vector_is_empty(&od->l3dgw_ports)) {
             /* Flows for NAT rules that are centralized are only
@@ -17693,7 +17693,7 @@ build_lrouter_in_dnat_flow(struct lflow_table *lflows,
         /* Distributed router. */
 
         /* Traffic received on l3dgw_port is subject to NAT. */
-        ds_put_format(match, " && inport == %s", l3dgw_port->json_key);
+        ds_put_format(match, " && reg14 == %"PRIu32"", l3dgw_port->tunnel_key);
         if (!distributed_nat && !vector_is_empty(&od->l3dgw_ports)) {
             /* Flows for NAT rules that are centralized are only
             * programmed on the gateway chassis. */
@@ -18057,9 +18057,9 @@ build_lrouter_ingress_nat_check_pkt_len(struct lflow_table *lflows,
                                         struct lflow_ref *lflow_ref)
 {
         ds_clear(match);
-        ds_put_format(match, "inport == %s && "REGBIT_PKT_LARGER
+        ds_put_format(match, "reg14 == %"PRIu32" && "REGBIT_PKT_LARGER
                       " && "REGBIT_EGRESS_LOOPBACK" == 0",
-                      l3dgw_port->json_key);
+                      l3dgw_port->tunnel_key);
 
         ds_clear(actions);
         if (!is_v6) {
@@ -18129,8 +18129,8 @@ build_lrouter_ingress_flow(struct lflow_table *lflows,
     if (!vector_is_empty(&od->l3dgw_ports) && nat_entry->type == SNAT) {
         ds_clear(match);
         ds_put_format(
-            match, "inport == %s && %s == %s",
-            l3dgw_port->json_key,
+            match, "reg14 == %"PRIu32" && %s == %s",
+            l3dgw_port->tunnel_key,
             is_v6 ? "ip6.src" : "ip4.src", nat->external_ip);
         ovn_lflow_add(lflows, od, S_ROUTER_IN_IP_INPUT, 120, ds_cstr(match),
                       "next;", lflow_ref, WITH_HINT(&nat->header_));
@@ -18149,10 +18149,10 @@ build_lrouter_ingress_flow(struct lflow_table *lflows,
                                   "gateway_mtu", 0);
         ds_clear(match);
         ds_put_format(match,
-                      "eth.dst == "ETH_ADDR_FMT" && inport == %s"
+                      "eth.dst == "ETH_ADDR_FMT" && reg14 == %"PRIu32""
                       " && is_chassis_resident(\"%s\")",
                       ETH_ADDR_ARGS(mac),
-                      l3dgw_port->json_key,
+                      l3dgw_port->tunnel_key,
                       nat->logical_port);
         build_gateway_mtu_flow(lflows, l3dgw_port,
                                S_ROUTER_IN_ADMISSION, 50, 55,
@@ -18277,14 +18277,14 @@ build_dgp_lrouter_commit_all(const struct ovn_datapath *od,
      * should be reply in both zones. */
     ds_clear(match);
     ds_put_format(match, "ip && (!ct.trk || !ct.rpl) && "
-                  "inport == %s && is_chassis_resident(%s)",
-                  l3dgw_port->json_key, l3dgw_port->cr_port->json_key);
+                  "reg14 == %"PRIu32" && is_chassis_resident(%s)",
+                  l3dgw_port->tunnel_key, l3dgw_port->cr_port->json_key);
     ovn_lflow_add(lflows, od, S_ROUTER_IN_DEFRAG, 10, ds_cstr(match),
                   "ct_next(dnat);", lflow_ref);
 
     ds_clear(match);
-    ds_put_format(match, "ip && ct.new && inport == %s && "
-                 "is_chassis_resident(%s)", l3dgw_port->json_key,
+    ds_put_format(match, "ip && ct.new && reg14 == %"PRIu32" && "
+                 "is_chassis_resident(%s)", l3dgw_port->tunnel_key,
                  l3dgw_port->cr_port->json_key);
     ovn_lflow_add(lflows, od, S_ROUTER_IN_DNAT, 10, ds_cstr(match),
                   "ct_commit_to_zone(dnat);", lflow_ref);
@@ -18296,14 +18296,14 @@ build_dgp_lrouter_commit_all(const struct ovn_datapath *od,
      * based on that. */
     ds_clear(match);
     ds_put_format(match, "ip && ct.new && "
-                  "inport == %s && is_chassis_resident(%s)",
-                  l3dgw_port->json_key, l3dgw_port->cr_port->json_key);
+                  "reg14 == %"PRIu32" && is_chassis_resident(%s)",
+                  l3dgw_port->tunnel_key, l3dgw_port->cr_port->json_key);
     ovn_lflow_add(lflows, od, S_ROUTER_IN_POST_UNSNAT, 10, ds_cstr(match),
                   "flags.unsnat_new = 1; next;", lflow_ref);
     ds_clear(match);
     ds_put_format(match, "ip && !ct.trk && "
-                  "inport == %s && is_chassis_resident(%s)",
-                  l3dgw_port->json_key, l3dgw_port->cr_port->json_key);
+                  "reg14 == %"PRIu32" && is_chassis_resident(%s)",
+                  l3dgw_port->tunnel_key, l3dgw_port->cr_port->json_key);
     ovn_lflow_add(lflows, od, S_ROUTER_IN_POST_UNSNAT, 10, ds_cstr(match),
                   "flags.unsnat_not_tracked = 1; next;",
                   lflow_ref);
@@ -18491,8 +18491,8 @@ build_lrouter_nat_defrag_and_lb(
                  * failed to convert the destination. */
                 ds_clear(match);
                 ds_put_format(
-                    match, "inport == %s && outport == %s && ip%s.dst == %s",
-                    nat_entry->l3dgw_port->json_key,
+                    match, "reg14 == %"PRIu32" && outport == %s && ip%s.dst == %s",
+                    nat_entry->l3dgw_port->tunnel_key,
                     nat_entry->l3dgw_port->json_key,
                     is_v6 ? "6" : "4", nat->external_ip);
                 ovn_lflow_add(lflows, od, S_ROUTER_IN_ARP_RESOLVE, 150,
@@ -19382,13 +19382,13 @@ consider_network_function(struct lflow_table *lflows,
      * we don't want the packets to be redirected again based on from-lport
      * match.
      */
-    ds_put_format(&match, "inport == %s", input_port->json_key);
+    ds_put_format(&match, "reg14 == %"PRIu32"", input_port->tunnel_key);
     ds_put_format(&action, REG_TUN_OFPORT" = ct_label.tun_if_id; next;");
     ovn_lflow_add(lflows, od, S_SWITCH_IN_NF, 100,
                   ds_cstr(&match), ds_cstr(&action), lflow_ref);
     ds_clear(&match);
 
-    ds_put_format(&match, "inport == %s", output_port->json_key);
+    ds_put_format(&match, "reg14 == %"PRIu32"", output_port->tunnel_key);
     ovn_lflow_add(lflows, od, S_SWITCH_IN_NF, 100,
                   ds_cstr(&match), ds_cstr(&action), lflow_ref);
     ds_clear(&match);
@@ -19419,7 +19419,7 @@ consider_network_function(struct lflow_table *lflows,
      * start from the NF table. The packets that fall under this category are
      * the response packets from NF for from-lport ACLs and request packets
      * received from NF for to-lport ACLs. */
-    ds_put_format(&match, "inport == %s", input_port->json_key);
+    ds_put_format(&match, "reg14 == %"PRIu32"", input_port->tunnel_key);
     ds_put_format(&action, "next(pipeline=egress, table=%d);",
                   (ovn_stage_get_table(S_SWITCH_OUT_NF) + 1));
     ovn_lflow_add(lflows, od, S_SWITCH_OUT_PRE_ACL, 110, ds_cstr(&match),
