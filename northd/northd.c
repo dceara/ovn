@@ -989,7 +989,7 @@ is_cr_port(const struct ovn_port *op)
  * requested chassis a remote chassis, i.e., if 'op' is a transit router
  * port. */
 static bool
-is_transit_router_port(struct ovn_port *op)
+is_transit_router_port(const struct ovn_port *op)
 {
     return op->nbrp &&
            op->sb->chassis &&
@@ -13001,6 +13001,12 @@ add_route(struct lflow_table *lflows, const struct ovn_datapath *od,
             op_inport = op;
         }
     }
+
+    // OK
+    if (op_inport && is_transit_router_port(op_inport)) {
+        return;
+    }
+
     build_route_match(op_inport, rtb_id, network_s, plen, is_src_route,
                       is_ipv4_prefix, &match, &priority, source, false);
 
@@ -14385,6 +14391,11 @@ build_lrouter_icmp_packet_toobig_admin_flows(
         return;
     }
 
+    //OK
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     ds_clear(match);
     ds_put_format(match,
                   "((ip4 && icmp4.type == 3 && icmp4.code == 4) ||"
@@ -14649,6 +14660,11 @@ build_adm_ctrl_flows_for_lrouter(
                   "vlan.present || eth.src[40]", debug_drop_action(),
                   lflow_ref);
 
+    // TODO flow to fix arps
+    ovn_lflow_add(lflows, od, S_ROUTER_IN_ADMISSION, 40,
+                  "flags.tunnel_rx == 1 && (arp.op == 2 || nd_na)",
+                  "next;", lflow_ref);
+
     /* Default action for L2 security is to drop. */
     ovn_lflow_add_default_drop(lflows, od, S_ROUTER_IN_ADMISSION,
                                lflow_ref);
@@ -14770,6 +14786,11 @@ build_adm_ctrl_flows_for_lrouter_port(
     if (is_cr_port(op)) {
         /* No ingress packets should be received on a chassisredirect
          * port. */
+        return;
+    }
+
+    //OK
+    if (is_transit_router_port(op)) {
         return;
     }
 
@@ -14970,6 +14991,11 @@ build_neigh_learning_flows_for_lrouter_port(
         struct lflow_ref *lflow_ref)
 {
     ovs_assert(op->nbrp);
+
+    // OK
+    if (is_transit_router_port(op)) {
+        return;
+    }
 
     bool learn_from_arp_request = smap_get_bool(&op->od->nbr->options,
         "always_learn_from_arp_request", true);
@@ -16300,6 +16326,11 @@ build_check_pkt_len_flows_for_lrp(struct ovn_port *op,
                                   struct lflow_ref *lflow_ref,
                                   const struct chassis_features *features)
 {
+    // OK
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     int gw_mtu = smap_get_int(&op->nbrp->options, "gateway_mtu", 0);
     if (gw_mtu <= 0) {
         return;
@@ -16330,6 +16361,11 @@ build_check_pkt_len_flows_for_lrp(struct ovn_port *op,
         struct ovn_port *rp = ovn_port_find(lr_ports,
                                             op->od->nbr->ports[i]->name);
         if (!rp || rp == op) {
+            continue;
+        }
+
+        // OK
+        if (is_transit_router_port(rp)) {
             continue;
         }
 
@@ -16384,6 +16420,7 @@ build_check_pkt_len_flows_for_lrouter(
         if (!rp || !rp->nbrp) {
             continue;
         }
+
         build_check_pkt_len_flows_for_lrp(rp, lflows, lr_ports, meter_groups,
                                           match, actions, lflow_ref, features);
     }
@@ -16547,6 +16584,11 @@ build_ecmp_stateful_egr_flows_for_lrouter_port(
     struct ds *match,  struct ds *actions,
     struct lflow_ref *lflow_ref)
 {
+    // OK
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     ds_clear(match);
     ds_put_format(match, REGBIT_NEEDS_ECMP_STATEFUL_COMMIT " == 1 && ip && "
                   "outport == %s", op->json_key);
@@ -16579,6 +16621,11 @@ build_lrouter_network_id_flows(
     size_t network_id;
 
     HMAP_FOR_EACH (op, dp_node, &od->ports) {
+        // OK
+        if (is_transit_router_port(op)) {
+            continue;
+        }
+
         for (size_t i = 0; i < op->lrp_networks.n_ipv4_addrs; i++) {
             if (i > OVN_MAX_NETWORK_ID) {
                 static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(1, 5);
@@ -16681,6 +16728,11 @@ build_egress_delivery_flows_for_lrouter_port(
          * a chassisredirect port.  The chassisredirect port should
          * be replaced by the l3dgw port in the local output
          * pipeline stage before egress processing. */
+        return;
+    }
+
+    //OK
+    if (is_transit_router_port(op)) {
         return;
     }
 
@@ -17142,6 +17194,12 @@ build_ipv6_input_flows_for_lrouter_port(
     if (is_cr_port(op)) {
         return;
     }
+
+    // OK
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     /* No ingress packets are accepted on a chassisredirect
      * port, so no need to program flows for that port. */
     if (op->lrp_networks.n_ipv6_addrs) {
@@ -17332,6 +17390,12 @@ build_lrouter_ipv4_ip_input(struct ovn_port *op,
     if (is_cr_port(op)) {
         return;
     }
+
+    // OK
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     if (op->lrp_networks.n_ipv4_addrs) {
         /* L3 admission control: drop packets that originate from an
          * IPv4 address owned by the router or a broadcast address
@@ -18947,6 +19011,11 @@ build_lrp_lflows_for_lbnats(struct ovn_port *op,
     ovs_assert(op->nbrp && uuid_equals(&op->od->nbr->header_.uuid,
                                        &lr_stateful_rec->nbr_uuid));
 
+    // OK
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     /* Drop IP traffic destined to router owned IPs except if the IP is
      * also a SNAT IP. Those are dropped later, in stage
      * "lr_in_arp_resolve", if unSNAT was unsuccessful.
@@ -19770,9 +19839,6 @@ build_lswitch_and_lrouter_iterate_by_lrp(struct ovn_port *op,
                                        op->lflow_ref);
     build_arp_resolve_flows_for_lrp(op, lsi->lflows,
                                     &lsi->match, &lsi->actions, op->lflow_ref);
-    build_egress_delivery_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
-                                                 &lsi->actions,
-                                                 op->lflow_ref);
     build_dhcpv6_reply_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
                                               op->lflow_ref);
     build_dhcp_relay_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
@@ -19794,6 +19860,9 @@ build_lswitch_and_lrouter_iterate_by_lrp(struct ovn_port *op,
                                                    &lsi->match,
                                                    &lsi->actions,
                                                    op->lflow_ref);
+    build_egress_delivery_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
+                                                 &lsi->actions,
+                                                 op->lflow_ref);
 }
 
 static void *
