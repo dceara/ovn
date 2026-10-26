@@ -13540,6 +13540,10 @@ add_route(struct lflow_table *lflows, const struct ovn_datapath *od,
           bool is_ipv4_prefix, bool is_ipv4_nexthop,
           bool override_connected)
 {
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     struct ds match = DS_EMPTY_INITIALIZER;
     uint16_t priority = calc_priority(plen, source, override_connected,
                                       is_src_route, false);
@@ -16930,6 +16934,11 @@ build_check_pkt_len_flows_for_lrouter(
         if (!rp || !rp->nbrp) {
             continue;
         }
+
+        if (is_transit_router_port(rp)) {
+            continue;
+        }
+
         build_check_pkt_len_flows_for_lrp(rp, lflows, lr_ports, meter_groups,
                                           match, actions, lflow_ref, features);
     }
@@ -20758,6 +20767,10 @@ build_lswitch_and_lrouter_iterate_by_lrp(struct ovn_port *op,
 {
     ovs_assert(op->nbrp);
 
+    if (is_transit_router_port(op)) {
+        return;
+    }
+
     build_adm_ctrl_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
                                           &lsi->actions, op->lflow_ref);
     build_neigh_learning_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
@@ -20767,9 +20780,6 @@ build_lswitch_and_lrouter_iterate_by_lrp(struct ovn_port *op,
                                        op->lflow_ref);
     build_arp_resolve_flows_for_lrp(op, lsi->lflows,
                                     &lsi->match, &lsi->actions, op->lflow_ref);
-    build_egress_delivery_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
-                                                 &lsi->actions,
-                                                 op->lflow_ref);
     build_dhcpv6_reply_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
                                               op->lflow_ref);
     build_dhcp_relay_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
@@ -20791,6 +20801,9 @@ build_lswitch_and_lrouter_iterate_by_lrp(struct ovn_port *op,
                                                    &lsi->match,
                                                    &lsi->actions,
                                                    op->lflow_ref);
+    build_egress_delivery_flows_for_lrouter_port(op, lsi->lflows, &lsi->match,
+                                                 &lsi->actions,
+                                                 op->lflow_ref);
 }
 
 static void *
