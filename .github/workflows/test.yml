@@ -129,7 +129,7 @@ jobs:
       if: ${{ startsWith(matrix.cfg.testsuite, 'system-test') }}
       run: |
         sudo apt update
-        sudo apt -y install linux-modules-extra-$(uname -r)
+        sudo apt -y install linux-modules-$(uname -r)
 
     - name: checkout
       if: github.event_name == 'push' || github.event_name == 'pull_request'
