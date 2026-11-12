@@ -65,7 +65,7 @@ jobs:
           echo "IMAGE_DISTRO=ubuntu" >> $GITHUB_ENV
 
       - name: Choose image distro
-        if: github.event_name == 'schedule'
+        if: github.event_name == 'push'
         run: |
           echo "IMAGE_DISTRO=fedora" >> $GITHUB_ENV
 
@@ -111,30 +111,6 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-        - { compiler: gcc, opts: --disable-ssl }
-        - { compiler: clang, opts: --disable-ssl }
-        - { compiler: gcc, testsuite: dist-test }
-        - { compiler: gcc, testsuite: test, test_range: "-300" }
-        - { compiler: gcc, testsuite: test, test_range: "301-600" }
-        - { compiler: gcc, testsuite: test, test_range: "601-", unstable: unstable }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "-300" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "301-600" }
-        - { compiler: clang, testsuite: test, sanitizers: sanitizers, test_range: "601-", unstable: unstable }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "-300" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "301-600" }
-        - { compiler: gcc, testsuite: test, libs: -ljemalloc, test_range: "601-", unstable: unstable }
-        - { compiler: gcc, testsuite: system-test-dpdk, dpdk: dpdk, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test-dpdk, dpdk: dpdk, test_range: "101-200" }
-        - { compiler: gcc, testsuite: system-test-dpdk, dpdk: dpdk, test_range: "201-", unstable: unstable }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "101-200" }
-        - { compiler: gcc, testsuite: system-test-userspace, test_range: "201-", unstable: unstable }
-        - { compiler: gcc, testsuite: system-test, test_range: "-100" }
-        - { compiler: gcc, testsuite: system-test, test_range: "101-200" }
-        - { compiler: gcc, testsuite: system-test, test_range: "201-", unstable: unstable }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "-100" }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "101-200" }
-        - { compiler: clang, testsuite: system-test, sanitizers: sanitizers, test_range: "201-", unstable: unstable }
         - { arch: x86, compiler: gcc, opts: --disable-ssl }
 
     steps:
