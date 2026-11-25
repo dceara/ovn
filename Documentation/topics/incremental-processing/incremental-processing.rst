@@ -316,7 +316,11 @@ Key Structures
   current iteration, plus an opaque `client_ctx` pointer that each binary
   uses to pass its own private state (e.g. `ovn-controller`'s
   `controller_engine_ctx`) through to `run()` methods and change handlers.
-  Accessed with `engine_get_context()`.
+  Callers pass the context to `engine_run()` and `engine_need_run()`.
+  Run and change callbacks receive it as their first argument and may
+  use it for the duration of the call. Transaction pointers depend on
+  the processing phase and may be NULL. For example, a call to
+  `engine_need_run()` may have no Southbound transaction.
 
 Call `engine_infra_init()` once in the main thread during startup to
 install the process-wide unixctl commands. `engine_init()` registers the

@@ -39,9 +39,10 @@ en_dp_group_init(struct engine_node *node OVS_UNUSED,
 
 static void
 dp_group_sync_to_sb(struct engine_node *node,
-                    struct lflow_data *lflow_data)
+                    struct lflow_data *lflow_data,
+                    struct ovsdb_idl_txn *ovnsb_idl_txn)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);
     struct ed_type_global_config *global_config =
@@ -54,7 +55,7 @@ dp_group_sync_to_sb(struct engine_node *node,
 
     stopwatch_start(LFLOWS_TO_SB_STOPWATCH_NAME, time_msec());
     lflow_table_sync_to_sb(lflow_data->lflow_table,
-                           eng_ctx->ovnsb_idl_txn,
+                           ovnsb_idl_txn,
                            all_dps->synced_dps,
                            global_config->ovn_internal_version_changed,
                            sb_flow_table, sb_dpgrp_table);
@@ -62,22 +63,21 @@ dp_group_sync_to_sb(struct engine_node *node,
 }
 
 enum engine_node_state
-en_dp_group_run(struct engine_node *node,
-                void *data OVS_UNUSED)
+en_dp_group_run(const struct engine_context *eng_ctx,
+                struct engine_node *node, void *data OVS_UNUSED)
 {
     struct lflow_data *lflow_data = engine_get_input_data("lflow", node);
 
-    dp_group_sync_to_sb(node, lflow_data);
+    dp_group_sync_to_sb(node, lflow_data, eng_ctx->ovnsb_idl_txn);
     return EN_UPDATED;
 }
 
 enum engine_input_handler_result
-dp_group_lflow_handler(struct engine_node *node,
-                       void *data OVS_UNUSED)
+dp_group_lflow_handler(const struct engine_context *eng_ctx,
+                       struct engine_node *node, void *data OVS_UNUSED)
 {
     struct lflow_data *lflow_data = engine_get_input_data("lflow", node);
 
-    const struct engine_context *eng_ctx = engine_get_context();
     struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);
 
@@ -90,7 +90,7 @@ dp_group_lflow_handler(struct engine_node *node,
         engine_get_input_data("global_config", node);
 
     if (hmapx_is_empty(&lflow_data->trk_data.dirty_lflow_refs)) {
-        dp_group_sync_to_sb(node, lflow_data);
+        dp_group_sync_to_sb(node, lflow_data, eng_ctx->ovnsb_idl_txn);
         return EN_HANDLED_UPDATED;
     }
 

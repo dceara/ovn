@@ -424,15 +424,14 @@ inc_proc_ic_run(struct ic_context *ctx,
     int64_t start = time_msec();
     engine_init_run(&engine);
 
-    struct engine_context eng_ctx = {
+    const struct engine_context eng_ctx = {
         .client_ctx = ctx,
     };
 
-    engine_set_context(&eng_ctx);
-    engine_run(&engine, true);
+    engine_run(&engine, &eng_ctx, true);
 
     if (!engine_has_run(&engine)) {
-        if (engine_need_run(&engine)) {
+        if (engine_need_run(&engine, &eng_ctx)) {
             VLOG_DBG("engine did not run, force recompute next time.");
             engine_set_force_recompute_immediate(&engine);
         } else {
@@ -457,7 +456,6 @@ void
 inc_proc_ic_cleanup(void)
 {
     engine_cleanup(&engine);
-    engine_set_context(NULL);
 }
 
 const struct icsbrec_availability_zone *

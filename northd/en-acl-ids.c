@@ -43,9 +43,10 @@ should_sync_to_sb(const struct nbrec_acl *nb_acl)
 }
 
 enum engine_node_state
-en_acl_id_run(struct engine_node *node, void *data OVS_UNUSED)
+en_acl_id_run(const struct engine_context *eng_ctx,
+              struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     const struct nbrec_acl_table *nb_acl_table =
         EN_OVSDB_GET(engine_get_input("NB_acl", node));
     const struct sbrec_acl_id_table *sb_acl_id_table =

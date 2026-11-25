@@ -61,7 +61,8 @@ en_bridge_data_cleanup(void *data_)
 }
 
 enum engine_node_state
-en_bridge_data_run(struct engine_node *node, void *data_)
+en_bridge_data_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                   struct engine_node *node, void *data_)
 {
     const struct ovnbrrec_bridge_table *ovnbrrec_br_table =
         EN_OVSDB_GET(engine_get_input("BR_bridge", node));

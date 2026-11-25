@@ -131,7 +131,8 @@ void en_lflow_output_cleanup(void *data_)
 }
 
 enum engine_node_state
-en_lflow_output_run(struct engine_node *node OVS_UNUSED, void *data_)
+en_lflow_output_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                    struct engine_node *node OVS_UNUSED, void *data_)
 {
     struct ed_type_lflow_output_data *lflow_data = data_;
     struct ed_type_bridge_data *bridge_data =

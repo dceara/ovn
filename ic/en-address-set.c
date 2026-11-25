@@ -23,9 +23,9 @@
 VLOG_DEFINE_THIS_MODULE(en_ic_address_set);
 
 enum engine_node_state
-en_address_set_run(struct engine_node *node, void *data OVS_UNUSED)
+en_address_set_run(const struct engine_context *eng_ctx,
+                   struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 

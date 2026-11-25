@@ -120,10 +120,12 @@ struct ed_type_lr_nat_data {
 void *en_lr_nat_init(struct engine_node *, struct engine_arg *);
 void en_lr_nat_cleanup(void *data);
 void en_lr_nat_clear_tracked_data(void *data);
-enum engine_node_state en_lr_nat_run(struct engine_node *, void *data);
+enum engine_node_state en_lr_nat_run(const struct engine_context *,
+                                     struct engine_node *, void *data);
 
-enum engine_input_handler_result lr_nat_northd_handler(struct engine_node *,
-                                                       void *data);
+enum engine_input_handler_result lr_nat_northd_handler(
+    const struct engine_context *,
+    struct engine_node *, void *data);
 
 static inline bool
 nat_entry_is_v6(const struct ovn_nat *nat_entry)

@@ -66,7 +66,8 @@ void en_pflow_output_cleanup(void *data_ OVS_UNUSED)
 }
 
 enum engine_node_state
-en_pflow_output_run(struct engine_node *node, void *data_  OVS_UNUSED)
+en_pflow_output_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                    struct engine_node *node, void *data_ OVS_UNUSED)
 {
     struct ed_type_bridge_data *br_data =
         engine_get_input_data("bridge_data", node);

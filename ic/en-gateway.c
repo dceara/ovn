@@ -344,9 +344,9 @@ sync_gateway_handle_icsb_gateway(
 }
 
 enum engine_node_state
-en_gateway_run(struct engine_node *node, void *data OVS_UNUSED)
+en_gateway_run(const struct engine_context *eng_ctx,
+               struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 
@@ -366,9 +366,9 @@ en_gateway_run(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-en_gateway_sb_chassis_handler(struct engine_node *node, void *data OVS_UNUSED)
+en_gateway_sb_chassis_handler(const struct engine_context *eng_ctx,
+                              struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 
@@ -383,10 +383,10 @@ en_gateway_sb_chassis_handler(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-en_gateway_icsb_gateway_handler(struct engine_node *node,
+en_gateway_icsb_gateway_handler(const struct engine_context *eng_ctx,
+                                struct engine_node *node,
                                 void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 

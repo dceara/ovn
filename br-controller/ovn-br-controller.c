@@ -106,7 +106,8 @@ en_br_controller_output_cleanup(void *data OVS_UNUSED)
 }
 
 static enum engine_node_state
-en_br_controller_output_run(struct engine_node *node OVS_UNUSED,
+en_br_controller_output_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                            struct engine_node *node OVS_UNUSED,
                             void *data OVS_UNUSED)
 {
     return EN_UPDATED;
@@ -257,12 +258,10 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
             ovnbr_cond_seqno = new_ovnbr_cond_seqno;
         }
 
-        struct engine_context eng_ctx = {
+        const struct engine_context eng_ctx = {
             .ovs_idl_txn = ovs_idl_txn,
             .ovnbr_idl_txn = ovnbr_idl_txn,
         };
-
-        engine_set_context(&eng_ctx);
 
         const struct ovsrec_open_vswitch_table *ovs_table =
             ovsrec_open_vswitch_table_get(ovs_idl_loop.idl);
@@ -270,7 +269,7 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
             ovsrec_open_vswitch_table_first(ovs_table);
 
         if (ovsdb_idl_has_ever_connected(ovnbr_idl_loop.idl) && cfg) {
-            engine_run(&engine, true);
+            engine_run(&engine, &eng_ctx, true);
 
             br_data = engine_get_data(&en_bridge_data);
             if (br_data) {
@@ -326,7 +325,6 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
         poll_block();
     }
 
-    engine_set_context(NULL);
     engine_cleanup(&engine);
 
     free(ovs_remote);

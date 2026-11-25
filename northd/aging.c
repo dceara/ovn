@@ -387,7 +387,8 @@ mac_binding_aging_run_for_datapath(const struct sbrec_datapath_binding *dp,
 }
 
 enum engine_node_state
-en_mac_binding_aging_run(struct engine_node *node, void *data OVS_UNUSED)
+en_mac_binding_aging_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                         struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
 
@@ -458,7 +459,8 @@ en_mac_binding_aging_cleanup(void *data OVS_UNUSED)
  * the waker cannot be dependent on other node because it wouldn't be
  * input node anymore. */
 enum engine_node_state
-en_mac_binding_aging_waker_run(struct engine_node *node OVS_UNUSED, void *data)
+en_mac_binding_aging_waker_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node OVS_UNUSED, void *data)
 {
     struct aging_waker *waker = data;
 
@@ -518,7 +520,8 @@ fdb_run_for_datapath(const struct sbrec_datapath_binding *dp,
 }
 
 enum engine_node_state
-en_fdb_aging_run(struct engine_node *node, void *data OVS_UNUSED)
+en_fdb_aging_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                 struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct aging_waker *waker = engine_get_input_data("fdb_aging_waker", node);
@@ -580,7 +583,8 @@ en_fdb_aging_cleanup(void *data OVS_UNUSED)
  * the waker cannot be dependent on other node because it wouldn't be
  * input node anymore. */
 enum engine_node_state
-en_fdb_aging_waker_run(struct engine_node *node OVS_UNUSED, void *data)
+en_fdb_aging_waker_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                       struct engine_node *node OVS_UNUSED, void *data)
 {
     struct aging_waker *waker = data;
 

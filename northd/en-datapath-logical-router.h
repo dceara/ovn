@@ -24,8 +24,9 @@
 void *en_datapath_logical_router_init(struct engine_node *,
                                       struct engine_arg *);
 
-enum engine_node_state en_datapath_logical_router_run(struct engine_node *,
-                                                      void *data);
+enum engine_node_state en_datapath_logical_router_run(
+    const struct engine_context *,
+    struct engine_node *, void *data);
 void en_datapath_logical_router_clear_tracked_data(void *data);
 void en_datapath_logical_router_cleanup(void *data);
 
@@ -53,15 +54,18 @@ void *en_datapath_synced_logical_router_init(struct engine_node *,
                                              struct engine_arg *);
 
 enum engine_node_state en_datapath_synced_logical_router_run(
+    const struct engine_context *,
     struct engine_node *, void *data);
 void en_datapath_synced_logical_router_clear_tracked_data(void *data);
 enum engine_input_handler_result
 en_datapath_synced_logical_router_datapath_sync_handler(
-        struct engine_node *node, void *data);
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data);
 void en_datapath_synced_logical_router_cleanup(void *data);
 
 enum engine_input_handler_result
-en_datapath_logical_router_logical_router_handler(struct engine_node *,
-                                                  void *);
+en_datapath_logical_router_logical_router_handler(
+    const struct engine_context *,
+    struct engine_node *, void *);
 
 #endif /* EN_DATAPATH_LOGICAL_ROUTER_H */

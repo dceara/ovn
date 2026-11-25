@@ -20,9 +20,11 @@
 #include "lib/inc-proc-eng.h"
 
 void *en_dp_group_init(struct engine_node *node, struct engine_arg *arg);
-enum engine_node_state en_dp_group_run(struct engine_node *node, void *data);
+enum engine_node_state en_dp_group_run(const struct engine_context *eng_ctx,
+                                       struct engine_node *node, void *data);
 void en_dp_group_cleanup(void *data);
 enum engine_input_handler_result
-dp_group_lflow_handler(struct engine_node *node, void *data);
+dp_group_lflow_handler(const struct engine_context *eng_ctx,
+                       struct engine_node *node, void *data);
 
 #endif /* EN_DP_GROUP_H */

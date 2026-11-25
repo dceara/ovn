@@ -25,8 +25,10 @@
 #include "lib/inc-proc-eng.h"
 
 enum engine_input_handler_result
-ecmp_nexthop_mac_binding_handler(struct engine_node *, void *data);
-enum engine_node_state en_ecmp_nexthop_run(struct engine_node *, void *data);
+ecmp_nexthop_mac_binding_handler(const struct engine_context *,
+                                 struct engine_node *, void *data);
+enum engine_node_state en_ecmp_nexthop_run(const struct engine_context *,
+                                           struct engine_node *, void *data);
 void *en_ecmp_nexthop_init(struct engine_node *, struct engine_arg *);
 void en_ecmp_nexthop_cleanup(void *data);
 struct ovsdb_idl_index *ecmp_nexthop_index_create(struct ovsdb_idl *idl);

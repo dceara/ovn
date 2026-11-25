@@ -90,19 +90,22 @@ struct group_ecmp_route_data {
 void *en_group_ecmp_route_init(struct engine_node *, struct engine_arg *);
 void en_group_ecmp_route_cleanup(void *data);
 void en_group_ecmp_route_clear_tracked_data(void *data);
-enum engine_node_state en_group_ecmp_route_run(struct engine_node *,
+enum engine_node_state en_group_ecmp_route_run(const struct engine_context *,
+                                               struct engine_node *,
                                                void *data);
 
 enum engine_input_handler_result
-group_ecmp_route_learned_route_change_handler(struct engine_node *,
+group_ecmp_route_learned_route_change_handler(const struct engine_context *,
+                                              struct engine_node *,
                                               void *data);
 
 enum engine_input_handler_result
-group_ecmp_route_routes_change_handler(struct engine_node *,
-                                       void *data);
+group_ecmp_route_routes_change_handler(const struct engine_context *,
+                                       struct engine_node *, void *data);
 
 enum engine_input_handler_result
-group_ecmp_route_dynamic_routes_change_handler(struct engine_node *,
+group_ecmp_route_dynamic_routes_change_handler(const struct engine_context *,
+                                               struct engine_node *,
                                                void *data);
 
 struct group_ecmp_datapath *group_ecmp_datapath_lookup(

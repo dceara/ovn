@@ -222,7 +222,9 @@ datapath_unsynced_new_logical_switch_handler(
 }
 
 enum engine_input_handler_result
-datapath_logical_switch_handler(struct engine_node *node, void *data)
+datapath_logical_switch_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct nbrec_logical_switch_table *nb_ls_table =
         EN_OVSDB_GET(engine_get_input("NB_logical_switch", node));
@@ -287,7 +289,8 @@ en_datapath_logical_switch_clear_tracked_data(void *data)
 }
 
 enum engine_node_state
-en_datapath_logical_switch_run(struct engine_node *node , void *data)
+en_datapath_logical_switch_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data)
 {
     const struct nbrec_logical_switch_table *nb_ls_table =
         EN_OVSDB_GET(engine_get_input("NB_logical_switch", node));
@@ -386,7 +389,9 @@ synced_logical_switch_alloc(const struct ovn_synced_datapath *sdp)
 }
 
 enum engine_node_state
-en_datapath_synced_logical_switch_run(struct engine_node *node , void *data)
+en_datapath_synced_logical_switch_run(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);
@@ -426,7 +431,8 @@ en_datapath_synced_logical_switch_clear_tracked_data(void *data)
 
 enum engine_input_handler_result
 en_datapath_synced_logical_switch_datapath_sync_handler(
-        struct engine_node *node, void *data)
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);

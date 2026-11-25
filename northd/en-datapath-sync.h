@@ -30,14 +30,19 @@ struct all_synced_datapaths {
 void *en_datapath_sync_init(struct engine_node *,
                             struct engine_arg *);
 enum engine_input_handler_result
-datapath_sync_logical_switch_handler(struct engine_node *, void *data);
+datapath_sync_logical_switch_handler(const struct engine_context *,
+                                     struct engine_node *, void *data);
 enum engine_input_handler_result
-datapath_sync_logical_router_handler(struct engine_node *, void *data);
+datapath_sync_logical_router_handler(const struct engine_context *,
+                                     struct engine_node *, void *data);
 enum engine_input_handler_result
-datapath_sync_sb_datapath_binding(struct engine_node *, void *data);
+datapath_sync_sb_datapath_binding(const struct engine_context *,
+                                  struct engine_node *, void *data);
 enum engine_input_handler_result
-datapath_sync_global_config_handler(struct engine_node *, void *data);
-enum engine_node_state en_datapath_sync_run(struct engine_node *, void *data);
+datapath_sync_global_config_handler(const struct engine_context *,
+                                    struct engine_node *, void *data);
+enum engine_node_state en_datapath_sync_run(const struct engine_context *,
+                                            struct engine_node *, void *data);
 void en_datapath_sync_cleanup(void *data);
 void en_datapath_sync_clear_tracked_data(void *data);
 

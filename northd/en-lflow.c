@@ -114,7 +114,8 @@ lflow_get_input_data(struct engine_node *node,
 }
 
 enum engine_node_state
-en_lflow_run(struct engine_node *node, void *data)
+en_lflow_run(const struct engine_context *eng_ctx OVS_UNUSED,
+             struct engine_node *node, void *data)
 {
     struct lflow_input lflow_input;
     lflow_get_input_data(node, &lflow_input);
@@ -131,8 +132,8 @@ en_lflow_run(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-lflow_northd_handler(struct engine_node *node,
-                     void *data)
+lflow_northd_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                     struct engine_node *node, void *data)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
@@ -167,7 +168,8 @@ lflow_northd_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-lflow_lr_stateful_handler(struct engine_node *node, void *data)
+lflow_lr_stateful_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                          struct engine_node *node, void *data)
 {
     struct ed_type_lr_stateful *lr_sful_data =
         engine_get_input_data("lr_stateful", node);
@@ -190,7 +192,8 @@ lflow_lr_stateful_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-lflow_ls_stateful_handler(struct engine_node *node, void *data)
+lflow_ls_stateful_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                          struct engine_node *node, void *data)
 {
     struct ed_type_ls_stateful *ls_sful_data =
         engine_get_input_data("ls_stateful", node);
@@ -212,7 +215,8 @@ lflow_ls_stateful_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-lflow_multicast_igmp_handler(struct engine_node *node, void *data)
+lflow_multicast_igmp_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data)
 {
     struct multicast_igmp_data *mcast_igmp_data =
         engine_get_input_data("multicast_igmp", node);
@@ -237,8 +241,9 @@ lflow_multicast_igmp_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-lflow_group_ecmp_route_change_handler(struct engine_node *node,
-                                      void *data OVS_UNUSED)
+lflow_group_ecmp_route_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     struct group_ecmp_route_data *group_ecmp_route_data =
         engine_get_input_data("group_ecmp_route", node);
@@ -283,8 +288,9 @@ lflow_group_ecmp_route_change_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-lflow_ic_learned_svc_mons_handler(struct engine_node *node,
-                                  void *data)
+lflow_ic_learned_svc_mons_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct ic_learned_svc_monitors_data *ic_learned_svc_monitors_data =
         engine_get_input_data("ic_learned_svcs", node);
@@ -316,8 +322,8 @@ lflow_ic_learned_svc_mons_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-lflow_route_policies_handler(struct engine_node *node,
-                             void *data)
+lflow_route_policies_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data)
 {
     struct route_policies_data *rp_data =
         engine_get_input_data("route_policies", node);

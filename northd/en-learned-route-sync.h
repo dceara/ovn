@@ -42,14 +42,17 @@ struct learned_route_sync_data {
 };
 
 enum engine_input_handler_result
-learned_route_sync_northd_change_handler(struct engine_node *, void *data);
+learned_route_sync_northd_change_handler(const struct engine_context *,
+                                         struct engine_node *, void *data);
 enum engine_input_handler_result
-learned_route_sync_sb_learned_route_change_handler(struct engine_node *,
-                                                   void *data);
+learned_route_sync_sb_learned_route_change_handler(
+    const struct engine_context *,
+    struct engine_node *, void *data);
 void *en_learned_route_sync_init(struct engine_node *, struct engine_arg *);
 void en_learned_route_sync_cleanup(void *data);
 void en_learned_route_sync_clear_tracked_data(void *data);
-enum engine_node_state en_learned_route_sync_run(struct engine_node *,
+enum engine_node_state en_learned_route_sync_run(const struct engine_context *,
+                                                 struct engine_node *,
                                                  void *data);
 
 #endif /* EN_LEARNED_ROUTE_SYNC_H */

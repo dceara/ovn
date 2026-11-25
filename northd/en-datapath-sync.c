@@ -432,11 +432,12 @@ datapath_sync_unsynced_datapath_handler(
 }
 
 enum engine_input_handler_result
-datapath_sync_logical_switch_handler(struct engine_node *node, void *data)
+datapath_sync_logical_switch_handler(const struct engine_context *eng_ctx,
+                                     struct engine_node *node, void *data)
 {
     const struct ovn_unsynced_datapath_map *map =
         engine_get_input_data("datapath_logical_switch", node);
-    const struct engine_context *eng_ctx = engine_get_context();
+
     const struct ed_type_global_config *global_config =
         engine_get_input_data("global_config", node);
 
@@ -447,11 +448,12 @@ datapath_sync_logical_switch_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-datapath_sync_logical_router_handler(struct engine_node *node, void *data)
+datapath_sync_logical_router_handler(const struct engine_context *eng_ctx,
+                                     struct engine_node *node, void *data)
 {
     const struct ovn_unsynced_datapath_map *map =
         engine_get_input_data("datapath_logical_router", node);
-    const struct engine_context *eng_ctx = engine_get_context();
+
     const struct ed_type_global_config *global_config =
         engine_get_input_data("global_config", node);
 
@@ -462,7 +464,9 @@ datapath_sync_logical_router_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-datapath_sync_global_config_handler(struct engine_node *node, void *data)
+datapath_sync_global_config_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct ed_type_global_config *global_config =
         engine_get_input_data("global_config", node);
@@ -480,7 +484,9 @@ datapath_sync_global_config_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-datapath_sync_sb_datapath_binding(struct engine_node *node, void *data)
+datapath_sync_sb_datapath_binding(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct sbrec_datapath_binding_table *sb_dp_table =
         EN_OVSDB_GET(engine_get_input("SB_datapath_binding", node));
@@ -559,7 +565,8 @@ en_datapath_sync_clear_tracked_data(void *data)
 }
 
 enum engine_node_state
-en_datapath_sync_run(struct engine_node *node , void *data)
+en_datapath_sync_run(const struct engine_context *eng_ctx,
+                     struct engine_node *node, void *data)
 {
     const struct sbrec_datapath_binding_table *sb_dp_table =
         EN_OVSDB_GET(engine_get_input("SB_datapath_binding", node));
@@ -592,7 +599,6 @@ en_datapath_sync_run(struct engine_node *node , void *data)
     create_synced_datapath_candidates_from_sb(sb_dp_table, &visited,
                                               input_maps, &candidate_sdps);
 
-    const struct engine_context *eng_ctx = engine_get_context();
     create_synced_datapath_candidates_from_nb(input_maps,
                                               eng_ctx->ovnsb_idl_txn, &visited,
                                               &candidate_sdps);

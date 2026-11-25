@@ -120,7 +120,8 @@ en_ls_stateful_clear_tracked_data(void *data_)
 }
 
 enum engine_node_state
-en_ls_stateful_run(struct engine_node *node, void *data_)
+en_ls_stateful_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                   struct engine_node *node, void *data_)
 {
     struct ls_stateful_input input_data = ls_stateful_get_input_data(node);
     struct ed_type_ls_stateful *data = data_;
@@ -134,7 +135,8 @@ en_ls_stateful_run(struct engine_node *node, void *data_)
 
 /* Handler functions. */
 enum engine_input_handler_result
-ls_stateful_northd_handler(struct engine_node *node, void *data_)
+ls_stateful_northd_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                           struct engine_node *node, void *data_)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
@@ -218,7 +220,8 @@ ls_stateful_northd_handler(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-ls_stateful_port_group_handler(struct engine_node *node, void *data_)
+ls_stateful_port_group_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data_)
 {
     struct port_group_data *pg_data =
         engine_get_input_data("port_group", node);
@@ -247,7 +250,8 @@ ls_stateful_port_group_handler(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-ls_stateful_acl_handler(struct engine_node *node, void *data_)
+ls_stateful_acl_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                        struct engine_node *node, void *data_)
 {
     struct ls_stateful_input input_data = ls_stateful_get_input_data(node);
     struct ed_type_ls_stateful *data = data_;

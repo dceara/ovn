@@ -1886,9 +1886,9 @@ route_snapshot_nb_global_opts(struct engine_node *node, struct smap *snap)
 }
 
 enum engine_node_state
-en_route_run(struct engine_node *node, void *data_)
+en_route_run(const struct engine_context *eng_ctx,
+             struct engine_node *node, void *data_)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     struct ed_type_route *data = data_;
     const struct ed_type_az *az = engine_get_input_data("az", node);
@@ -1914,9 +1914,9 @@ en_route_run(struct engine_node *node, void *data_)
  * for the route engine to do). */
 static struct ic_context *
 route_handler_ctx(struct engine_node *node,
-                  const struct icsbrec_availability_zone **runned_az)
+                  const struct icsbrec_availability_zone **runned_az,
+                  struct ic_context *ctx)
 {
-    struct ic_context *ctx = engine_get_context()->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
     *runned_az = az->runned_az;
     return az->runned_az ? ctx : NULL;
@@ -2082,7 +2082,8 @@ route_scope_finish(struct ic_context *ctx,
  * otherwise the options change is irrelevant to routes and is handled as
  * a no-op. */
 enum engine_input_handler_result
-route_nb_nb_global_handler(struct engine_node *node, void *data_)
+route_nb_nb_global_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                           struct engine_node *node, void *data_)
 {
     const struct ed_type_az *az = engine_get_input_data("az", node);
     if (!az->runned_az) {
@@ -2122,11 +2123,12 @@ route_find_ts_in_icnb(struct ic_context *ctx, const char *name)
  * transit switch re-synced; any other logical switch (tenant churn) is
  * irrelevant. */
 enum engine_input_handler_result
-route_nb_logical_switch_handler(struct engine_node *node,
-                                void *data)
+route_nb_logical_switch_handler(const struct engine_context *eng_ctx,
+                                struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2179,11 +2181,12 @@ route_nb_logical_switch_handler(struct engine_node *node,
  * mapped to its transit switches (its IC-SB port bindings are being removed),
  * so it falls back to a full recompute. */
 enum engine_input_handler_result
-route_nb_logical_router_handler(struct engine_node *node,
-                                void *data)
+route_nb_logical_router_handler(const struct engine_context *eng_ctx,
+                                struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2232,11 +2235,12 @@ route_nb_logical_router_handler(struct engine_node *node,
  * route_nb_logical_router_handler; here only column updates to an existing
  * port need to be scoped to the owning router. */
 enum engine_input_handler_result
-route_nb_logical_router_port_handler(struct engine_node *node,
-                                     void *data)
+route_nb_logical_router_port_handler(const struct engine_context *eng_ctx,
+                                     struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2272,11 +2276,13 @@ route_nb_logical_router_port_handler(struct engine_node *node,
  * can no longer be mapped to its owner (it was removed from the router's
  * static_routes column), so it falls back to a full recompute. */
 enum engine_input_handler_result
-route_nb_logical_router_static_route_handler(struct engine_node *node,
-                                             void *data)
+route_nb_logical_router_static_route_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2320,11 +2326,12 @@ route_nb_logical_router_static_route_handler(struct engine_node *node,
  * creation/deletion changes the mirror's 'ports' column and is handled by
  * route_nb_logical_switch_handler. */
 enum engine_input_handler_result
-route_nb_logical_switch_port_handler(struct engine_node *node,
-                                     void *data)
+route_nb_logical_switch_port_handler(const struct engine_context *eng_ctx,
+                                     struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2356,10 +2363,12 @@ route_nb_logical_switch_port_handler(struct engine_node *node,
  * the routers that use this LB.  LB deletion changes the router's
  * load_balancer column and is handled by route_nb_logical_router_handler. */
 enum engine_input_handler_result
-route_nb_load_balancer_handler(struct engine_node *node, void *data)
+route_nb_load_balancer_handler(const struct engine_context *eng_ctx,
+                               struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2390,11 +2399,12 @@ route_nb_load_balancer_handler(struct engine_node *node, void *data)
  * the group.  Group removal changes the router's load_balancer_group column
  * and is handled by route_nb_logical_router_handler. */
 enum engine_input_handler_result
-route_nb_load_balancer_group_handler(struct engine_node *node,
-                                     void *data)
+route_nb_load_balancer_group_handler(const struct engine_context *eng_ctx,
+                                     struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2491,10 +2501,12 @@ route_remove_learned_nb_route(
 /* IC-SB Route: the most impactful input.  Each relevant change is scoped to
  * the route's transit switch.  See the per-case comments. */
 enum engine_input_handler_result
-route_icsb_route_handler(struct engine_node *node, void *data)
+route_icsb_route_handler(const struct engine_context *eng_ctx,
+                         struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2595,11 +2607,12 @@ route_icsb_route_handler(struct engine_node *node, void *data)
  * binding) needs its transit switch re-synced; tunnel_key/gateway/nb_ic_uuid/
  * encap are not read by route_run. */
 enum engine_input_handler_result
-route_icsb_port_binding_handler(struct engine_node *node,
-                                void *data)
+route_icsb_port_binding_handler(const struct engine_context *eng_ctx,
+                                struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2639,11 +2652,12 @@ route_icsb_port_binding_handler(struct engine_node *node,
  * cannot be scoped (the old name is no longer available) and falls back to a
  * full recompute.  Its other_config/external_ids are not read. */
 enum engine_input_handler_result
-route_icnb_transit_switch_handler(struct engine_node *node,
-                                  void *data)
+route_icnb_transit_switch_handler(const struct engine_context *eng_ctx,
+                                  struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2676,11 +2690,12 @@ route_icnb_transit_switch_handler(struct engine_node *node,
  * or removed for an interconnected router changes that lookup, so scope to
  * that router's transit switches. */
 enum engine_input_handler_result
-route_sb_datapath_binding_handler(struct engine_node *node,
-                                  void *data)
+route_sb_datapath_binding_handler(const struct engine_context *eng_ctx,
+                                  struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -2716,10 +2731,12 @@ route_sb_datapath_binding_handler(struct engine_node *node,
  * are advertised by build_ts_routes_to_adv().  Scope a change to the transit
  * switches of the interconnected router owning the route's datapath. */
 enum engine_input_handler_result
-route_sb_learned_route_handler(struct engine_node *node, void *data)
+route_sb_learned_route_handler(const struct engine_context *eng_ctx,
+                               struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = route_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = route_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }

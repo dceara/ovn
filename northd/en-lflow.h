@@ -27,22 +27,30 @@ struct lflow_data {
     struct lflow_tracked_data trk_data;
 };
 
-enum engine_node_state en_lflow_run(struct engine_node *node, void *data);
+enum engine_node_state en_lflow_run(const struct engine_context *eng_ctx,
+                                    struct engine_node *node, void *data);
 void *en_lflow_init(struct engine_node *node, struct engine_arg *arg);
 void en_lflow_cleanup(void *data);
 void en_lflow_clear_tracked_data(void *data);
-enum engine_input_handler_result lflow_northd_handler(struct engine_node *,
-                                                      void *data);
+enum engine_input_handler_result lflow_northd_handler(
+    const struct engine_context *,
+    struct engine_node *, void *data);
 enum engine_input_handler_result
-lflow_lr_stateful_handler(struct engine_node *, void *data);
+lflow_lr_stateful_handler(const struct engine_context *,
+                          struct engine_node *, void *data);
 enum engine_input_handler_result
-lflow_ls_stateful_handler(struct engine_node *node, void *data);
+lflow_ls_stateful_handler(const struct engine_context *eng_ctx,
+                          struct engine_node *node, void *data);
 enum engine_input_handler_result
-lflow_multicast_igmp_handler(struct engine_node *node, void *data);
+lflow_multicast_igmp_handler(const struct engine_context *eng_ctx,
+                             struct engine_node *node, void *data);
 enum engine_input_handler_result
-lflow_group_ecmp_route_change_handler(struct engine_node *node, void *data);
+lflow_group_ecmp_route_change_handler(const struct engine_context *eng_ctx,
+                                      struct engine_node *node, void *data);
 enum engine_input_handler_result
-lflow_ic_learned_svc_mons_handler(struct engine_node *node, void *data);
+lflow_ic_learned_svc_mons_handler(const struct engine_context *eng_ctx,
+                                  struct engine_node *node, void *data);
 enum engine_input_handler_result
-lflow_route_policies_handler(struct engine_node *node, void *data);
+lflow_route_policies_handler(const struct engine_context *eng_ctx,
+                             struct engine_node *node, void *data);
 #endif /* EN_LFLOW_H */

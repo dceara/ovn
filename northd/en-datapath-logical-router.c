@@ -137,7 +137,8 @@ logical_router_is_enabled(const struct nbrec_logical_router *nbr)
 }
 
 enum engine_node_state
-en_datapath_logical_router_run(struct engine_node *node , void *data)
+en_datapath_logical_router_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data)
 {
     const struct nbrec_logical_router_table *nb_lr_table =
         EN_OVSDB_GET(engine_get_input("NB_logical_router", node));
@@ -166,8 +167,9 @@ en_datapath_logical_router_clear_tracked_data(void *data)
 }
 
 enum engine_input_handler_result
-en_datapath_logical_router_logical_router_handler(struct engine_node *node,
-                                                  void *data)
+en_datapath_logical_router_logical_router_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct nbrec_logical_router_table *nb_lr_table =
         EN_OVSDB_GET(engine_get_input("NB_logical_router", node));
@@ -307,7 +309,9 @@ synced_logical_router_alloc(const struct ovn_synced_datapath *sdp)
 }
 
 enum engine_node_state
-en_datapath_synced_logical_router_run(struct engine_node *node , void *data)
+en_datapath_synced_logical_router_run(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);
@@ -346,7 +350,8 @@ en_datapath_synced_logical_router_clear_tracked_data(void *data)
 
 enum engine_input_handler_result
 en_datapath_synced_logical_router_datapath_sync_handler(
-        struct engine_node *node, void *data)
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);

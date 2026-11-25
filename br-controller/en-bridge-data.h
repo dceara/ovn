@@ -36,7 +36,8 @@ struct ed_type_bridge_data {
     struct shash bridges;
 };
 
-enum engine_node_state en_bridge_data_run(struct engine_node *, void *data);
+enum engine_node_state en_bridge_data_run(const struct engine_context *,
+                                          struct engine_node *, void *data);
 void *en_bridge_data_init(struct engine_node *node, struct engine_arg *arg);
 void en_bridge_data_cleanup(void *data);
 

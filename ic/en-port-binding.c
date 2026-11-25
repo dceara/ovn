@@ -1242,9 +1242,9 @@ struct ed_type_port_binding {
 };
 
 enum engine_node_state
-en_port_binding_run(struct engine_node *node, void *data OVS_UNUSED)
+en_port_binding_run(const struct engine_context *eng_ctx,
+                    struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 
@@ -1264,9 +1264,9 @@ en_port_binding_run(struct engine_node *node, void *data OVS_UNUSED)
  * '*runned_az' to the AZ resolved by the upstream en_az node. */
 static struct ic_context *
 port_binding_handler_ctx(struct engine_node *node,
-                         const struct icsbrec_availability_zone **runned_az)
+                         const struct icsbrec_availability_zone **runned_az,
+                         struct ic_context *ctx)
 {
-    struct ic_context *ctx = engine_get_context()->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
     *runned_az = az->runned_az;
     return az->runned_az ? ctx : NULL;
@@ -1329,11 +1329,12 @@ port_binding_scope_finish(struct ic_context *ctx,
  * collected under the old one would leak) and falls back to a full
  * recompute. */
 enum engine_input_handler_result
-port_binding_icnb_transit_switch_handler(struct engine_node *node,
-                                         void *data)
+port_binding_icnb_transit_switch_handler(const struct engine_context *eng_ctx,
+                                         struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1367,11 +1368,12 @@ port_binding_icnb_transit_switch_handler(struct engine_node *node,
 /* IC-NB Transit_Router: analogous to the transit-switch handler, including
  * the full-recompute fallback on a rename. */
 enum engine_input_handler_result
-port_binding_icnb_transit_router_handler(struct engine_node *node,
-                                         void *data)
+port_binding_icnb_transit_router_handler(const struct engine_context *eng_ctx,
+                                         struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1409,11 +1411,13 @@ port_binding_icnb_transit_router_handler(struct engine_node *node,
  * twice in one iteration and double-delete rows, so new/deleted ports are
  * skipped. */
 enum engine_input_handler_result
-port_binding_icnb_transit_router_port_handler(struct engine_node *node,
-                                              void *data)
+port_binding_icnb_transit_router_port_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1452,11 +1456,13 @@ port_binding_icnb_transit_router_port_handler(struct engine_node *node,
  * reconcile the same switch twice in one iteration and double-delete rows, so
  * new/deleted ports are skipped. */
 enum engine_input_handler_result
-port_binding_icnb_transit_switch_port_handler(struct engine_node *node,
-                                              void *data)
+port_binding_icnb_transit_switch_port_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1515,11 +1521,12 @@ port_binding_icnb_transit_switch_port_handler(struct engine_node *node,
  * idempotent (guarded by value comparisons), so they converge without a
  * feedback loop. */
 enum engine_input_handler_result
-port_binding_icsb_port_binding_handler(struct engine_node *node,
-                                       void *data)
+port_binding_icsb_port_binding_handler(const struct engine_context *eng_ctx,
+                                       struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1548,11 +1555,12 @@ port_binding_icsb_port_binding_handler(struct engine_node *node,
  * are read by the sync.  A change to such a mirror (its ports, name, or its
  * deletion) reconciles the transit switch; tenant switches are irrelevant. */
 enum engine_input_handler_result
-port_binding_nb_logical_switch_handler(struct engine_node *node,
-                                       void *data)
+port_binding_nb_logical_switch_handler(const struct engine_context *eng_ctx,
+                                       struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1579,11 +1587,13 @@ port_binding_nb_logical_switch_handler(struct engine_node *node,
  * reconciles its transit switch.  Port creation/deletion changes the mirror's
  * 'ports' column and is handled by the NB logical_switch handler. */
 enum engine_input_handler_result
-port_binding_nb_logical_switch_port_handler(struct engine_node *node,
-                                            void *data)
+port_binding_nb_logical_switch_port_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1614,11 +1624,12 @@ port_binding_nb_logical_switch_port_handler(struct engine_node *node,
 /* NB Logical_Router: only transit-router mirrors (options:interconn-tr) are
  * read by the sync. */
 enum engine_input_handler_result
-port_binding_nb_logical_router_handler(struct engine_node *node,
-                                       void *data)
+port_binding_nb_logical_router_handler(const struct engine_context *eng_ctx,
+                                       struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1645,11 +1656,13 @@ port_binding_nb_logical_router_handler(struct engine_node *node,
  * reconciles its transit router.  Port creation/deletion changes the mirror's
  * 'ports' column and is handled by the NB logical_router handler. */
 enum engine_input_handler_result
-port_binding_nb_logical_router_port_handler(struct engine_node *node,
-                                            void *data)
+port_binding_nb_logical_router_port_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1683,11 +1696,12 @@ port_binding_nb_logical_router_port_handler(struct engine_node *node,
  * switch via the name map; SB bindings of no IC port are irrelevant.  Transit-
  * router syncs do not read SB port bindings. */
 enum engine_input_handler_result
-port_binding_sb_port_binding_handler(struct engine_node *node,
-                                     void *data)
+port_binding_sb_port_binding_handler(const struct engine_context *eng_ctx,
+                                     struct engine_node *node, void *data)
 {
     const struct icsbrec_availability_zone *runned_az;
-    struct ic_context *ctx = port_binding_handler_ctx(node, &runned_az);
+    struct ic_context *ctx = port_binding_handler_ctx(
+        node, &runned_az, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -1725,8 +1739,9 @@ port_binding_sb_port_binding_handler(struct engine_node *node,
  * other_config change, and ignore the rest instead of forcing a full
  * recompute on every chassis update. */
 enum engine_input_handler_result
-port_binding_sb_chassis_handler(struct engine_node *node,
-                                void *data OVS_UNUSED)
+port_binding_sb_chassis_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct ed_type_az *az = engine_get_input_data("az", node);
     if (!az->runned_az) {

@@ -662,7 +662,8 @@ group_ecmp_route(struct group_ecmp_route_data *data,
 }
 
 enum engine_node_state
-en_group_ecmp_route_run(struct engine_node *node, void *_data)
+en_group_ecmp_route_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                        struct engine_node *node, void *_data)
 {
     struct group_ecmp_route_data *data = _data;
     group_ecmp_route_clear(data);
@@ -753,8 +754,9 @@ handle_deleted_route(struct group_ecmp_route_data *data,
 }
 
 enum engine_input_handler_result
-group_ecmp_route_learned_route_change_handler(struct engine_node *eng_node,
-                                              void *_data)
+group_ecmp_route_learned_route_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *eng_node, void *_data)
 {
     struct group_ecmp_route_data *data = _data;
     struct learned_route_sync_data *learned_route_data
@@ -810,8 +812,9 @@ group_ecmp_route_learned_route_change_handler(struct engine_node *eng_node,
 }
 
 enum engine_input_handler_result
-group_ecmp_route_routes_change_handler(struct engine_node *eng_node,
-                                       void *_data)
+group_ecmp_route_routes_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *eng_node, void *_data)
 {
     struct routes_data *routes_data
         = engine_get_input_data("routes", eng_node);
@@ -866,8 +869,9 @@ group_ecmp_route_routes_change_handler(struct engine_node *eng_node,
  * content.  tracked=false therefore means that the rebuild produced no
  * delta, even when parsed_routes itself is nonempty. */
 enum engine_input_handler_result
-group_ecmp_route_dynamic_routes_change_handler(struct engine_node *eng_node,
-                                                void *data)
+group_ecmp_route_dynamic_routes_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *eng_node, void *data)
 {
     struct group_ecmp_route_data *gdata = data;
     struct dynamic_routes_data *dynamic_routes_data

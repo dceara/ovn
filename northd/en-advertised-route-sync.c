@@ -221,13 +221,14 @@ en_advertised_route_sync_cleanup(void *data OVS_UNUSED)
 }
 
 enum engine_node_state
-en_advertised_route_sync_run(struct engine_node *node, void *data OVS_UNUSED)
+en_advertised_route_sync_run(const struct engine_context *eng_ctx,
+                             struct engine_node *node, void *data OVS_UNUSED)
 {
     struct routes_data *routes_data
         = engine_get_input_data("routes", node);
     struct dynamic_routes_data *dynamic_routes_data
         = engine_get_input_data("dynamic_routes", node);
-    const struct engine_context *eng_ctx = engine_get_context();
+
     const struct sbrec_advertised_route_table *sbrec_advertised_route_table =
         EN_OVSDB_GET(engine_get_input("SB_advertised_route", node));
 
@@ -968,7 +969,8 @@ en_dynamic_routes_cleanup(void *data_)
 }
 
 enum engine_node_state
-en_dynamic_routes_run(struct engine_node *node, void *data)
+en_dynamic_routes_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                      struct engine_node *node, void *data)
 {
     struct dynamic_routes_data *dynamic_routes_data = data;
     struct northd_data *northd_data = engine_get_input_data("northd", node);
@@ -1020,8 +1022,9 @@ en_dynamic_routes_run(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-dynamic_routes_lr_stateful_change_handler(struct engine_node *node,
-                                          void *data_)
+dynamic_routes_lr_stateful_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data_)
 {
     /* We only actually use lr_stateful data if we expose individual host
      * routes. In this case we for now just recompute. */
@@ -1042,7 +1045,9 @@ dynamic_routes_lr_stateful_change_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-dynamic_routes_northd_change_handler(struct engine_node *node, void *data_)
+dynamic_routes_northd_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data_)
 {
     struct dynamic_routes_data *data = data_;
     struct northd_data *northd_data = engine_get_input_data("northd", node);
@@ -1458,7 +1463,8 @@ en_advertised_mac_binding_sync_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_advertised_mac_binding_sync_run(struct engine_node *node,
+en_advertised_mac_binding_sync_run(const struct engine_context *eng_ctx,
+                                   struct engine_node *node,
                                    void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
@@ -1466,7 +1472,7 @@ en_advertised_mac_binding_sync_run(struct engine_node *node,
         EN_OVSDB_GET(engine_get_input("SB_advertised_mac_binding", node));
     struct ed_type_lr_nat_data *lr_nat_data =
         engine_get_input_data("lr_nat", node);
-    const struct engine_context *eng_ctx = engine_get_context();
+
 
     struct hmap advertised_mac_binding_map =
         HMAP_INITIALIZER(&advertised_mac_binding_map);
@@ -1519,14 +1525,16 @@ en_advertised_mac_binding_sync_cleanup(void *data OVS_UNUSED)
 
 enum engine_input_handler_result
 northd_output_advertised_mac_binding_sync_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
     struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
 {
     return EN_HANDLED_UPDATED;
 }
 
 enum engine_input_handler_result
-advertised_mac_binding_sync_northd_change_handler(struct engine_node *node,
-                                                  void *data OVS_UNUSED)
+advertised_mac_binding_sync_northd_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct northd_tracked_data *trk_data = &northd_data->trk_data;

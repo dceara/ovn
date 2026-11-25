@@ -115,7 +115,8 @@ en_multicast_igmp_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_multicast_igmp_run(struct engine_node *node, void *data_)
+en_multicast_igmp_run(const struct engine_context *eng_ctx,
+                      struct engine_node *node, void *data_)
 {
     struct multicast_igmp_data *data = data_;
     struct northd_data *northd_data = engine_get_input_data("northd", node);
@@ -127,7 +128,7 @@ en_multicast_igmp_run(struct engine_node *node, void *data_)
         engine_ovsdb_node_get_index(
             engine_get_input("SB_multicast_group", node),
             "sbrec_mcast_group_by_name");
-    const struct engine_context *eng_ctx = engine_get_context();
+
 
     ovn_multicast_groups_destroy(&data->mcast_groups);
     ovn_igmp_groups_destroy(&data->igmp_groups);
@@ -146,7 +147,8 @@ en_multicast_igmp_run(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-multicast_igmp_northd_handler(struct engine_node *node, void *data OVS_UNUSED)
+multicast_igmp_northd_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                              struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
