@@ -18,7 +18,6 @@
 
 #include <errno.h>
 #include <getopt.h>
-#include <inttypes.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,18 +32,38 @@
 #include "inc-proc-eng.h"
 #include "timeval.h"
 #include "unixctl.h"
-#include "vec.h"
 #include "sset.h"
 #include "lib/stopwatch.h"
 
 VLOG_DEFINE_THIS_MODULE(inc_proc_eng);
 
-static bool engine_force_recompute = false;
-static bool engine_run_canceled = false;
-static const struct engine_context *engine_context;
+struct engine {
+    const char *name;
 
-static struct vector engine_nodes =
-    VECTOR_EMPTY_INITIALIZER(struct engine_node *);
+    struct vector nodes;
+    struct shash stopwatch_keys;
+
+    bool force_recompute;
+    bool run_canceled;
+    long long compute_log_timeout_msec;
+};
+
+#define ENGINE_INITIALIZER(E, NAME)                                  \
+    (struct engine) {                                                \
+        .name = (NAME),                                              \
+        .nodes = VECTOR_EMPTY_INITIALIZER(struct engine_node *),     \
+        .stopwatch_keys = SHASH_INITIALIZER(&(E)->stopwatch_keys),   \
+        .force_recompute = false,                                    \
+        .run_canceled = false,                                       \
+        .compute_log_timeout_msec = 500,                             \
+    }
+
+/* Keep used names so a new graph cannot inherit the process-wide OVS
+ * stopwatch records of a retired graph. */
+static struct shash registered_engines =
+    SHASH_INITIALIZER(&registered_engines);
+
+static const struct engine_context *engine_context;
 
 static const char *engine_node_state_name[EN_STATE_MAX] = {
     [EN_STALE]     = "Stale",
@@ -53,35 +72,33 @@ static const char *engine_node_state_name[EN_STATE_MAX] = {
     [EN_CANCELED]   = "Canceled",
 };
 
-static long long engine_compute_log_timeout_msec = 500;
-
 static void
-engine_recompute(struct engine_node *node, bool allowed,
-                 const char *reason_fmt, ...) OVS_PRINTF_FORMAT(3, 4);
+engine_recompute(struct engine *, struct engine_node *, bool allowed,
+                 const char *reason_fmt, ...) OVS_PRINTF_FORMAT(4, 5);
 
 void
-engine_set_force_recompute(void)
+engine_set_force_recompute(struct engine *e)
 {
-    engine_force_recompute = true;
+    e->force_recompute = true;
 }
 
 void
-engine_set_force_recompute_immediate(void)
+engine_set_force_recompute_immediate(struct engine *e)
 {
-    engine_force_recompute = true;
+    e->force_recompute = true;
     poll_immediate_wake();
 }
 
 void
-engine_clear_force_recompute(void)
+engine_clear_force_recompute(struct engine *e)
 {
-    engine_force_recompute = false;
+    e->force_recompute = false;
 }
 
 bool
-engine_get_force_recompute(void)
+engine_get_force_recompute(const struct engine *e)
 {
-    return engine_force_recompute;
+    return e->force_recompute;
 }
 
 const struct engine_context *
@@ -120,26 +137,26 @@ engine_topo_sort(struct engine_node *node, struct vector *sorted_nodes)
 }
 
 static void
-engine_clear_stats(struct unixctl_conn *conn, int argc OVS_UNUSED,
-                   const char *argv[] OVS_UNUSED, void *arg OVS_UNUSED)
+engine_clear_stats(struct engine *e, struct unixctl_conn *conn,
+                   int argc OVS_UNUSED, const char *argv[] OVS_UNUSED)
 {
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         memset(&node->stats, 0, sizeof node->stats);
     }
     unixctl_command_reply(conn, NULL);
 }
 
 static void
-engine_dump_stats(struct unixctl_conn *conn, int argc,
-                  const char *argv[], void *arg OVS_UNUSED)
+engine_dump_stats(struct engine *e, struct unixctl_conn *conn, int argc,
+                  const char *argv[])
 {
     struct ds dump = DS_EMPTY_INITIALIZER;
-    const char *dump_eng_node_name = (argc > 1 ? argv[1] : NULL);
-    const char *dump_stat_type = (argc > 2 ? argv[2] : NULL);
+    const char *dump_eng_node_name = argc > 0 ? argv[0] : NULL;
+    const char *dump_stat_type = argc > 1 ? argv[1] : NULL;
 
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         if (dump_eng_node_name && strcmp(node->name, dump_eng_node_name)) {
             continue;
         }
@@ -175,115 +192,215 @@ engine_dump_stats(struct unixctl_conn *conn, int argc,
 }
 
 static void
-engine_trigger_recompute_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
-                             const char *argv[] OVS_UNUSED,
-                             void *arg OVS_UNUSED)
+engine_trigger_recompute_cmd(struct engine *e, struct unixctl_conn *conn,
+                             int argc OVS_UNUSED,
+                             const char *argv[] OVS_UNUSED)
 {
-    engine_trigger_recompute();
+    engine_trigger_recompute(e);
     unixctl_command_reply(conn, NULL);
 }
 
 static void
-engine_set_log_timeout_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
-                           const char *argv[], void *arg OVS_UNUSED)
+engine_set_log_timeout_cmd(struct engine *e, struct unixctl_conn *conn,
+                           int argc OVS_UNUSED, const char *argv[])
 {
 
     unsigned int timeout;
-    if (!str_to_uint(argv[1], 10, &timeout)) {
+    if (!str_to_uint(argv[0], 10, &timeout)) {
         unixctl_command_reply_error(conn, "unsigned integer required");
         return;
     }
-    engine_compute_log_timeout_msec = timeout;
+    e->compute_log_timeout_msec = timeout;
     unixctl_command_reply(conn, NULL);
 }
 
 #define ENGINE_STOPWATCH_MAX_NAME 31
 #define ENGINE_STOPWATCH_PREFIX "@ip:"
 
-BUILD_ASSERT_DECL(sizeof ENGINE_STOPWATCH_PREFIX "4294967295"
+BUILD_ASSERT_DECL(sizeof ENGINE_STOPWATCH_PREFIX "4294967295:4294967295"
                   <= ENGINE_STOPWATCH_MAX_NAME + 1);
 
-static struct shash engine_stopwatch_keys =
-    SHASH_INITIALIZER(&engine_stopwatch_keys);
-
 static void
-engine_list_stopwatch_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
-                          const char *argv[], void *arg OVS_UNUSED)
+engine_list_stopwatches_cmd(struct engine *e, struct unixctl_conn *conn,
+                            int argc, const char *argv[])
 {
-    const char *node_name = argc > 1 ? argv[1] : NULL;
+    const char *node_name = argc ? argv[0] : NULL;
+    struct ds output = DS_EMPTY_INITIALIZER;
+
     struct engine_node *node;
-    struct ds output_str = DS_EMPTY_INITIALIZER;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         if (node_name && strcmp(node->name, node_name)) {
             continue;
         }
-        ds_put_format(&output_str, "%s -> %s\n", node->name,
+        ds_put_format(&output, "%s -> %s\n", node->name,
                       node->stopwatch_key);
         for (size_t i = 0; i < node->n_inputs; i++) {
-            struct engine_node_input *input = &node->inputs[i];
-            if (!input->change_handler) {
-                continue;
+            const struct engine_node_input *input = &node->inputs[i];
+            if (input->change_handler) {
+                ds_put_format(&output, "%s -> %s\n",
+                              input->change_handler_name,
+                              input->stopwatch_key);
             }
-            ds_put_format(&output_str, "%s -> %s\n",
-                          input->change_handler_name, input->stopwatch_key);
         }
     }
 
-    unixctl_command_reply(conn, ds_cstr(&output_str));
-    ds_destroy(&output_str);
+    unixctl_command_reply(conn, ds_cstr(&output));
+    ds_destroy(&output);
 }
 
 static void
-engine_set_stopwatch_cmd(struct unixctl_conn *conn, int argc,
-                         const char *argv[], bool enabled)
+engine_set_stopwatch_cmd(struct engine *e, struct unixctl_conn *conn,
+                         int argc, const char *argv[], bool enabled)
 {
-    const char *node_name = argc > 1 ? argv[1] : NULL;
+    const char *node_name = argc ? argv[0] : NULL;
 
     struct engine_node *node;
-    bool found = false;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
-        if (node_name && strcmp(node->name, node_name)) {
-            continue;
-        }
-        node->stopwatch_enabled = enabled;
-        found = true;
-        if (node_name) {
-            break;
+    VECTOR_FOR_EACH (&e->nodes, node) {
+        if (!node_name || !strcmp(node->name, node_name)) {
+            node->stopwatch_enabled = enabled;
+            if (node_name) {
+                unixctl_command_reply(conn, NULL);
+                return;
+            }
         }
     }
-
-    if (node_name && !found) {
+    if (node_name) {
         unixctl_command_reply_error(conn, "node not found");
+    } else {
+        unixctl_command_reply(conn, NULL);
+    }
+}
+
+static void
+engine_enable_stopwatches_cmd(struct engine *e, struct unixctl_conn *conn,
+                              int argc, const char *argv[])
+{
+    engine_set_stopwatch_cmd(e, conn, argc, argv, true);
+}
+
+static void
+engine_disable_stopwatches_cmd(struct engine *e, struct unixctl_conn *conn,
+                               int argc, const char *argv[])
+{
+    engine_set_stopwatch_cmd(e, conn, argc, argv, false);
+}
+
+static void
+engine_list_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
+                const char *argv[] OVS_UNUSED, void *aux OVS_UNUSED)
+{
+    struct ds output = DS_EMPTY_INITIALIZER;
+    const struct shash_node **engines = shash_sort(&registered_engines);
+
+    for (size_t i = 0; i < shash_count(&registered_engines); i++) {
+        ds_put_format(&output, "%s\n", engines[i]->name);
+    }
+    unixctl_command_reply(conn, ds_cstr(&output));
+    free(engines);
+    ds_destroy(&output);
+}
+
+struct engine_command {
+    const char *name;
+    const char *usage;
+    int min_args;
+    int max_args;
+    void (*run)(struct engine *, struct unixctl_conn *,
+                int argc, const char *argv[]);
+};
+
+static void
+engine_dispatch_cmd(struct unixctl_conn *conn, int argc, const char *argv[],
+                     void *aux)
+{
+    const struct engine_command *command = aux;
+    struct engine *e;
+
+    /* Skip the command name and consume an optional leading selector. */
+    argc--;
+    argv++;
+    const char selector[] = "--engine=";
+    const char *name = NULL;
+    for (int i = 0; i < argc; i++) {
+        bool has_value = !strncmp(argv[i], selector, sizeof selector - 1);
+        if (!strcmp(argv[i], "--engine")
+            || (has_value && (i || !argv[i][sizeof selector - 1]))) {
+            unixctl_command_reply_error(conn, "expected one leading "
+                                        "--engine=NAME selector");
+            return;
+        }
+        if (has_value) {
+            name = argv[i] + sizeof selector - 1;
+        }
+    }
+    if (name) {
+        e = shash_find_data(&registered_engines, name);
+        if (!e) {
+            unixctl_command_reply_error(conn, "unknown registered engine");
+            return;
+        }
+        argc--;
+        argv++;
+    } else if (shash_is_empty(&registered_engines)) {
+        unixctl_command_reply_error(conn, "no registered engines");
+        return;
+    } else if (shash_count(&registered_engines) > 1) {
+        unixctl_command_reply_error(conn, "multiple registered engines; use"
+                                    " inc-engine/list-engines and"
+                                    " --engine=NAME");
+        return;
+    } else {
+        e = shash_first(&registered_engines)->data;
+    }
+
+    if (argc < command->min_args || argc > command->max_args) {
+        unixctl_command_reply_error(conn, "wrong number of arguments");
         return;
     }
-    unixctl_command_reply(conn, NULL);
+    command->run(e, conn, argc, argv);
 }
 
-static void
-engine_enable_stopwatches_cmd(struct unixctl_conn *conn, int argc,
-                              const char *argv[], void *arg OVS_UNUSED)
+void
+engine_infra_init(void)
 {
-    engine_set_stopwatch_cmd(conn, argc, argv, true);
-}
+    static struct engine_command commands[] = {
+        { "inc-engine/show-stats", "[--engine=NAME] [NODE [COUNTER]]", 0, 2,
+          engine_dump_stats },
+        { "inc-engine/clear-stats", "[--engine=NAME]", 0, 0,
+          engine_clear_stats },
+        { "inc-engine/recompute", "[--engine=NAME]", 0, 0,
+          engine_trigger_recompute_cmd },
+        { "inc-engine/compute-log-timeout", "[--engine=NAME] MSEC", 1, 1,
+          engine_set_log_timeout_cmd },
+        { "inc-engine/list-stopwatches", "[--engine=NAME] [NODE]", 0, 1,
+          engine_list_stopwatches_cmd },
+        { "inc-engine/enable-stopwatch", "[--engine=NAME] [NODE]", 0, 1,
+          engine_enable_stopwatches_cmd },
+        { "inc-engine/disable-stopwatch", "[--engine=NAME] [NODE]", 0, 1,
+          engine_disable_stopwatches_cmd },
+    };
 
-static void
-engine_disable_stopwatches_cmd(struct unixctl_conn *conn, int argc,
-                               const char *argv[], void *arg OVS_UNUSED)
-{
-    engine_set_stopwatch_cmd(conn, argc, argv, false);
+    unixctl_command_register("inc-engine/list-engines", "", 0, 0,
+                             engine_list_cmd, NULL);
+    for (size_t i = 0; i < ARRAY_SIZE(commands); i++) {
+        struct engine_command *command = &commands[i];
+        unixctl_command_register(command->name, command->usage,
+                                 command->min_args, command->max_args + 1,
+                                 engine_dispatch_cmd, command);
+    }
 }
 
 static const char *
-engine_register_stopwatch(const char *label)
+engine_register_stopwatch(struct engine *e, uint32_t id, const char *label)
 {
-    char *key = shash_find_data(&engine_stopwatch_keys, label);
+    char *key = shash_find_data(&e->stopwatch_keys, label);
     if (!key) {
-        size_t n_keys = shash_count(&engine_stopwatch_keys);
+        size_t n_keys = shash_count(&e->stopwatch_keys);
         ovs_assert(n_keys <= UINT32_MAX);
-
-        key = xasprintf(ENGINE_STOPWATCH_PREFIX"%"PRIuSIZE, n_keys);
+        key = xasprintf(ENGINE_STOPWATCH_PREFIX"%"PRIu32":%"PRIuSIZE,
+                        id, n_keys);
         stopwatch_create(key, SW_MS);
-        shash_add(&engine_stopwatch_keys, label, key);
+        shash_add(&e->stopwatch_keys, label, key);
     }
     return key;
 }
@@ -294,13 +411,24 @@ engine_get_compute_failure_info(struct engine_node *node)
     VLOG_DBG("Node \"%s\" is missing compute failure debug info.", node->name);
 }
 
-void
-engine_init(struct engine_node *node, struct engine_arg *arg)
+struct engine *
+engine_register(const char *name, struct engine_node *node,
+                struct engine_arg *arg)
 {
-    engine_topo_sort(node, &engine_nodes);
+    if (!name || !name[0]) {
+        ovs_fatal(0, "Missing incremental processing engine name");
+    }
+    if (shash_find(&registered_engines, name)) {
+        ovs_fatal(0, "Could not register incremental processing engine '%s'",
+                  name);
+    }
+
+    struct engine *e = xmalloc(sizeof *e);
+    *e = ENGINE_INITIALIZER(e, name);
+    engine_topo_sort(node, &e->nodes);
 
     struct engine_node *sorted_node;
-    VECTOR_FOR_EACH (&engine_nodes, sorted_node) {
+    VECTOR_FOR_EACH (&e->nodes, sorted_node) {
         if (sorted_node->init) {
             sorted_node->data = sorted_node->init(sorted_node, arg);
         } else {
@@ -313,39 +441,36 @@ engine_init(struct engine_node *node, struct engine_arg *arg)
         }
     }
 
-    VECTOR_FOR_EACH (&engine_nodes, sorted_node) {
-        sorted_node->stopwatch_key =
-            engine_register_stopwatch(sorted_node->name);
-        for (size_t i = 0; i < sorted_node->n_inputs; i++) {
-            struct engine_node_input *input = &sorted_node->inputs[i];
+    size_t id = shash_count(&registered_engines);
+    ovs_assert(id <= UINT32_MAX);
+
+    VECTOR_FOR_EACH (&e->nodes, node) {
+        node->stopwatch_key =
+            engine_register_stopwatch(e, id, node->name);
+        for (size_t i = 0; i < node->n_inputs; i++) {
+            struct engine_node_input *input = &node->inputs[i];
             if (input->change_handler) {
                 input->stopwatch_key =
-                    engine_register_stopwatch(input->change_handler_name);
+                    engine_register_stopwatch(e, id,
+                                              input->change_handler_name);
             }
         }
     }
+    shash_add(&registered_engines, e->name, e);
 
-    unixctl_command_register("inc-engine/show-stats", "", 0, 2,
-                             engine_dump_stats, NULL);
-    unixctl_command_register("inc-engine/clear-stats", "", 0, 0,
-                             engine_clear_stats, NULL);
-    unixctl_command_register("inc-engine/recompute", "", 0, 0,
-                             engine_trigger_recompute_cmd, NULL);
-    unixctl_command_register("inc-engine/compute-log-timeout", "", 1, 1,
-                             engine_set_log_timeout_cmd, NULL);
-    unixctl_command_register("inc-engine/list-stopwatches", "", 0, 1,
-                             engine_list_stopwatch_cmd, NULL);
-    unixctl_command_register("inc-engine/enable-stopwatch", "[node]", 0, 1,
-                             engine_enable_stopwatches_cmd, NULL);
-    unixctl_command_register("inc-engine/disable-stopwatch", "[node]", 0, 1,
-                             engine_disable_stopwatches_cmd, NULL);
+    return e;
 }
 
 void
-engine_cleanup(void)
+engine_deregister(struct engine *e)
 {
+    ovs_assert(e->name);
+    struct shash_node *registered = shash_find(&registered_engines, e->name);
+    ovs_assert(registered && registered->data == e);
+    shash_delete(&registered_engines, registered);
+
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         if (node->clear_tracked_data) {
             node->clear_tracked_data(node->data);
         }
@@ -361,8 +486,9 @@ engine_cleanup(void)
         }
     }
 
-    shash_destroy_free_data(&engine_stopwatch_keys);
-    vector_destroy(&engine_nodes);
+    shash_destroy_free_data(&e->stopwatch_keys);
+    vector_destroy(&e->nodes);
+    free(e);
 }
 
 struct engine_node *
@@ -480,10 +606,10 @@ engine_node_changed(struct engine_node *node)
 }
 
 bool
-engine_has_run(void)
+engine_has_run(const struct engine *e)
 {
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         if (node->state != EN_STALE) {
             return true;
         }
@@ -492,10 +618,10 @@ engine_has_run(void)
 }
 
 bool
-engine_has_updated(void)
+engine_has_updated(const struct engine *e)
 {
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         if (node->state == EN_UPDATED) {
             return true;
         }
@@ -504,9 +630,9 @@ engine_has_updated(void)
 }
 
 bool
-engine_canceled(void)
+engine_canceled(const struct engine *e)
 {
-    return engine_run_canceled;
+    return e->run_canceled;
 }
 
 void *
@@ -525,11 +651,11 @@ engine_get_internal_data(struct engine_node *node)
 }
 
 void
-engine_init_run(void)
+engine_init_run(struct engine *e)
 {
-    VLOG_DBG("Initializing new run");
+    VLOG_DBG("Initializing new run for engine %s", e->name);
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         engine_set_node_state(node, EN_STALE, "engine_init_run");
 
         if (node->clear_tracked_data) {
@@ -570,7 +696,7 @@ run_change_handler(struct engine_node *node, struct engine_node_input *input)
  * mark the node as "canceled".
  */
 static void
-engine_recompute(struct engine_node *node, bool allowed,
+engine_recompute(struct engine *e, struct engine_node *node, bool allowed,
                  const char *reason_fmt, ...)
 {
     char *reason = NULL;
@@ -581,7 +707,8 @@ engine_recompute(struct engine_node *node, bool allowed,
     va_end(reason_args);
 
     if (node->sb_write && !allowed) {
-        VLOG_DBG("node: %s, recompute (%s) canceled", node->name, reason);
+        VLOG_DBG("engine %s, node: %s, recompute (%s) canceled",
+                 e->name, node->name, reason);
         engine_set_node_state(node, EN_CANCELED, "recompute not allowed");
         goto done;
     }
@@ -598,13 +725,13 @@ engine_recompute(struct engine_node *node, bool allowed,
                           "recompute run() result");
     node->stats.recompute++;
     long long int delta_time = time_msec() - now;
-    if (delta_time > engine_compute_log_timeout_msec) {
+    if (delta_time > e->compute_log_timeout_msec) {
         static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(20, 10);
-        VLOG_INFO_RL(&rl, "node: %s, recompute (%s) took %lldms", node->name,
-                     reason, delta_time);
+        VLOG_INFO_RL(&rl, "engine %s, node: %s, recompute (%s) took %lldms",
+                     e->name, node->name, reason, delta_time);
     } else {
-        VLOG_DBG("node: %s, recompute (%s) took %lldms", node->name, reason,
-                 delta_time);
+        VLOG_DBG("engine %s, node: %s, recompute (%s) took %lldms",
+                 e->name, node->name, reason, delta_time);
     }
 done:
     free(reason);
@@ -612,7 +739,8 @@ done:
 
 /* Return true if the node could be computed, false otherwise. */
 static bool
-engine_compute(struct engine_node *node, bool recompute_allowed)
+engine_compute(struct engine *e, struct engine_node *node,
+               bool recompute_allowed)
 {
     for (size_t i = 0; i < node->n_inputs; i++) {
         struct engine_node *input_node = node->inputs[i].node;
@@ -626,18 +754,20 @@ engine_compute(struct engine_node *node, bool recompute_allowed)
             enum engine_input_handler_result handled;
             handled = run_change_handler(node, &node->inputs[i]);
             long long int delta_time = time_msec() - now;
-            if (delta_time > engine_compute_log_timeout_msec) {
+            if (delta_time > e->compute_log_timeout_msec) {
                 static struct vlog_rate_limit rl =
                     VLOG_RATE_LIMIT_INIT(20, 10);
-                VLOG_INFO_RL(&rl, "node: %s, handler for input %s took %lldms",
-                             node->name, input_node->name, delta_time);
+                VLOG_INFO_RL(&rl, "engine %s, node: %s, handler for input %s"
+                             " took %lldms", e->name, node->name,
+                             input_node->name, delta_time);
             } else {
-                VLOG_DBG("node: %s, handler for input %s took %lldms",
-                         node->name, input_node->name, delta_time);
+                VLOG_DBG("engine %s, node: %s, handler for input %s took"
+                         " %lldms", e->name, node->name, input_node->name,
+                         delta_time);
             }
             if (handled == EN_UNHANDLED) {
                 input_node->get_compute_failure_info(input_node);
-                engine_recompute(node, recompute_allowed,
+                engine_recompute(e, node, recompute_allowed,
                                  "failed handler for input %s",
                                  input_node->name);
                 return (node->state != EN_CANCELED);
@@ -657,7 +787,8 @@ engine_compute(struct engine_node *node, bool recompute_allowed)
 }
 
 static void
-engine_run_node(struct engine_node *node, bool recompute_allowed)
+engine_run_node(struct engine *e, struct engine_node *node,
+                bool recompute_allowed)
 {
     if (!node->n_inputs) {
         /* Run the node handler which might change state. */
@@ -667,8 +798,8 @@ engine_run_node(struct engine_node *node, bool recompute_allowed)
         return;
     }
 
-    if (engine_force_recompute) {
-        engine_recompute(node, recompute_allowed, "forced");
+    if (e->force_recompute) {
+        engine_recompute(e, node, recompute_allowed, "forced");
         return;
     }
 
@@ -683,7 +814,7 @@ engine_run_node(struct engine_node *node, bool recompute_allowed)
 
             /* Trigger a recompute if we don't have a change handler. */
             if (!node->inputs[i].change_handler) {
-                engine_recompute(node, recompute_allowed,
+                engine_recompute(e, node, recompute_allowed,
                                  "missing handler for input %s",
                                  input_node->name);
                 input_node->get_compute_failure_info(input_node);
@@ -696,7 +827,7 @@ engine_run_node(struct engine_node *node, bool recompute_allowed)
         /* If we couldn't compute the node we either canceled or triggered
          * a full recompute. In any case, stop processing.
          */
-        if (!engine_compute(node, recompute_allowed)) {
+        if (!engine_compute(e, node, recompute_allowed)) {
             return;
         }
     }
@@ -710,37 +841,37 @@ engine_run_node(struct engine_node *node, bool recompute_allowed)
 }
 
 void
-engine_run(bool recompute_allowed)
+engine_run(struct engine *e, bool recompute_allowed)
 {
     /* If the last run was canceled skip the incremental run because a
      * recompute is needed first.
      */
-    if (!recompute_allowed && engine_run_canceled) {
+    if (!recompute_allowed && e->run_canceled) {
         return;
     }
 
     struct ovsdb_idl_txn *sb_txn = engine_get_context()->ovnsb_idl_txn;
 
-    engine_run_canceled = false;
+    e->run_canceled = false;
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         ovsdb_idl_txn_assert_read_only(sb_txn, !node->sb_write);
-        engine_run_node(node, recompute_allowed);
+        engine_run_node(e, node, recompute_allowed);
         ovsdb_idl_txn_assert_read_only(sb_txn, false);
 
         if (node->state == EN_CANCELED) {
             node->stats.cancel++;
-            engine_run_canceled = true;
+            e->run_canceled = true;
             return;
         }
     }
 }
 
 bool
-engine_need_run(void)
+engine_need_run(struct engine *e)
 {
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         /* Check only leaf nodes for updates. */
         if (node->n_inputs) {
             continue;
@@ -759,10 +890,12 @@ engine_need_run(void)
 }
 
 void
-engine_trigger_recompute(void)
+engine_trigger_recompute(struct engine *e)
 {
-    VLOG_INFO("User triggered force recompute.");
-    engine_set_force_recompute_immediate();
+    static struct vlog_rate_limit rl = VLOG_RATE_LIMIT_INIT(20, 10);
+    VLOG_INFO_RL(&rl, "User triggered force recompute for engine %s.",
+                 e->name);
+    engine_set_force_recompute_immediate(e);
 }
 
 static void
@@ -790,14 +923,14 @@ engine_dump_node(struct engine_node *node, struct sset *visited_nodes)
 }
 
 void
-engine_dump_graph(const char *node_name)
+engine_dump_graph(const struct engine *e, const char *node_name)
 {
     printf("digraph \"Incremental-Processing-Engine\" {\n");
     printf("\trankdir=LR;\n");
 
     struct sset visited_nodes = SSET_INITIALIZER(&visited_nodes);
     struct engine_node *node;
-    VECTOR_FOR_EACH (&engine_nodes, node) {
+    VECTOR_FOR_EACH (&e->nodes, node) {
         if (node_name && strcmp(node->name, node_name)) {
             continue;
         }

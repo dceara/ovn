@@ -47,6 +47,7 @@ TESTSUITE_AT = \
 	tests/ovn-vif-plug.at \
 	tests/ovn-util.at \
 	tests/ovn-br-controller.at \
+	tests/ovn-inc-proc-eng.at \
 	tests/ovn-inc-proc-graph-dump.at \
 	tests/ovn-ctl.at
 
@@ -282,6 +283,7 @@ tests_ovstest_SOURCES = \
 	tests/test-utils.c \
 	tests/test-utils.h \
 	tests/test-ovn.c \
+	tests/test-inc-proc-eng.c \
 	tests/test-sparse-array.c \
 	tests/test-spsc-ring.c \
 	tests/test-vector.c \

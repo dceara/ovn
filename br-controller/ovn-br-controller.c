@@ -142,6 +142,7 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
     if (retval) {
         exit(EXIT_FAILURE);
     }
+    engine_infra_init();
     unixctl_command_register("exit", "", 0, 1, ovn_exit_command_callback,
                              &exit_args);
 
@@ -215,7 +216,9 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
         .ovs_idl = ovs_idl_loop.idl,
         .ovnbr_idl = ovnbr_idl_loop.idl,
     };
-    engine_init(&en_br_controller_output, &engine_arg);
+    struct engine *engine = engine_register("ovn-br-controller-i-p",
+                                            &en_br_controller_output,
+                                            &engine_arg);
     engine_ovsdb_node_add_index(&en_ovs_bridge, "name", ovsrec_bridge_by_name);
 
     unsigned int ovnbr_expected_cond_seqno = UINT_MAX;
@@ -227,7 +230,7 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
 
     /* Main loop. */
     while (!exit_args.exiting) {
-        engine_init_run();
+        engine_init_run(engine);
 
         struct ovsdb_idl_txn *ovs_idl_txn = ovsdb_idl_loop_run(&ovs_idl_loop);
         unsigned int new_ovs_cond_seqno
@@ -235,7 +238,7 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
         if (new_ovs_cond_seqno != ovs_cond_seqno) {
             if (!new_ovs_cond_seqno) {
                 VLOG_INFO("OVS IDL reconnected, force recompute.");
-                engine_set_force_recompute();
+                engine_set_force_recompute(engine);
             }
             ovs_cond_seqno = new_ovs_cond_seqno;
         }
@@ -249,7 +252,7 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
         if (new_ovnbr_cond_seqno != ovnbr_cond_seqno) {
             if (!new_ovnbr_cond_seqno) {
                 VLOG_INFO("OVNBR IDL reconnected, force recompute.");
-                engine_set_force_recompute();
+                engine_set_force_recompute(engine);
             }
             ovnbr_cond_seqno = new_ovnbr_cond_seqno;
         }
@@ -267,7 +270,7 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
             ovsrec_open_vswitch_table_first(ovs_table);
 
         if (ovsdb_idl_has_ever_connected(ovnbr_idl_loop.idl) && cfg) {
-            engine_run(true);
+            engine_run(engine, true);
 
             br_data = engine_get_data(&en_bridge_data);
             if (br_data) {
@@ -324,7 +327,7 @@ main(int argc OVS_UNUSED, char *argv[] OVS_UNUSED)
     }
 
     engine_set_context(NULL);
-    engine_cleanup();
+    engine_deregister(engine);
 
     free(ovs_remote);
     ovn_exit_args_finish(&exit_args);

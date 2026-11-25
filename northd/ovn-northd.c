@@ -23,6 +23,7 @@
 #include "daemon.h"
 #include "fatal-signal.h"
 #include "inc-proc-northd.h"
+#include "lib/inc-proc-eng.h"
 #include "lib/ip-mcast-index.h"
 #include "lib/mcast-group-index.h"
 #include "lib/memory-trim.h"
@@ -599,8 +600,9 @@ static void inc_proc_graph_dump(const char *end_node)
     struct ovsdb_idl_loop ovnsb_idl_loop = OVSDB_IDL_LOOP_INITIALIZER(
         ovsdb_idl_create_unconnected(&sbrec_idl_class, true));
 
-    inc_proc_northd_init(&ovnnb_idl_loop, &ovnsb_idl_loop);
-    engine_dump_graph(end_node);
+    struct engine *engine =
+        inc_proc_northd_init(&ovnnb_idl_loop, &ovnsb_idl_loop);
+    engine_dump_graph(engine, end_node);
 
     ovsdb_idl_loop_destroy(&ovnnb_idl_loop);
     ovsdb_idl_loop_destroy(&ovnsb_idl_loop);
@@ -847,6 +849,7 @@ main(int argc, char *argv[])
     if (retval) {
         exit(EXIT_FAILURE);
     }
+    engine_infra_init();
     unixctl_command_register("exit", "", 0, 0, ovn_exit_command_callback,
                              &exit_args);
     unixctl_command_register("pause", "", 0, 0, ovn_northd_pause, &state);
@@ -1015,7 +1018,8 @@ main(int argc, char *argv[])
     stopwatch_create(LFLOWS_TO_SB_STOPWATCH_NAME, SW_MS);
 
     /* Initialize incremental processing engine for ovn-northd */
-    inc_proc_northd_init(&ovnnb_idl_loop, &ovnsb_idl_loop);
+    struct engine *engine =
+        inc_proc_northd_init(&ovnnb_idl_loop, &ovnsb_idl_loop);
 
     unsigned int ovnnb_cond_seqno = UINT_MAX;
     unsigned int ovnsb_cond_seqno = UINT_MAX;
@@ -1058,7 +1062,7 @@ main(int argc, char *argv[])
             if (new_ovnnb_cond_seqno != ovnnb_cond_seqno) {
                 if (!new_ovnnb_cond_seqno) {
                     VLOG_INFO("OVN NB IDL reconnected, force recompute.");
-                    inc_proc_northd_force_recompute();
+                    engine_set_force_recompute(engine);
                 }
                 ovnnb_cond_seqno = new_ovnnb_cond_seqno;
             }
@@ -1071,7 +1075,7 @@ main(int argc, char *argv[])
             if (new_ovnsb_cond_seqno != ovnsb_cond_seqno) {
                 if (!new_ovnsb_cond_seqno) {
                     VLOG_INFO("OVN SB IDL reconnected, force recompute.");
-                    inc_proc_northd_force_recompute();
+                    engine_set_force_recompute(engine);
                 }
                 ovnsb_cond_seqno = new_ovnsb_cond_seqno;
             }
@@ -1118,7 +1122,7 @@ main(int argc, char *argv[])
                                             ovnsb_idl_loop.idl,
                                             ovnnb_txn, ovnsb_txn,
                                             &ovnsb_idl_loop);
-                } else if (!inc_proc_northd_get_force_recompute()) {
+                } else if (!engine_get_force_recompute(engine)) {
                     clear_idl_track = false;
                 }
 
@@ -1143,14 +1147,14 @@ main(int argc, char *argv[])
                 if (!ovsdb_idl_loop_commit_and_wait(&ovnnb_idl_loop)) {
                     VLOG_INFO("OVNNB commit failed, "
                               "force recompute next time.");
-                    inc_proc_northd_force_recompute_immediate();
+                    engine_set_force_recompute_immediate(engine);
                 }
 
                 if (!ovsdb_idl_loop_commit_and_wait(&ovnsb_idl_loop) &&
                     !ovnsb_txn_aborted_intentionally) {
                     VLOG_INFO("OVNSB commit failed, "
                               "force recompute next time.");
-                    inc_proc_northd_force_recompute_immediate();
+                    engine_set_force_recompute_immediate(engine);
                 }
                 run_memory_trimmer(ovnnb_idl_loop.idl, activity);
             } else {
@@ -1159,7 +1163,7 @@ main(int argc, char *argv[])
                 ovsdb_idl_loop_commit_and_wait(&ovnsb_idl_loop);
 
                 /* Force a full recompute next time we become active. */
-                inc_proc_northd_force_recompute();
+                engine_set_force_recompute(engine);
             }
         } else {
             /* ovn-northd is paused
@@ -1183,7 +1187,7 @@ main(int argc, char *argv[])
             ovsdb_idl_wait(ovnsb_idl_loop.idl);
 
             /* Force a full recompute next time we become active. */
-            inc_proc_northd_force_recompute();
+            engine_set_force_recompute(engine);
         }
 
         if (clear_idl_track) {

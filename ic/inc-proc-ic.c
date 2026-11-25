@@ -42,6 +42,8 @@
 
 VLOG_DEFINE_THIS_MODULE(inc_proc_ic);
 
+static struct engine *engine;
+
 #define NB_NODES \
     NB_NODE(nb_global, "nb_global") \
     NB_NODE(logical_router_static_route, "logical_router_static_route") \
@@ -188,10 +190,11 @@ static ENGINE_NODE(service_monitor);
 static ENGINE_NODE(address_set);
 static ENGINE_NODE(ic);
 
-void inc_proc_ic_init(struct ovsdb_idl_loop *nb,
-                      struct ovsdb_idl_loop *sb,
-                      struct ovsdb_idl_loop *icnb,
-                      struct ovsdb_idl_loop *icsb)
+struct engine *
+inc_proc_ic_init(struct ovsdb_idl_loop *nb,
+                 struct ovsdb_idl_loop *sb,
+                 struct ovsdb_idl_loop *icnb,
+                 struct ovsdb_idl_loop *icsb)
 {
     /* Define relationships between nodes where the first argument is dependent
      * on the second argument.
@@ -406,7 +409,8 @@ void inc_proc_ic_init(struct ovsdb_idl_loop *nb,
         .icsb_idl = icsb->idl,
     };
 
-    engine_init(&en_ic, &engine_arg);
+    engine = engine_register("ovn-ic-i-p", &en_ic, &engine_arg);
+    return engine;
 }
 
 /* Returns true if the incremental processing ended up updating nodes. */
@@ -418,27 +422,27 @@ inc_proc_ic_run(struct ic_context *ctx,
                ctx->ovninb_txn && ctx->ovnisb_unlocked_txn);
 
     int64_t start = time_msec();
-    engine_init_run();
+    engine_init_run(engine);
 
     struct engine_context eng_ctx = {
         .client_ctx = ctx,
     };
 
     engine_set_context(&eng_ctx);
-    engine_run(true);
+    engine_run(engine, true);
 
-    if (!engine_has_run()) {
-        if (engine_need_run()) {
+    if (!engine_has_run(engine)) {
+        if (engine_need_run(engine)) {
             VLOG_DBG("engine did not run, force recompute next time.");
-            engine_set_force_recompute_immediate();
+            engine_set_force_recompute_immediate(engine);
         } else {
             VLOG_DBG("engine did not run, and it was not needed");
         }
-    } else if (engine_canceled()) {
+    } else if (engine_canceled(engine)) {
         VLOG_DBG("engine was canceled, force recompute next time.");
-        engine_set_force_recompute_immediate();
+        engine_set_force_recompute_immediate(engine);
     } else {
-        engine_clear_force_recompute();
+        engine_clear_force_recompute(engine);
     }
 
     int64_t now = time_msec();
@@ -446,13 +450,13 @@ inc_proc_ic_run(struct ic_context *ctx,
      * by "ic-backoff-interval-ms" interval. */
     ic_eng_ctx->next_run_ms = now + MIN(now - start, ic_eng_ctx->backoff_ms);
 
-    return engine_has_updated();
+    return engine_has_updated(engine);
 }
 
 void
 inc_proc_ic_cleanup(void)
 {
-    engine_cleanup();
+    engine_deregister(engine);
     engine_set_context(NULL);
 }
 
@@ -466,7 +470,8 @@ inc_proc_ic_get_runned_az(void)
 bool
 inc_proc_ic_can_run(struct ic_engine_context *ctx)
 {
-    if (engine_get_force_recompute() || time_msec() >= ctx->next_run_ms ||
+    if (engine_get_force_recompute(engine) ||
+        time_msec() >= ctx->next_run_ms ||
         ctx->nb_idl_duration_ms >= IDL_LOOP_MAX_DURATION_MS ||
         ctx->sb_idl_duration_ms >= IDL_LOOP_MAX_DURATION_MS ||
         ctx->inb_idl_duration_ms >= IDL_LOOP_MAX_DURATION_MS ||

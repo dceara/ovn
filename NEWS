@@ -1,5 +1,8 @@
 Post v26.09.0
 --------------
+   - Incremental processing commands in ovn-appctl can select an engine
+     by name with --engine=NAME. Use inc-engine/list-engines to discover
+     names.
    - Incremental processing stopwatches now use compact keys.
      Use inc-engine/list-stopwatches to find the keys for show and reset.
    - ovn-nbctl lr-policy-del, when not passed a --chain value, can now delete
