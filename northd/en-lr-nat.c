@@ -107,7 +107,8 @@ en_lr_nat_clear_tracked_data(void *data_)
 }
 
 enum engine_node_state
-en_lr_nat_run(struct engine_node *node, void *data_)
+en_lr_nat_run(const struct engine_context *eng_ctx OVS_UNUSED,
+              struct engine_node *node, void *data_)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct ed_type_lr_nat_data *data = data_;
@@ -121,7 +122,8 @@ en_lr_nat_run(struct engine_node *node, void *data_)
 
 /* Handler functions. */
 enum engine_input_handler_result
-lr_nat_northd_handler(struct engine_node *node, void *data_)
+lr_nat_northd_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                      struct engine_node *node, void *data_)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {

@@ -108,14 +108,18 @@ struct ed_type_ls_stateful {
 void *en_ls_stateful_init(struct engine_node *, struct engine_arg *);
 void en_ls_stateful_cleanup(void *data);
 void en_ls_stateful_clear_tracked_data(void *data);
-enum engine_node_state en_ls_stateful_run(struct engine_node *, void *data);
+enum engine_node_state en_ls_stateful_run(const struct engine_context *,
+                                          struct engine_node *, void *data);
 
 enum engine_input_handler_result
-ls_stateful_northd_handler(struct engine_node *, void *data);
+ls_stateful_northd_handler(const struct engine_context *,
+                           struct engine_node *, void *data);
 enum engine_input_handler_result
-ls_stateful_port_group_handler(struct engine_node *, void *data);
+ls_stateful_port_group_handler(const struct engine_context *,
+                               struct engine_node *, void *data);
 enum engine_input_handler_result
-ls_stateful_acl_handler(struct engine_node *node, void *data);
+ls_stateful_acl_handler(const struct engine_context *eng_ctx,
+                        struct engine_node *node, void *data);
 
 const struct ls_stateful_record *ls_stateful_table_find(
     const struct ls_stateful_table *, const struct nbrec_logical_switch *);

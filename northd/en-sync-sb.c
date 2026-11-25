@@ -70,7 +70,8 @@ en_sync_to_sb_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_sync_to_sb_run(struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
+en_sync_to_sb_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                  struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
 {
     return EN_UPDATED;
 }
@@ -89,7 +90,8 @@ en_sync_to_sb_addr_set_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_sync_to_sb_addr_set_run(struct engine_node *node, void *data OVS_UNUSED)
+en_sync_to_sb_addr_set_run(const struct engine_context *eng_ctx,
+                           struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct nbrec_address_set_table *nb_address_set_table =
         EN_OVSDB_GET(engine_get_input("NB_address_set", node));
@@ -98,7 +100,6 @@ en_sync_to_sb_addr_set_run(struct engine_node *node, void *data OVS_UNUSED)
     const struct sbrec_address_set_table *sb_address_set_table =
         EN_OVSDB_GET(engine_get_input("SB_address_set", node));
 
-    const struct engine_context *eng_ctx = engine_get_context();
     const struct ed_type_lr_stateful *lr_stateful_data =
         engine_get_input_data("lr_stateful", node);
     struct northd_data *northd_data = engine_get_input_data("northd", node);
@@ -121,8 +122,9 @@ en_sync_to_sb_addr_set_cleanup(void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-sync_to_sb_addr_set_nb_address_set_handler(struct engine_node *node,
-                                           void *data OVS_UNUSED)
+sync_to_sb_addr_set_nb_address_set_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct nbrec_address_set_table *nb_address_set_table =
         EN_OVSDB_GET(engine_get_input("NB_address_set", node));
@@ -161,8 +163,9 @@ sync_to_sb_addr_set_nb_address_set_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-sync_to_sb_addr_set_nb_port_group_handler(struct engine_node *node,
-                                          void *data OVS_UNUSED)
+sync_to_sb_addr_set_nb_port_group_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct nbrec_port_group *nb_pg;
     const struct nbrec_port_group_table *nb_port_group_table =
@@ -278,7 +281,8 @@ en_sync_to_sb_lb_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_sync_to_sb_lb_run(struct engine_node *node, void *data_)
+en_sync_to_sb_lb_run(const struct engine_context *eng_ctx,
+                     struct engine_node *node, void *data_)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     const struct sbrec_load_balancer_table *sb_load_balancer_table =
@@ -287,7 +291,7 @@ en_sync_to_sb_lb_run(struct engine_node *node, void *data_)
         EN_OVSDB_GET(engine_get_input("SB_logical_dp_group", node));
     const struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct ed_type_sync_to_sb_lb_data *data = data_;
 
     sb_lb_table_clear(&data->sb_lbs);
@@ -308,7 +312,8 @@ en_sync_to_sb_lb_cleanup(void *data_)
 }
 
 enum engine_input_handler_result
-sync_to_sb_lb_northd_handler(struct engine_node *node, void *data_)
+sync_to_sb_lb_northd_handler(const struct engine_context *eng_ctx,
+                             struct engine_node *node, void *data_)
 {
     struct northd_data *nd = engine_get_input_data("northd", node);
 
@@ -321,7 +326,6 @@ sync_to_sb_lb_northd_handler(struct engine_node *node, void *data_)
         return EN_HANDLED_UNCHANGED;
     }
 
-    const struct engine_context *eng_ctx = engine_get_context();
     const struct sbrec_logical_dp_group_table *sb_dpgrp_table =
         EN_OVSDB_GET(engine_get_input("SB_logical_dp_group", node));
     const struct sbrec_load_balancer_table *sb_lb_table =
@@ -340,7 +344,8 @@ sync_to_sb_lb_northd_handler(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-sync_to_sb_lb_sb_load_balancer(struct engine_node *node, void *data_)
+sync_to_sb_lb_sb_load_balancer(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data_)
 {
     const struct sbrec_load_balancer_table *sb_lb_table =
         EN_OVSDB_GET(engine_get_input("SB_load_balancer", node));
@@ -380,9 +385,10 @@ en_sync_to_sb_pb_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_sync_to_sb_pb_run(struct engine_node *node, void *data OVS_UNUSED)
+en_sync_to_sb_pb_run(const struct engine_context *eng_ctx,
+                     struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct ed_type_lr_stateful *lr_stateful_data =
         engine_get_input_data("lr_stateful", node);
@@ -400,7 +406,8 @@ en_sync_to_sb_pb_cleanup(void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-sync_to_sb_pb_northd_handler(struct engine_node *node, void *data OVS_UNUSED)
+sync_to_sb_pb_northd_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *nd = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&nd->trk_data)) {
@@ -417,8 +424,9 @@ sync_to_sb_pb_northd_handler(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-sync_to_sb_pb_lr_stateful_handler(struct engine_node *node,
-                                  void *data OVS_UNUSED)
+sync_to_sb_pb_lr_stateful_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     struct ed_type_lr_stateful *lr_stateful_data =
         engine_get_input_data("lr_stateful", node);

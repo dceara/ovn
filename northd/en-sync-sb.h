@@ -4,34 +4,44 @@
 #include "lib/inc-proc-eng.h"
 
 void *en_sync_to_sb_init(struct engine_node *, struct engine_arg *);
-enum engine_node_state en_sync_to_sb_run(struct engine_node *, void *data);
+enum engine_node_state en_sync_to_sb_run(const struct engine_context *,
+                                         struct engine_node *, void *data);
 void en_sync_to_sb_cleanup(void *data);
 
 void *en_sync_to_sb_addr_set_init(struct engine_node *, struct engine_arg *);
-enum engine_node_state en_sync_to_sb_addr_set_run(struct engine_node *,
-                                                  void *data);
+enum engine_node_state en_sync_to_sb_addr_set_run(
+    const struct engine_context *,
+    struct engine_node *, void *data);
 void en_sync_to_sb_addr_set_cleanup(void *data);
 
 enum engine_input_handler_result
-sync_to_sb_addr_set_nb_address_set_handler(struct engine_node *, void *data);
+sync_to_sb_addr_set_nb_address_set_handler(const struct engine_context *,
+                                           struct engine_node *, void *data);
 enum engine_input_handler_result
-sync_to_sb_addr_set_nb_port_group_handler(struct engine_node *, void *data);
+sync_to_sb_addr_set_nb_port_group_handler(const struct engine_context *,
+                                          struct engine_node *, void *data);
 
 
 void *en_sync_to_sb_lb_init(struct engine_node *, struct engine_arg *);
-enum engine_node_state en_sync_to_sb_lb_run(struct engine_node *, void *data);
+enum engine_node_state en_sync_to_sb_lb_run(const struct engine_context *,
+                                            struct engine_node *, void *data);
 void en_sync_to_sb_lb_cleanup(void *data);
 enum engine_input_handler_result
-sync_to_sb_lb_northd_handler(struct engine_node *, void *data OVS_UNUSED);
+sync_to_sb_lb_northd_handler(const struct engine_context *,
+                             struct engine_node *, void *data);
 enum engine_input_handler_result
-sync_to_sb_lb_sb_load_balancer(struct engine_node *, void *data OVS_UNUSED);
+sync_to_sb_lb_sb_load_balancer(const struct engine_context *,
+                               struct engine_node *, void *data);
 
 void *en_sync_to_sb_pb_init(struct engine_node *, struct engine_arg *);
-enum engine_node_state en_sync_to_sb_pb_run(struct engine_node *, void *data);
+enum engine_node_state en_sync_to_sb_pb_run(const struct engine_context *,
+                                            struct engine_node *, void *data);
 void en_sync_to_sb_pb_cleanup(void *data);
 enum engine_input_handler_result
-sync_to_sb_pb_northd_handler(struct engine_node *, void *data OVS_UNUSED);
+sync_to_sb_pb_northd_handler(const struct engine_context *,
+                             struct engine_node *, void *data);
 enum engine_input_handler_result
-sync_to_sb_pb_lr_stateful_handler(struct engine_node *, void *data OVS_UNUSED);
+sync_to_sb_pb_lr_stateful_handler(const struct engine_context *,
+                                  struct engine_node *, void *data);
 
 #endif /* end of EN_SYNC_SB_H */

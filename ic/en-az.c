@@ -35,9 +35,9 @@ VLOG_DEFINE_THIS_MODULE(en_ic_az);
  * EN_UPDATED only when the resolved AZ identity changes so dependent nodes do
  * not recompute on every iteration. */
 enum engine_node_state
-en_az_run(struct engine_node *node OVS_UNUSED, void *data_)
+en_az_run(const struct engine_context *eng_ctx,
+          struct engine_node *node OVS_UNUSED, void *data_)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     struct ed_type_az *data = data_;
     const struct icsbrec_availability_zone *old_az = data->runned_az;

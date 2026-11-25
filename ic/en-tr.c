@@ -104,9 +104,9 @@ tr_run(struct ic_context *ctx, struct shash *isb_tr_dps)
 }
 
 enum engine_node_state
-en_tr_run(struct engine_node *node, void *data OVS_UNUSED)
+en_tr_run(const struct engine_context *eng_ctx,
+          struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 
@@ -130,8 +130,9 @@ en_tr_run(struct engine_node *node, void *data OVS_UNUSED)
  * its change is handled as a no-op, avoiding a recompute on unrelated NB
  * Logical_Router updates. */
 enum engine_input_handler_result
-en_tr_nb_logical_router_handler(struct engine_node *node,
-                                void *data OVS_UNUSED)
+en_tr_nb_logical_router_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct ed_type_az *az = engine_get_input_data("az", node);
 
@@ -159,8 +160,9 @@ en_tr_nb_logical_router_handler(struct engine_node *node,
  * affect en_tr and are a no-op.  A change to the type column cannot be
  * classified (the old type is gone), so recompute to be safe. */
 enum engine_input_handler_result
-en_tr_icsb_datapath_binding_handler(struct engine_node *node,
-                                    void *data OVS_UNUSED)
+en_tr_icsb_datapath_binding_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct ed_type_az *az = engine_get_input_data("az", node);
 

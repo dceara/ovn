@@ -48,9 +48,9 @@ collect_ts_datapaths(struct ic_context *ctx, struct shash *isb_ts_dps)
 }
 
 enum engine_node_state
-en_ts_run(struct engine_node *node, void *data OVS_UNUSED)
+en_ts_run(const struct engine_context *eng_ctx,
+          struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 
@@ -71,9 +71,9 @@ en_ts_run(struct engine_node *node, void *data OVS_UNUSED)
 /* Returns the ic_context, or NULL when there is no availability zone yet (in
  * which case the caller should report EN_HANDLED_UNCHANGED). */
 static struct ic_context *
-ts_handler_ctx(struct engine_node *node)
+ts_handler_ctx(struct engine_node *node,
+               struct ic_context *ctx)
 {
-    struct ic_context *ctx = engine_get_context()->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
     return az->runned_az ? ctx : NULL;
 }
@@ -103,10 +103,11 @@ ts_scope_finish(struct ic_context *ctx, struct sset *ts_scope)
  * only carries the new name, so the mirror of the old one would leak) and
  * falls back to a full recompute. */
 enum engine_input_handler_result
-en_ts_icnb_transit_switch_handler(struct engine_node *node,
+en_ts_icnb_transit_switch_handler(const struct engine_context *eng_ctx,
+                                  struct engine_node *node,
                                   void *data OVS_UNUSED)
 {
-    struct ic_context *ctx = ts_handler_ctx(node);
+    struct ic_context *ctx = ts_handler_ctx(node, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -139,10 +140,11 @@ en_ts_icnb_transit_switch_handler(struct engine_node *node,
  * logical switch is irrelevant to en_ts, so its change is a no-op, avoiding a
  * recompute on unrelated NB Logical_Switch updates. */
 enum engine_input_handler_result
-en_ts_nb_logical_switch_handler(struct engine_node *node,
+en_ts_nb_logical_switch_handler(const struct engine_context *eng_ctx,
+                                struct engine_node *node,
                                 void *data OVS_UNUSED)
 {
-    struct ic_context *ctx = ts_handler_ctx(node);
+    struct ic_context *ctx = ts_handler_ctx(node, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }
@@ -185,10 +187,11 @@ en_ts_nb_logical_switch_handler(struct engine_node *node,
  * already-existing binding (the vxlan refresh), whose mirror already
  * exists. */
 enum engine_input_handler_result
-en_ts_icsb_datapath_binding_handler(struct engine_node *node,
+en_ts_icsb_datapath_binding_handler(const struct engine_context *eng_ctx,
+                                    struct engine_node *node,
                                     void *data OVS_UNUSED)
 {
-    struct ic_context *ctx = ts_handler_ctx(node);
+    struct ic_context *ctx = ts_handler_ctx(node, eng_ctx->client_ctx);
     if (!ctx) {
         return EN_HANDLED_UNCHANGED;
     }

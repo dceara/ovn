@@ -97,7 +97,8 @@ en_lb_data_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_lb_data_run(struct engine_node *node, void *data)
+en_lb_data_run(const struct engine_context *eng_ctx OVS_UNUSED,
+               struct engine_node *node, void *data)
 {
     struct ed_type_lb_data *lb_data = (struct ed_type_lb_data *) data;
     lb_data_destroy(lb_data);
@@ -137,7 +138,8 @@ en_lb_data_clear_tracked_data(void *data)
 
 /* Handler functions. */
 enum engine_input_handler_result
-lb_data_load_balancer_handler(struct engine_node *node, void *data)
+lb_data_load_balancer_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                              struct engine_node *node, void *data)
 {
     const struct nbrec_load_balancer_table *nb_lb_table =
         EN_OVSDB_GET(engine_get_input("NB_load_balancer", node));
@@ -239,7 +241,9 @@ lb_data_load_balancer_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-lb_data_load_balancer_group_handler(struct engine_node *node, void *data)
+lb_data_load_balancer_group_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct ed_type_lb_data *lb_data = (struct ed_type_lb_data *) data;
     const struct nbrec_load_balancer_group_table *nb_lbg_table =
@@ -379,7 +383,9 @@ lb_data_handle_updated_logical_switch(const struct nbrec_logical_switch *nbs,
 }
 
 enum engine_input_handler_result
-lb_data_synced_logical_switch_handler(struct engine_node *node, void *data)
+lb_data_synced_logical_switch_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct ed_type_lb_data *lb_data = (struct ed_type_lb_data *) data;
     const struct ovn_synced_logical_switch_map *synced_lses =
@@ -459,7 +465,9 @@ lb_data_handle_updated_logical_router(const struct nbrec_logical_router *nbr,
 }
 
 enum engine_input_handler_result
-lb_data_synced_logical_router_handler(struct engine_node *node, void *data)
+lb_data_synced_logical_router_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct ed_type_lb_data *lb_data = (struct ed_type_lb_data *) data;
     const struct ovn_synced_logical_router_map *synced_lrs =

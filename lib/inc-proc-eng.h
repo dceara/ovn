@@ -210,15 +210,13 @@ struct engine_node_input {
      *    data was updated as a result.
      *  - EN_HANDLED_UNCHANGED: the change can be handled, and the node's
      *    data was left unchanged.
-     * A change handler can also call engine_get_context() but it must make
-     * sure the txn pointers returned by it are non-NULL. In case the change
-     * handler needs to use the txn pointers returned by engine_get_context(),
-     * and the pointers are NULL, the change handler MUST return EN_UNHANDLED.
+     * The context is borrowed for the duration of the call.  If a required
+     * transaction pointer is NULL, it must return EN_UNHANDLED.
      */
     const char *change_handler_name;
     const char *stopwatch_key;
-    enum engine_input_handler_result (*change_handler)
-        (struct engine_node *node, void *data);
+    enum engine_input_handler_result (*change_handler)(
+        const struct engine_context *, struct engine_node *, void *);
 };
 
 struct engine_stats {
@@ -257,12 +255,12 @@ struct engine_node {
     void (*cleanup)(void *data);
 
     /* Fully processes all inputs of this node and regenerates the data
-     * of this node. The pointer to the node's data is passed as argument.
-     * 'run' handlers can also call engine_get_context() and the
-     * implementation guarantees that the txn pointers returned
-     * engine_get_context() are not NULL and valid.
+     * of this node.  The callback borrows the iteration context for the
+     * duration of the call.  Transaction pointers can be NULL depending on
+     * the caller and processing phase, including in engine_need_run().
      */
-    enum engine_node_state (*run)(struct engine_node *node, void *data);
+    enum engine_node_state (*run)(const struct engine_context *,
+                                  struct engine_node *, void *);
 
     /* Method to validate if the 'internal_data' is valid. This allows users
      * to customize when 'data' can be used (e.g., even if the node
@@ -307,15 +305,17 @@ void engine_init_run(struct engine *);
 /* Execute the processing, which should be called in the main loop.
  * Updates the engine node's states accordingly. If 'recompute_allowed' is
  * false and a recompute is required by the current engine run then the engine
- * cancels its processing.
+ * cancels its processing.  'ctx' is borrowed for this call.
  */
-void engine_run(struct engine *, bool recompute_allowed);
+void engine_run(struct engine *, const struct engine_context *ctx,
+                bool recompute_allowed);
 
 /* Remove this engine's registration. */
 void engine_deregister(struct engine *);
 
-/* Check if engine needs to run but didn't. */
-bool engine_need_run(struct engine *);
+/* Run leaf nodes to check whether the engine needs to run.
+ * The engine borrows 'ctx' for the duration of the call. */
+bool engine_need_run(struct engine *, const struct engine_context *ctx);
 
 /* Get the input node with <name> for <node> */
 struct engine_node * engine_get_input(const char *input_name,
@@ -329,16 +329,17 @@ void *engine_get_input_data(const char *input_name, struct engine_node *);
  * be able to process the change incrementally, and will fall back to call
  * the run method to recompute. */
 void engine_add_input_impl(struct engine_node *node, struct engine_node *input,
-                           enum engine_input_handler_result (*change_handler)
-                               (struct engine_node *, void *),
+                           enum engine_input_handler_result (*change_handler)(
+                               const struct engine_context *,
+                               struct engine_node *, void *),
                            const char *change_handler_name);
 #define engine_add_input(node, input, change_handler) \
     engine_add_input_impl(node, input, change_handler, #change_handler)
 
 void engine_add_input_with_compute_debug_impl(
         struct engine_node *node, struct engine_node *input,
-        enum engine_input_handler_result (*change_handler)
-            (struct engine_node *, void *),
+        enum engine_input_handler_result (*change_handler)(
+            const struct engine_context *, struct engine_node *, void *),
         void (*get_compute_failure_info)(struct engine_node *),
         const char *change_handler_name);
 #define engine_add_input_with_compute_debug(node, input, change_handler, \
@@ -365,16 +366,6 @@ void engine_clear_force_recompute(struct engine *);
 
 /* Returns whether next engine_run() is forced to rempute. */
 bool engine_get_force_recompute(const struct engine *);
-
-/* Return the current engine_context. The values in the context can be NULL
- * if the engine is run with allow_recompute == false in the current
- * iteration.
- * Therefore, it is the responsibility of the caller to check the context
- * values when called from change handlers.
- */
-const struct engine_context *engine_get_context(void);
-
-void engine_set_context(const struct engine_context *);
 
 /* Return true if during the last iteration the node's data was updated. */
 bool engine_node_changed(struct engine_node *node);
@@ -430,7 +421,8 @@ struct ovsdb_idl_index * engine_ovsdb_node_get_index(struct engine_node *,
 
 /* Any engine node can use this function for no-op handlers. */
 static inline enum engine_input_handler_result
-engine_noop_handler(struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
+engine_noop_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                    struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
 {
     return EN_HANDLED_UNCHANGED;
 }
@@ -485,8 +477,9 @@ void engine_ovsdb_node_add_index(struct engine_node *, const char *name,
  * a table of OVSDB */
 #define ENGINE_FUNC_OVSDB(DB_NAME, TBL_NAME) \
 static enum engine_node_state \
-en_##DB_NAME##_##TBL_NAME##_run(struct engine_node *node, \
-                                void *data OVS_UNUSED) \
+en_##DB_NAME##_##TBL_NAME##_run( \
+    const struct engine_context *eng_ctx OVS_UNUSED, \
+    struct engine_node *node, void *data OVS_UNUSED) \
 { \
     const struct DB_NAME##rec_##TBL_NAME##_table *table = \
         EN_OVSDB_GET(node); \

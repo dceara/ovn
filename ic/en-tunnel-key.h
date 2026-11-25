@@ -32,7 +32,8 @@ struct ed_type_tunnel_key {
     struct hmap dp_tnlids;
 };
 
-enum engine_node_state en_tunnel_key_run(struct engine_node *node, void *data);
+enum engine_node_state en_tunnel_key_run(const struct engine_context *eng_ctx,
+                                         struct engine_node *node, void *data);
 void *en_tunnel_key_init(struct engine_node *node, struct engine_arg *arg);
 void en_tunnel_key_cleanup(void *data);
 
@@ -40,14 +41,17 @@ void en_tunnel_key_cleanup(void *data);
  * only the transit switches/routers whose IC-NB row or IC-SB binding changed,
  * without a full recompute. */
 enum engine_input_handler_result
-en_tunnel_key_icnb_transit_switch_handler(struct engine_node *node,
+en_tunnel_key_icnb_transit_switch_handler(const struct engine_context *,
+                                          struct engine_node *node,
                                           void *data);
 enum engine_input_handler_result
-en_tunnel_key_icnb_transit_router_handler(struct engine_node *node,
+en_tunnel_key_icnb_transit_router_handler(const struct engine_context *,
+                                          struct engine_node *node,
                                           void *data);
 enum engine_input_handler_result
-en_tunnel_key_icsb_datapath_binding_handler(struct engine_node *node,
-                                            void *data);
+en_tunnel_key_icsb_datapath_binding_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data);
 
 /* Shared change handler for the IC-NB Global input of nodes that only care
  * about its 'options' (e.g. vxlan_mode), not the nb_ic_cfg/sb_ic_cfg
@@ -55,6 +59,7 @@ en_tunnel_key_icsb_datapath_binding_handler(struct engine_node *node,
  * Named without a node prefix because it is shared by en_tunnel_key and
  * en_ts. */
 enum engine_input_handler_result
-ic_nb_global_options_handler(struct engine_node *node, void *data);
+ic_nb_global_options_handler(const struct engine_context *eng_ctx,
+                             struct engine_node *node, void *data);
 
 #endif /* EN_IC_TUNNEL_KEY_H */

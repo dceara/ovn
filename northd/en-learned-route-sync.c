@@ -34,8 +34,9 @@ routes_table_sync(
     struct hmap *parsed_routes_out);
 
 enum engine_input_handler_result
-learned_route_sync_northd_change_handler(struct engine_node *node,
-                                         void *data_ OVS_UNUSED)
+learned_route_sync_northd_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data_ OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
@@ -120,7 +121,8 @@ en_learned_route_sync_clear_tracked_data(void *data)
 }
 
 enum engine_node_state
-en_learned_route_sync_run(struct engine_node *node, void *data)
+en_learned_route_sync_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                          struct engine_node *node, void *data)
 {
     routes_sync_clear(data);
 
@@ -251,8 +253,9 @@ find_learned_route(const struct sbrec_learned_route *learned_route,
 }
 
 enum engine_input_handler_result
-learned_route_sync_sb_learned_route_change_handler(struct engine_node *node,
-                                                   void *data_)
+learned_route_sync_sb_learned_route_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data_)
 {
     struct learned_route_sync_data *data = data_;
     data->tracked = true;

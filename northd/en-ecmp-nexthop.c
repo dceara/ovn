@@ -158,8 +158,9 @@ ecmp_nexthop_lookup(struct ovsdb_idl_index *sbrec_ecmp_by_nexthop,
 }
 
 enum engine_input_handler_result
-ecmp_nexthop_mac_binding_handler(struct engine_node *node,
-                                 void *data OVS_UNUSED)
+ecmp_nexthop_mac_binding_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct sbrec_mac_binding_table *mac_binding_table =
         EN_OVSDB_GET(engine_get_input("SB_mac_binding", node));
@@ -203,9 +204,10 @@ en_ecmp_nexthop_cleanup(void *data OVS_UNUSED)
 }
 
 enum engine_node_state
-en_ecmp_nexthop_run(struct engine_node *node, void *data OVS_UNUSED)
+en_ecmp_nexthop_run(const struct engine_context *eng_ctx,
+                    struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct routes_data *routes_data = engine_get_input_data("routes", node);
     const struct sbrec_ecmp_nexthop_table *sbrec_ecmp_nexthop_table =
         EN_OVSDB_GET(engine_get_input("SB_ecmp_nexthop", node));

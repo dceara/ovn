@@ -521,9 +521,10 @@ en_port_group_clear_tracked_data(void *data_)
 }
 
 enum engine_node_state
-en_port_group_run(struct engine_node *node, void *data_)
+en_port_group_run(const struct engine_context *eng_ctx,
+                  struct engine_node *node, void *data_)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct port_group_input input_data = port_group_get_input_data(node);
     struct port_group_data *data = data_;
 
@@ -543,10 +544,11 @@ en_port_group_run(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-port_group_nb_port_group_handler(struct engine_node *node, void *data_)
+port_group_nb_port_group_handler(const struct engine_context *eng_ctx,
+                                 struct engine_node *node, void *data_)
 {
     struct port_group_input input_data = port_group_get_input_data(node);
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct port_group_data *data = data_;
     bool changed = false;
 

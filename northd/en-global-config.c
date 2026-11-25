@@ -95,9 +95,10 @@ update_svc_monitor_addr(const char *new_ip, char **old_ip_pptr)
 }
 
 enum engine_node_state
-en_global_config_run(struct engine_node *node , void *data)
+en_global_config_run(const struct engine_context *eng_ctx,
+                     struct engine_node *node, void *data)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     const struct nbrec_nb_global_table *nb_global_table =
         EN_OVSDB_GET(engine_get_input("NB_nb_global", node));
     const struct nbrec_logical_switch_table *nbrec_ls_table =
@@ -261,7 +262,9 @@ en_global_config_clear_tracked_data(void *data)
 }
 
 enum engine_input_handler_result
-global_config_nb_global_handler(struct engine_node *node, void *data)
+global_config_nb_global_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct nbrec_nb_global_table *nb_global_table =
         EN_OVSDB_GET(engine_get_input("NB_nb_global", node));
@@ -365,7 +368,9 @@ global_config_nb_global_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-global_config_sb_global_handler(struct engine_node *node, void *data)
+global_config_sb_global_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct sbrec_sb_global_table *sb_global_table =
         EN_OVSDB_GET(engine_get_input("SB_sb_global", node));
@@ -387,7 +392,9 @@ global_config_sb_global_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-global_config_sb_chassis_handler(struct engine_node *node, void *data)
+global_config_sb_chassis_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct ed_type_global_config *config_data = data;
 
@@ -450,7 +457,8 @@ global_config_sb_chassis_handler(struct engine_node *node, void *data)
 /* generic global config handler for any engine node which has global_config
  * has an input node . */
 enum engine_input_handler_result
-node_global_config_handler(struct engine_node *node, void *data OVS_UNUSED)
+node_global_config_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                           struct engine_node *node, void *data OVS_UNUSED)
 {
     struct ed_type_global_config *global_config =
         engine_get_input_data("global_config", node);
@@ -465,8 +473,9 @@ node_global_config_handler(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-global_config_nb_logical_switch_handler(struct engine_node *node,
-                                        void *data)
+global_config_nb_logical_switch_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct ed_type_global_config *config_data = data;
     const struct nbrec_logical_switch_table *nbrec_ls_table =

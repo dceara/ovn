@@ -15,7 +15,8 @@
 #define BR_OFTABLE_SAVE_INPORT            120
 #define BR_OFTABLE_LOG_TO_PHY             121
 
-enum engine_node_state en_lflow_output_run(struct engine_node *, void *data);
+enum engine_node_state en_lflow_output_run(const struct engine_context *,
+                                           struct engine_node *, void *data);
 void *en_lflow_output_init(struct engine_node *node, struct engine_arg *arg);
 void en_lflow_output_cleanup(void *data);
 

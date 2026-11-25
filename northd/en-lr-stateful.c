@@ -121,7 +121,8 @@ en_lr_stateful_clear_tracked_data(void *data_)
 }
 
 enum engine_node_state
-en_lr_stateful_run(struct engine_node *node, void *data_)
+en_lr_stateful_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                   struct engine_node *node, void *data_)
 {
     struct lr_stateful_input input_data = lr_stateful_get_input_data(node);
     struct ed_type_lr_stateful *data = data_;
@@ -136,7 +137,8 @@ en_lr_stateful_run(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-lr_stateful_northd_handler(struct engine_node *node, void *data OVS_UNUSED)
+lr_stateful_northd_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                           struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
@@ -167,7 +169,8 @@ lr_stateful_northd_handler(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-lr_stateful_lb_data_handler(struct engine_node *node, void *data_)
+lr_stateful_lb_data_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                            struct engine_node *node, void *data_)
 {
     struct ed_type_lb_data *lb_data = engine_get_input_data("lb_data", node);
     if (!lb_data->tracked) {
@@ -344,7 +347,8 @@ lr_stateful_lb_data_handler(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-lr_stateful_lr_nat_handler(struct engine_node *node, void *data_)
+lr_stateful_lr_nat_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                           struct engine_node *node, void *data_)
 {
     struct ed_type_lr_nat_data *lr_nat_data =
         engine_get_input_data("lr_nat", node);

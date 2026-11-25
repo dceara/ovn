@@ -27,7 +27,8 @@
 VLOG_DEFINE_THIS_MODULE(en_ic);
 
 enum engine_node_state
-en_ic_run(struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
+en_ic_run(const struct engine_context *eng_ctx OVS_UNUSED,
+          struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
 {
     /* 'en_ic' is the engine's output node and only aggregates the per
      * subsystem nodes (gateway, ts, tr, port_binding, route, service_monitor

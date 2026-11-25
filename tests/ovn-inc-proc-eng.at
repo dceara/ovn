@@ -19,6 +19,7 @@ AT_CHECK([appctl inc-engine/show-stats sink recompute], [0], [dnl
 0
 ])
 check appctl test/step start-right
+check appctl test/step need_run
 AT_CHECK([appctl inc-engine/list-engines], [0], [left
 right
 ])
@@ -108,6 +109,10 @@ AT_CHECK([appctl inc-engine/compute-log-timeout 25 --engine=right], [2],
          [ignore], [ignore])
 AT_CHECK([appctl stopwatch/show "$right_handler" | grep -i 'samples.*1'],
          [0], [ignore])
+check appctl test/step fallback
+AT_CHECK([appctl inc-engine/show-stats sink recompute], [0], [dnl
+1
+])
 check appctl test/step retire-right
 check appctl inc-engine/list-engines
 AT_CHECK([appctl inc-engine/recompute], [2], [ignore], [ignore])

@@ -7,6 +7,7 @@
 #include "lib/inc-proc-eng.h"
 
 void *en_acl_id_init(struct engine_node *, struct engine_arg *);
-enum engine_node_state en_acl_id_run(struct engine_node *, void *data);
+enum engine_node_state en_acl_id_run(const struct engine_context *,
+                                     struct engine_node *, void *data);
 void en_acl_id_cleanup(void *data);
 #endif

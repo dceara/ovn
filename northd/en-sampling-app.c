@@ -45,7 +45,8 @@ en_sampling_app_cleanup(void *data OVS_UNUSED)
 }
 
 enum engine_node_state
-en_sampling_app_run(struct engine_node *node, void *data_)
+en_sampling_app_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                    struct engine_node *node, void *data_)
 {
     const struct nbrec_sampling_app_table *nb_sampling_app_table =
         EN_OVSDB_GET(engine_get_input("NB_sampling_app", node));

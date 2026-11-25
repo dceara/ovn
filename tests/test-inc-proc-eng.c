@@ -18,7 +18,9 @@
 #include <string.h>
 
 #include "lib/inc-proc-eng.h"
+#include "lib/ovn-sb-idl.h"
 #include "openvswitch/poll-loop.h"
+#include "ovsdb-idl.h"
 #include "stopwatch.h"
 #include "tests/ovstest.h"
 #include "unixctl.h"
@@ -29,36 +31,67 @@ struct test_graph {
     struct engine_node source;
     struct engine_node second_source;
     struct engine_node sink;
+    struct ovsdb_idl *idl;
+    struct ovsdb_idl_txn *txn;
+    unsigned int context_calls;
+    bool need_run_without_sb_txn;
+    bool unhandled_change;
     bool registered;
 };
 
 static enum engine_node_state
-test_engine_run(struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
+test_engine_source(const struct engine_context *eng_ctx,
+                   struct engine_node *node, void *data OVS_UNUSED)
 {
+    struct test_graph *graph = eng_ctx->client_ctx;
+
+    ovs_assert(node == &graph->source || node == &graph->second_source);
+    ovs_assert(eng_ctx->ovnsb_idl_txn ==
+               (graph->need_run_without_sb_txn ? NULL : graph->txn));
+    graph->context_calls++;
+    return EN_UPDATED;
+}
+
+static enum engine_node_state
+test_engine_sink(const struct engine_context *eng_ctx,
+                 struct engine_node *node, void *data OVS_UNUSED)
+{
+    struct test_graph *graph = eng_ctx->client_ctx;
+
+    ovs_assert(node == &graph->sink);
+    ovs_assert(eng_ctx->ovnsb_idl_txn == graph->txn);
+    graph->context_calls++;
     return EN_UPDATED;
 }
 
 static enum engine_input_handler_result
-test_engine_change(struct engine_node *node OVS_UNUSED, void *data OVS_UNUSED)
+test_engine_change(const struct engine_context *eng_ctx,
+                   struct engine_node *node, void *data)
 {
-    return EN_HANDLED_UPDATED;
+    const struct test_graph *graph = eng_ctx->client_ctx;
+
+    ovs_assert(test_engine_sink(eng_ctx, node, data) == EN_UPDATED);
+    return graph->unhandled_change ? EN_UNHANDLED : EN_HANDLED_UPDATED;
 }
 
 static void
 test_graph_run(struct test_graph *graph, bool allow)
 {
-    const struct engine_context ctx = { 0 };
+    const struct engine_context ctx = {
+        .client_ctx = graph,
+        .ovnsb_idl_txn = graph->txn,
+    };
 
     engine_init_run(graph->engine);
-    engine_set_context(&ctx);
-    engine_run(graph->engine, allow);
-    engine_set_context(NULL);
+    engine_run(graph->engine, &ctx, allow);
 }
 
 static void
 test_graph_cleanup(struct test_graph *graph)
 {
     engine_deregister(graph->engine);
+    ovsdb_idl_txn_destroy(graph->txn);
+    ovsdb_idl_destroy(graph->idl);
     graph->registered = false;
 }
 
@@ -68,11 +101,11 @@ test_graph_init(struct test_graph *graph, const char *name, bool long_labels)
     ovs_assert(!graph->registered);
     graph->source = (struct engine_node) {
         .name = "source",
-        .run = test_engine_run,
+        .run = test_engine_source,
     };
     graph->sink = (struct engine_node) {
         .name = "sink",
-        .run = test_engine_run,
+        .run = test_engine_sink,
         .sb_write = true,
     };
 
@@ -83,7 +116,7 @@ test_graph_init(struct test_graph *graph, const char *name, bool long_labels)
         graph->source.name = "long_source_label_with_a_common_prefix_alpha";
         graph->second_source = (struct engine_node) {
             .name = "long_source_label_with_a_common_prefix_beta",
-            .run = test_engine_run,
+            .run = test_engine_source,
         };
         engine_add_input_impl(&graph->sink, &graph->second_source,
                               test_engine_change, handler_label);
@@ -92,6 +125,12 @@ test_graph_init(struct test_graph *graph, const char *name, bool long_labels)
     ovs_assert(!engine_get_force_recompute(graph->engine));
     ovs_assert(!engine_canceled(graph->engine));
     graph->registered = true;
+
+    graph->context_calls = 0;
+    graph->need_run_without_sb_txn = false;
+    graph->unhandled_change = false;
+    graph->idl = ovsdb_idl_create_unconnected(&sbrec_idl_class, true);
+    graph->txn = ovsdb_idl_txn_create(graph->idl);
 }
 
 static void
@@ -116,6 +155,21 @@ test_engine_step(struct unixctl_conn *conn, int argc OVS_UNUSED,
     } else if (!strcmp(argv[1], "run-long-left")) {
         test_graph_run(left, true);
         stopwatch_sync();
+    } else if (!strcmp(argv[1], "need_run")) {
+        const struct engine_context left_ctx = {
+            .client_ctx = left,
+            .ovnsb_idl_txn = left->txn,
+        };
+        const struct engine_context right_ctx = { .client_ctx = right };
+        right->need_run_without_sb_txn = true;
+
+        ovs_assert(engine_need_run(left->engine, &left_ctx));
+        ovs_assert(engine_need_run(right->engine, &right_ctx));
+        ovs_assert(left->context_calls == 1);
+        ovs_assert(right->context_calls == 1);
+        left->context_calls = right->context_calls = 0;
+
+        right->need_run_without_sb_txn = false;
     } else if (!strcmp(argv[1], "run")) {
         ovs_assert(engine_get_force_recompute(left->engine));
         ovs_assert(!engine_get_force_recompute(right->engine));
@@ -125,7 +179,16 @@ test_engine_step(struct unixctl_conn *conn, int argc OVS_UNUSED,
         ovs_assert(!engine_canceled(right->engine));
         test_graph_run(left, true);
         ovs_assert(!engine_canceled(left->engine));
+        ovs_assert(left->context_calls == 3);
+        ovs_assert(right->context_calls == 2);
         stopwatch_sync();
+    } else if (!strcmp(argv[1], "fallback")) {
+        unsigned int calls = right->context_calls;
+
+        right->unhandled_change = true;
+        test_graph_run(right, true);
+        ovs_assert(right->context_calls == calls + 3);
+        right->unhandled_change = false;
     } else if (!strcmp(argv[1], "sync")) {
         stopwatch_sync();
     } else if (!strcmp(argv[1], "retire-left")) {

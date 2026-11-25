@@ -190,9 +190,9 @@ tunnel_key_collect_nb_mirrors(struct ic_context *ctx,
 }
 
 enum engine_node_state
-en_tunnel_key_run(struct engine_node *node OVS_UNUSED, void *data_)
+en_tunnel_key_run(const struct engine_context *eng_ctx,
+                  struct engine_node *node OVS_UNUSED, void *data_)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     struct ed_type_tunnel_key *data = data_;
 
@@ -321,11 +321,12 @@ tunnel_key_sync_scope(struct ic_context *ctx, struct ed_type_tunnel_key *data,
  * tracked row only carries the new name, so the binding keyed by the old one
  * would leak) and falls back to a full recompute. */
 enum engine_input_handler_result
-en_tunnel_key_icnb_transit_switch_handler(struct engine_node *node,
+en_tunnel_key_icnb_transit_switch_handler(const struct engine_context *eng_ctx,
+                                          struct engine_node *node,
                                           void *data_)
 {
     struct ed_type_tunnel_key *data = data_;
-    struct ic_context *ctx = engine_get_context()->client_ctx;
+    struct ic_context *ctx = eng_ctx->client_ctx;
     const struct icnbrec_transit_switch_table *tbl =
         EN_OVSDB_GET(engine_get_input("ICNB_transit_switch", node));
     struct sset ts_scope = SSET_INITIALIZER(&ts_scope);
@@ -354,11 +355,12 @@ en_tunnel_key_icnb_transit_switch_handler(struct engine_node *node,
 /* IC-NB Transit_Router: analogous to the transit-switch handler, scoped by the
  * transit router's NB IC UUID (the binding key). */
 enum engine_input_handler_result
-en_tunnel_key_icnb_transit_router_handler(struct engine_node *node,
+en_tunnel_key_icnb_transit_router_handler(const struct engine_context *eng_ctx,
+                                          struct engine_node *node,
                                           void *data_)
 {
     struct ed_type_tunnel_key *data = data_;
-    struct ic_context *ctx = engine_get_context()->client_ctx;
+    struct ic_context *ctx = eng_ctx->client_ctx;
     const struct icnbrec_transit_router_table *tbl =
         EN_OVSDB_GET(engine_get_input("ICNB_transit_router", node));
     struct sset ts_scope = SSET_INITIALIZER(&ts_scope);
@@ -400,11 +402,12 @@ icnb_transit_switch_exists(struct ic_context *ctx, const char *name)
  * the requested-tnl-key follow-up is driven by en_ts/en_tr's own handlers on
  * this same table. */
 enum engine_input_handler_result
-en_tunnel_key_icsb_datapath_binding_handler(struct engine_node *node,
-                                            void *data_)
+en_tunnel_key_icsb_datapath_binding_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data_)
 {
     struct ed_type_tunnel_key *data = data_;
-    struct ic_context *ctx = engine_get_context()->client_ctx;
+    struct ic_context *ctx = eng_ctx->client_ctx;
     const struct icsbrec_datapath_binding_table *tbl =
         EN_OVSDB_GET(engine_get_input("ICSB_datapath_binding", node));
     struct sset ts_scope = SSET_INITIALIZER(&ts_scope);
@@ -444,7 +447,8 @@ en_tunnel_key_icsb_datapath_binding_handler(struct engine_node *node,
  * only when the row is created/deleted or its 'options' (e.g. vxlan_mode)
  * change. */
 enum engine_input_handler_result
-ic_nb_global_options_handler(struct engine_node *node, void *data OVS_UNUSED)
+ic_nb_global_options_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct icnbrec_ic_nb_global_table *tbl =
         EN_OVSDB_GET(engine_get_input("ICNB_ic_nb_global", node));

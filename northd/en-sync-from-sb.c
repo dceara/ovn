@@ -41,9 +41,10 @@ en_sync_from_sb_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_sync_from_sb_run(struct engine_node *node, void *data OVS_UNUSED)
+en_sync_from_sb_run(const struct engine_context *eng_ctx,
+                    struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct northd_data *nd = engine_get_input_data("northd", node);
 
     const struct sbrec_port_binding_table *sb_pb_table =
@@ -64,8 +65,8 @@ en_sync_from_sb_run(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-sync_from_sb_northd_handler(struct engine_node *node,
-                            void *data OVS_UNUSED)
+sync_from_sb_northd_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                            struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *nd = engine_get_input_data("northd", node);
     if (northd_has_tracked_data(&nd->trk_data)) {

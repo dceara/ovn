@@ -51,7 +51,8 @@ en_sync_meters_cleanup(void *data_)
 }
 
 enum engine_node_state
-en_sync_meters_run(struct engine_node *node, void *data_)
+en_sync_meters_run(const struct engine_context *eng_ctx,
+                   struct engine_node *node, void *data_)
 {
     struct sync_meters_data *data = data_;
 
@@ -64,7 +65,6 @@ en_sync_meters_run(struct engine_node *node, void *data_)
     const struct sbrec_meter_table *sb_meter_table =
         EN_OVSDB_GET(engine_get_input("SB_meter", node));
 
-    const struct engine_context *eng_ctx = engine_get_context();
 
     build_meter_groups(&data->meter_groups, nb_meter_table);
 
@@ -74,7 +74,8 @@ en_sync_meters_run(struct engine_node *node, void *data_)
 }
 
 enum engine_input_handler_result
-sync_meters_nb_acl_handler(struct engine_node *node, void *data OVS_UNUSED)
+sync_meters_nb_acl_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                           struct engine_node *node, void *data OVS_UNUSED)
 {
     const struct nbrec_acl_table *acl_table =
         EN_OVSDB_GET(engine_get_input("NB_acl", node));

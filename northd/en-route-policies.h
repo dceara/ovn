@@ -101,10 +101,12 @@ struct route_policies_data {
 
 void en_route_policies_cleanup(void *data);
 enum engine_input_handler_result
-route_policies_datapath_synced_logical_router_handler(struct engine_node *node,
-                                                      void *data);
-enum engine_node_state en_route_policies_run(struct engine_node *node,
-                                             void *data);
+route_policies_datapath_synced_logical_router_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data);
+enum engine_node_state en_route_policies_run(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data);
 void *en_route_policies_init(struct engine_node *node OVS_UNUSED,
                              struct engine_arg *arg OVS_UNUSED);
 void en_route_policies_clear_tracked_data(void *data);

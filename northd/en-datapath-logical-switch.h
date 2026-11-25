@@ -25,9 +25,11 @@ void *en_datapath_logical_switch_init(struct engine_node *,
                                       struct engine_arg *);
 
 enum engine_input_handler_result
-datapath_logical_switch_handler(struct engine_node *, void *data);
-enum engine_node_state en_datapath_logical_switch_run(struct engine_node *,
-                                                      void *data);
+datapath_logical_switch_handler(const struct engine_context *,
+                                struct engine_node *, void *data);
+enum engine_node_state en_datapath_logical_switch_run(
+    const struct engine_context *,
+    struct engine_node *, void *data);
 void en_datapath_logical_switch_cleanup(void *data);
 void en_datapath_logical_switch_clear_tracked_data(void *data);
 
@@ -54,11 +56,13 @@ void *en_datapath_synced_logical_switch_init(struct engine_node *,
                                              struct engine_arg *);
 
 enum engine_node_state en_datapath_synced_logical_switch_run(
+    const struct engine_context *,
     struct engine_node *, void *data);
 void en_datapath_synced_logical_switch_clear_tracked_data(void *data);
 enum engine_input_handler_result
 en_datapath_synced_logical_switch_datapath_sync_handler(
-        struct engine_node *node, void *data);
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data);
 void en_datapath_synced_logical_switch_cleanup(void *data);
 
 #endif /* EN_DATAPATH_LOGICAL_SWITCH_H */

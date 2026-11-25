@@ -86,7 +86,8 @@ en_acl_id_init(struct engine_node *node OVS_UNUSED,
 }
 
 enum engine_node_state
-en_acl_id_run(struct engine_node *node, void *data)
+en_acl_id_run(const struct engine_context *eng_ctx OVS_UNUSED,
+              struct engine_node *node, void *data)
 {
     if (!ovs_feature_is_supported(OVS_CT_LABEL_FLUSH_SUPPORT)) {
         return EN_UNCHANGED;

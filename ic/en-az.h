@@ -31,7 +31,8 @@ struct ed_type_az {
     char *az_name;
 };
 
-enum engine_node_state en_az_run(struct engine_node *node, void *data);
+enum engine_node_state en_az_run(const struct engine_context *eng_ctx,
+                                 struct engine_node *node, void *data);
 void *en_az_init(struct engine_node *node, struct engine_arg *arg);
 void en_az_cleanup(void *data);
 

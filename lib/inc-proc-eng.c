@@ -65,8 +65,6 @@ static struct shash registered_engines =
 
 static uint32_t engine_next_id;
 
-static const struct engine_context *engine_context;
-
 static const char *engine_node_state_name[EN_STATE_MAX] = {
     [EN_STALE]     = "Stale",
     [EN_UPDATED]   = "Updated",
@@ -75,8 +73,9 @@ static const char *engine_node_state_name[EN_STATE_MAX] = {
 };
 
 static void
-engine_recompute(struct engine *, struct engine_node *, bool allowed,
-                 const char *reason_fmt, ...) OVS_PRINTF_FORMAT(4, 5);
+engine_recompute(struct engine *, const struct engine_context *,
+                 struct engine_node *, bool allowed,
+                 const char *reason_fmt, ...) OVS_PRINTF_FORMAT(5, 6);
 
 void
 engine_set_force_recompute(struct engine *e)
@@ -101,18 +100,6 @@ bool
 engine_get_force_recompute(const struct engine *e)
 {
     return e->force_recompute;
-}
-
-const struct engine_context *
-engine_get_context(void)
-{
-    return engine_context;
-}
-
-void
-engine_set_context(const struct engine_context *ctx)
-{
-    engine_context = ctx;
 }
 
 /* Builds the topologically sorted 'sorted_nodes' array starting from
@@ -519,8 +506,9 @@ engine_get_input_data(const char *input_name, struct engine_node *node)
 
 void
 engine_add_input_impl(struct engine_node *node, struct engine_node *input,
-                      enum engine_input_handler_result (*change_handler)
-                          (struct engine_node *, void *),
+                      enum engine_input_handler_result (*change_handler)(
+                          const struct engine_context *, struct engine_node *,
+                          void *),
                       const char *change_handler_name)
 {
     ovs_assert(node->n_inputs < ENGINE_MAX_INPUT);
@@ -533,8 +521,8 @@ engine_add_input_impl(struct engine_node *node, struct engine_node *input,
 void
 engine_add_input_with_compute_debug_impl(
         struct engine_node *node, struct engine_node *input,
-        enum engine_input_handler_result (*change_handler)
-            (struct engine_node *, void *),
+        enum engine_input_handler_result (*change_handler)(
+            const struct engine_context *, struct engine_node *, void *),
         void (*get_compute_failure_info)(struct engine_node *),
         const char *change_handler_name)
 {
@@ -671,13 +659,14 @@ engine_init_run(struct engine *e)
 }
 
 static enum engine_node_state
-run_recompute_callback(struct engine_node *node)
+run_recompute_callback(const struct engine_context *ctx,
+                       struct engine_node *node)
 {
     enum engine_node_state ret;
     if (node->stopwatch_enabled) {
         stopwatch_start(node->stopwatch_key, time_msec());
     }
-    ret = node->run(node, node->data);
+    ret = node->run(ctx, node, node->data);
     if (node->stopwatch_enabled) {
         stopwatch_stop(node->stopwatch_key, time_msec());
     }
@@ -685,13 +674,14 @@ run_recompute_callback(struct engine_node *node)
 }
 
 static enum engine_input_handler_result
-run_change_handler(struct engine_node *node, struct engine_node_input *input)
+run_change_handler(const struct engine_context *ctx,
+                   struct engine_node *node, struct engine_node_input *input)
 {
     enum engine_input_handler_result ret;
     if (node->stopwatch_enabled) {
         stopwatch_start(input->stopwatch_key, time_msec());
     }
-    ret = input->change_handler(node, node->data);
+    ret = input->change_handler(ctx, node, node->data);
     if (node->stopwatch_enabled) {
         stopwatch_stop(input->stopwatch_key, time_msec());
     }
@@ -702,7 +692,8 @@ run_change_handler(struct engine_node *node, struct engine_node_input *input)
  * mark the node as "canceled".
  */
 static void
-engine_recompute(struct engine *e, struct engine_node *node, bool allowed,
+engine_recompute(struct engine *e, const struct engine_context *ctx,
+                 struct engine_node *node, bool allowed,
                  const char *reason_fmt, ...)
 {
     char *reason = NULL;
@@ -727,7 +718,7 @@ engine_recompute(struct engine *e, struct engine_node *node, bool allowed,
 
     /* Run the node handler which might change state. */
     long long int now = time_msec();
-    engine_set_node_state(node, run_recompute_callback(node),
+    engine_set_node_state(node, run_recompute_callback(ctx, node),
                           "recompute run() result");
     node->stats.recompute++;
     long long int delta_time = time_msec() - now;
@@ -745,8 +736,8 @@ done:
 
 /* Return true if the node could be computed, false otherwise. */
 static bool
-engine_compute(struct engine *e, struct engine_node *node,
-               bool recompute_allowed)
+engine_compute(struct engine *e, const struct engine_context *ctx,
+               struct engine_node *node, bool recompute_allowed)
 {
     for (size_t i = 0; i < node->n_inputs; i++) {
         struct engine_node *input_node = node->inputs[i].node;
@@ -758,7 +749,7 @@ engine_compute(struct engine *e, struct engine_node *node,
              */
             long long int now = time_msec();
             enum engine_input_handler_result handled;
-            handled = run_change_handler(node, &node->inputs[i]);
+            handled = run_change_handler(ctx, node, &node->inputs[i]);
             long long int delta_time = time_msec() - now;
             if (delta_time > e->compute_log_timeout_msec) {
                 static struct vlog_rate_limit rl =
@@ -773,7 +764,7 @@ engine_compute(struct engine *e, struct engine_node *node,
             }
             if (handled == EN_UNHANDLED) {
                 input_node->get_compute_failure_info(input_node);
-                engine_recompute(e, node, recompute_allowed,
+                engine_recompute(e, ctx, node, recompute_allowed,
                                  "failed handler for input %s",
                                  input_node->name);
                 return (node->state != EN_CANCELED);
@@ -793,19 +784,19 @@ engine_compute(struct engine *e, struct engine_node *node,
 }
 
 static void
-engine_run_node(struct engine *e, struct engine_node *node,
-                bool recompute_allowed)
+engine_run_node(struct engine *e, const struct engine_context *ctx,
+                struct engine_node *node, bool recompute_allowed)
 {
     if (!node->n_inputs) {
         /* Run the node handler which might change state. */
-        engine_set_node_state(node, run_recompute_callback(node),
+        engine_set_node_state(node, run_recompute_callback(ctx, node),
                               "run() result due to having no inputs");
         node->stats.recompute++;
         return;
     }
 
     if (e->force_recompute) {
-        engine_recompute(e, node, recompute_allowed, "forced");
+        engine_recompute(e, ctx, node, recompute_allowed, "forced");
         return;
     }
 
@@ -820,7 +811,7 @@ engine_run_node(struct engine *e, struct engine_node *node,
 
             /* Trigger a recompute if we don't have a change handler. */
             if (!node->inputs[i].change_handler) {
-                engine_recompute(e, node, recompute_allowed,
+                engine_recompute(e, ctx, node, recompute_allowed,
                                  "missing handler for input %s",
                                  input_node->name);
                 input_node->get_compute_failure_info(input_node);
@@ -833,7 +824,7 @@ engine_run_node(struct engine *e, struct engine_node *node,
         /* If we couldn't compute the node we either canceled or triggered
          * a full recompute. In any case, stop processing.
          */
-        if (!engine_compute(e, node, recompute_allowed)) {
+        if (!engine_compute(e, ctx, node, recompute_allowed)) {
             return;
         }
     }
@@ -847,7 +838,8 @@ engine_run_node(struct engine *e, struct engine_node *node,
 }
 
 void
-engine_run(struct engine *e, bool recompute_allowed)
+engine_run(struct engine *e, const struct engine_context *ctx,
+           bool recompute_allowed)
 {
     /* If the last run was canceled skip the incremental run because a
      * recompute is needed first.
@@ -856,13 +848,13 @@ engine_run(struct engine *e, bool recompute_allowed)
         return;
     }
 
-    struct ovsdb_idl_txn *sb_txn = engine_get_context()->ovnsb_idl_txn;
+    struct ovsdb_idl_txn *sb_txn = ctx->ovnsb_idl_txn;
 
     e->run_canceled = false;
     struct engine_node *node;
     VECTOR_FOR_EACH (&e->nodes, node) {
         ovsdb_idl_txn_assert_read_only(sb_txn, !node->sb_write);
-        engine_run_node(e, node, recompute_allowed);
+        engine_run_node(e, ctx, node, recompute_allowed);
         ovsdb_idl_txn_assert_read_only(sb_txn, false);
 
         if (node->state == EN_CANCELED) {
@@ -874,7 +866,7 @@ engine_run(struct engine *e, bool recompute_allowed)
 }
 
 bool
-engine_need_run(struct engine *e)
+engine_need_run(struct engine *e, const struct engine_context *ctx)
 {
     struct engine_node *node;
     VECTOR_FOR_EACH (&e->nodes, node) {
@@ -883,7 +875,7 @@ engine_need_run(struct engine *e)
             continue;
         }
 
-        engine_set_node_state(node, run_recompute_callback(node),
+        engine_set_node_state(node, run_recompute_callback(ctx, node),
                               "checking if engine needs to be run");
         node->stats.recompute++;
         VLOG_DBG("input node: %s, state: %s", node->name,

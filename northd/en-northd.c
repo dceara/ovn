@@ -138,9 +138,10 @@ northd_get_input_data(struct engine_node *node,
 }
 
 enum engine_node_state
-en_northd_run(struct engine_node *node, void *data)
+en_northd_run(const struct engine_context *eng_ctx,
+              struct engine_node *node, void *data)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
 
     struct northd_input input_data;
 
@@ -155,10 +156,10 @@ en_northd_run(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-northd_nb_logical_switch_handler(struct engine_node *node,
-                                 void *data)
+northd_nb_logical_switch_handler(const struct engine_context *eng_ctx,
+                                 struct engine_node *node, void *data)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct northd_data *nd = data;
 
     struct northd_input input_data;
@@ -178,8 +179,8 @@ northd_nb_logical_switch_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-northd_sb_port_binding_handler(struct engine_node *node,
-                               void *data)
+northd_sb_port_binding_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data)
 {
     struct northd_data *nd = data;
 
@@ -196,8 +197,9 @@ northd_sb_port_binding_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-northd_nb_logical_router_handler(struct engine_node *node,
-                                 void *data)
+northd_nb_logical_router_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct northd_data *nd = data;
     struct northd_input input_data;
@@ -218,7 +220,8 @@ northd_nb_logical_router_handler(struct engine_node *node,
 }
 
 enum engine_input_handler_result
-northd_lb_data_handler(struct engine_node *node, void *data)
+northd_lb_data_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                       struct engine_node *node, void *data)
 {
     struct ed_type_lb_data *lb_data = engine_get_input_data("lb_data", node);
 
@@ -245,7 +248,8 @@ northd_lb_data_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-northd_global_config_handler(struct engine_node *node, void *data OVS_UNUSED)
+northd_global_config_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data OVS_UNUSED)
 {
     struct ed_type_global_config *global_config =
         engine_get_input_data("global_config", node);
@@ -259,7 +263,8 @@ northd_global_config_handler(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-northd_nb_port_group_handler(struct engine_node *node, void *data)
+northd_nb_port_group_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data)
 {
     struct northd_data *nd = data;
 
@@ -280,8 +285,8 @@ northd_nb_port_group_handler(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-routes_northd_change_handler(struct engine_node *node,
-                             void *data OVS_UNUSED)
+routes_northd_change_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
@@ -355,8 +360,9 @@ static_route_bfd_is_updated(const struct nbrec_logical_router_static_route *sr)
 }
 
 enum engine_input_handler_result
-routes_static_route_change_handler(struct engine_node *node,
-                                   void *data)
+routes_static_route_change_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     struct routes_data *routes_data = data;
     const struct nbrec_logical_router_static_route_table *
@@ -450,7 +456,8 @@ routes_static_route_change_handler(struct engine_node *node,
 }
 
 enum engine_node_state
-en_routes_run(struct engine_node *node, void *data)
+en_routes_run(const struct engine_context *eng_ctx OVS_UNUSED,
+              struct engine_node *node, void *data)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct routes_data *routes_data = data;
@@ -476,7 +483,8 @@ en_routes_run(struct engine_node *node, void *data)
 }
 
 enum engine_input_handler_result
-bfd_sync_northd_change_handler(struct engine_node *node, void *data OVS_UNUSED)
+bfd_sync_northd_change_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data OVS_UNUSED)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     if (!northd_has_tracked_data(&northd_data->trk_data)) {
@@ -496,8 +504,8 @@ bfd_sync_northd_change_handler(struct engine_node *node, void *data OVS_UNUSED)
 }
 
 enum engine_input_handler_result
-bfd_sync_routes_change_handler(struct engine_node *node,
-                               void *data OVS_UNUSED)
+bfd_sync_routes_change_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data OVS_UNUSED)
 {
     struct routes_data *routes_data
         = engine_get_input_data("routes", node);
@@ -508,10 +516,11 @@ bfd_sync_routes_change_handler(struct engine_node *node,
 }
 
 enum engine_node_state
-en_bfd_sync_run(struct engine_node *node, void *data)
+en_bfd_sync_run(const struct engine_context *eng_ctx,
+                struct engine_node *node, void *data)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
-    const struct engine_context *eng_ctx = engine_get_context();
+
     struct route_policies_data *route_policies_data
         = engine_get_input_data("route_policies", node);
     struct routes_data *routes_data
@@ -557,7 +566,8 @@ en_bfd_sync_run(struct engine_node *node, void *data)
 }
 
 enum engine_node_state
-en_ic_learned_svc_monitors_run(struct engine_node *node, void *data_)
+en_ic_learned_svc_monitors_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                               struct engine_node *node, void *data_)
 {
     struct ic_learned_svc_monitors_data *data = data_;
     struct ovsdb_idl_index *sbrec_service_monitor_by_learned_type =
@@ -628,7 +638,8 @@ en_northd_clear_tracked_data(void *data_)
 }
 
 enum engine_input_handler_result
-northd_sb_fdb_change_handler(struct engine_node *node, void *data)
+northd_sb_fdb_change_handler(const struct engine_context *eng_ctx OVS_UNUSED,
+                             struct engine_node *node, void *data)
 {
     struct northd_data *nd = data;
     const struct sbrec_fdb_table *sbrec_fdb_table =

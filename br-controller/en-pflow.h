@@ -9,7 +9,8 @@
 
 #include "lib/inc-proc-eng.h"
 
-enum engine_node_state en_pflow_output_run(struct engine_node *, void *data);
+enum engine_node_state en_pflow_output_run(const struct engine_context *,
+                                           struct engine_node *, void *data);
 void *en_pflow_output_init(struct engine_node *node, struct engine_arg *arg);
 void en_pflow_output_cleanup(void *data);
 

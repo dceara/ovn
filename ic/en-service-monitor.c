@@ -461,10 +461,9 @@ sync_service_monitor(struct ic_context *ctx,
 }
 
 enum engine_node_state
-en_service_monitor_run(struct engine_node *node,
-                       void *data OVS_UNUSED)
+en_service_monitor_run(const struct engine_context *eng_ctx,
+                       struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 
@@ -508,10 +507,10 @@ svc_monitor_target_lport(struct ic_context *ctx,
  * are not service-monitor backends - the vast majority of SB churn) is a
  * no-op, instead of forcing a full recompute of this node. */
 enum engine_input_handler_result
-en_service_monitor_sb_port_binding_handler(struct engine_node *node,
-                                           void *data OVS_UNUSED)
+en_service_monitor_sb_port_binding_handler(
+    const struct engine_context *eng_ctx,
+    struct engine_node *node, void *data OVS_UNUSED)
 {
-    const struct engine_context *eng_ctx = engine_get_context();
     struct ic_context *ctx = eng_ctx->client_ctx;
     const struct ed_type_az *az = engine_get_input_data("az", node);
 

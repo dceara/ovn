@@ -523,7 +523,8 @@ build_datapath_route_policies(
 }
 
 enum engine_node_state
-en_route_policies_run(struct engine_node *node, void *data)
+en_route_policies_run(const struct engine_context *eng_ctx OVS_UNUSED,
+                      struct engine_node *node, void *data)
 {
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct route_policies_data *route_policies_data = data;
@@ -610,8 +611,9 @@ logical_router_ports_updated(const struct nbrec_logical_router *lr)
 }
 
 enum engine_input_handler_result
-route_policies_datapath_synced_logical_router_handler(struct engine_node *node,
-                                                      void *data)
+route_policies_datapath_synced_logical_router_handler(
+    const struct engine_context *eng_ctx OVS_UNUSED,
+    struct engine_node *node, void *data)
 {
     const struct ovn_synced_logical_router_map *synced_lrs =
         engine_get_input_data("datapath_synced_logical_router", node);
