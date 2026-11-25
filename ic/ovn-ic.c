@@ -28,6 +28,7 @@
 #include "fatal-signal.h"
 #include "hash.h"
 #include "openvswitch/hmap.h"
+#include "lib/inc-proc-eng.h"
 #include "lib/ovn-ic-nb-idl.h"
 #include "lib/ovn-ic-sb-idl.h"
 #include "lib/ovn-nb-idl.h"
@@ -694,9 +695,10 @@ inc_proc_graph_dump(const char *end_node)
     struct ovsdb_idl_loop ovnisb_idl_loop = OVSDB_IDL_LOOP_INITIALIZER(
         ovsdb_idl_create_unconnected(&icsbrec_idl_class, true));
 
-    inc_proc_ic_init(&ovnnb_idl_loop, &ovnsb_idl_loop,
-                     &ovninb_idl_loop, &ovnisb_idl_loop);
-    engine_dump_graph(end_node);
+    struct engine *engine =
+        inc_proc_ic_init(&ovnnb_idl_loop, &ovnsb_idl_loop,
+                         &ovninb_idl_loop, &ovnisb_idl_loop);
+    engine_dump_graph(engine, end_node);
 
     ovsdb_idl_loop_destroy(&ovnnb_idl_loop);
     ovsdb_idl_loop_destroy(&ovnsb_idl_loop);
@@ -905,6 +907,7 @@ main(int argc, char *argv[])
     if (retval) {
         exit(EXIT_FAILURE);
     }
+    engine_infra_init();
     unixctl_command_register("exit", "", 0, 0, ovn_ic_exit, &exiting);
     unixctl_command_register("pause", "", 0, 0, ovn_ic_pause, &state);
     unixctl_command_register("resume", "", 0, 0, ovn_ic_resume, &state);
@@ -1239,9 +1242,10 @@ main(int argc, char *argv[])
     unixctl_command_register("ic-sb-connection-status", "", 0, 0,
                              ovn_conn_show, ovnisb_idl_loop.idl);
 
-    /* Initialize incremental processing engine for ovn-northd */
-    inc_proc_ic_init(&ovnnb_idl_loop, &ovnsb_idl_loop,
-                     &ovninb_idl_loop, &ovnisb_unlocked_idl_loop);
+    /* Initialize the incremental processing engine. */
+    struct engine *engine =
+        inc_proc_ic_init(&ovnnb_idl_loop, &ovnsb_idl_loop,
+                         &ovninb_idl_loop, &ovnisb_unlocked_idl_loop);
 
     unsigned int ovnnb_cond_seqno = UINT_MAX;
     unsigned int ovnsb_cond_seqno = UINT_MAX;
@@ -1303,7 +1307,7 @@ main(int argc, char *argv[])
             if (new_ovnnb_cond_seqno != ovnnb_cond_seqno) {
                 if (!new_ovnnb_cond_seqno) {
                     VLOG_INFO("OVN NB IDL reconnected, force recompute.");
-                    inc_proc_ic_force_recompute();
+                    engine_set_force_recompute(engine);
                 }
                 ovnnb_cond_seqno = new_ovnnb_cond_seqno;
             }
@@ -1316,7 +1320,7 @@ main(int argc, char *argv[])
             if (new_ovnsb_cond_seqno != ovnsb_cond_seqno) {
                 if (!new_ovnsb_cond_seqno) {
                     VLOG_INFO("OVN SB IDL reconnected, force recompute.");
-                    inc_proc_ic_force_recompute();
+                    engine_set_force_recompute(engine);
                 }
                 ovnsb_cond_seqno = new_ovnsb_cond_seqno;
             }
@@ -1348,7 +1352,7 @@ main(int argc, char *argv[])
             if (new_ovninb_cond_seqno != ovninb_cond_seqno) {
                 if (!new_ovninb_cond_seqno) {
                     VLOG_INFO("OVN INB IDL reconnected, force recompute.");
-                    inc_proc_ic_force_recompute();
+                    engine_set_force_recompute(engine);
                 }
                 ovninb_cond_seqno = new_ovninb_cond_seqno;
             }
@@ -1361,7 +1365,7 @@ main(int argc, char *argv[])
             if (new_ovnisb_cond_seqno != ovnisb_cond_seqno) {
                 if (!new_ovnisb_cond_seqno) {
                     VLOG_INFO("OVN ISB IDL reconnected, force recompute.");
-                    inc_proc_ic_force_recompute();
+                    engine_set_force_recompute(engine);
                 }
                 ovnisb_cond_seqno = new_ovnisb_cond_seqno;
             }
@@ -1375,7 +1379,7 @@ main(int argc, char *argv[])
                 if (!new_ovnisb_unlocked_cond_seqno) {
                     VLOG_INFO("OVN ISB IDL Unlocked reconnected, "
                               "force recompute.");
-                    inc_proc_ic_force_recompute();
+                    engine_set_force_recompute(engine);
                 }
                 ovnisb_unlocked_cond_seqno = new_ovnisb_unlocked_cond_seqno;
             }
@@ -1441,7 +1445,7 @@ main(int argc, char *argv[])
                 VLOG_INFO("OVN ISB lock acquired. "
                           "This ovn-ic instance is now active.");
                 state.had_isb_lock = true;
-                inc_proc_ic_force_recompute_immediate();
+                engine_set_force_recompute_immediate(engine);
             } else if (state.had_isb_lock &&
                        !ovsdb_idl_has_lock(ctx.ovnisb_idl)) {
                 VLOG_INFO("OVN ISB lock lost.");
@@ -1477,7 +1481,7 @@ main(int argc, char *argv[])
                         update_sequence_numbers(&ctx, runned_az,
                                                 &ovnisb_unlocked_idl_loop);
                     }
-                } else if (!inc_proc_ic_get_force_recompute()) {
+                } else if (!engine_get_force_recompute(engine)) {
                     clear_idl_track = false;
                 }
                 /* If there are any errors, we force a full recompute in order
@@ -1485,25 +1489,25 @@ main(int argc, char *argv[])
                 if (!ovsdb_idl_loop_commit_and_wait(&ovnnb_idl_loop)) {
                     VLOG_INFO("OVNNB commit failed, "
                                 "force recompute next time.");
-                    inc_proc_ic_force_recompute_immediate();
+                    engine_set_force_recompute_immediate(engine);
                 }
 
                 if (!ovsdb_idl_loop_commit_and_wait(&ovnsb_idl_loop)) {
                     VLOG_INFO("OVNSB commit failed, "
                                 "force recompute next time.");
-                    inc_proc_ic_force_recompute_immediate();
+                    engine_set_force_recompute_immediate(engine);
                 }
 
                 if (!ovsdb_idl_loop_commit_and_wait(&ovninb_idl_loop)) {
                     VLOG_INFO("OVNINB commit failed, "
                                 "force recompute next time.");
-                    inc_proc_ic_force_recompute_immediate();
+                    engine_set_force_recompute_immediate(engine);
                 }
                 if (!ovsdb_idl_loop_commit_and_wait(
                                           &ovnisb_unlocked_idl_loop)) {
                     VLOG_INFO("OVNISB Unlocked commit failed, "
                                 "force recompute next time.");
-                    inc_proc_ic_force_recompute_immediate();
+                    engine_set_force_recompute_immediate(engine);
                 }
 
                 /*
@@ -1514,7 +1518,7 @@ main(int argc, char *argv[])
                     ovsdb_idl_has_lock(ovnisb_idl_loop.idl)) {
                     VLOG_INFO("OVNISB commit failed, "
                               "force recompute next time.");
-                    inc_proc_ic_force_recompute_immediate();
+                    engine_set_force_recompute_immediate(engine);
                 }
             } else {
                 /* Make sure we send any pending requests, e.g., lock. */
@@ -1534,7 +1538,7 @@ main(int argc, char *argv[])
                     */
                 }
                 /* Force a full recompute next time we become active. */
-                inc_proc_ic_force_recompute();
+                engine_set_force_recompute(engine);
             }
         } else {
             /* ovn-ic is paused
@@ -1571,7 +1575,7 @@ main(int argc, char *argv[])
             ovsdb_idl_wait(ovnisb_unlocked_idl_loop.idl);
 
             /* Force a full recompute next time we become active. */
-            inc_proc_ic_force_recompute();
+            engine_set_force_recompute(engine);
         }
 
         if (clear_idl_track) {

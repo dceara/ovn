@@ -1,0 +1,150 @@
+AT_SETUP([incremental processing - independent engines])
+AT_KEYWORDS([inc-engine])
+ovstest test-inc-proc-eng "$PWD/engine.ctl" &
+engine_pid=$!
+on_exit 'test -z "$engine_pid" || kill "$engine_pid" 2>/dev/null || :'
+OVS_WAIT_UNTIL([test -S engine.ctl])
+
+appctl () {
+    ovn-appctl -T 5 -t "$PWD/engine.ctl" "$@"
+}
+
+check appctl inc-engine/list-engines
+AT_CHECK([appctl inc-engine/recompute], [2], [], [stderr])
+AT_CHECK([grep -Fx 'no registered engines' stderr], [0], [ignore])
+check appctl test/step start-left
+AT_CHECK([appctl inc-engine/list-engines], [0], [left
+])
+AT_CHECK([appctl inc-engine/show-stats sink recompute], [0], [dnl
+0
+])
+check appctl test/step start-right
+AT_CHECK([appctl inc-engine/list-engines], [0], [left
+right
+])
+AT_CHECK([appctl inc-engine/show-stats], [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/show-stats --engine=], [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/show-stats --engine=other], [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/show-stats --engine=left --engine=right],
+         [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/show-stats --engine=left sink --engine=right],
+         [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/list-stopwatches --engine=left --engine=right],
+         [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/list-stopwatches --engine=left --engine],
+         [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/clear-stats --engine=left extra], [2], [ignore],
+         [ignore])
+AT_CHECK([appctl inc-engine/compute-log-timeout --engine=left -1], [2],
+         [ignore], [ignore])
+check appctl inc-engine/compute-log-timeout --engine=left 25
+check appctl inc-engine/recompute --engine=left
+check appctl inc-engine/enable-stopwatch --engine=left sink
+check appctl inc-engine/enable-stopwatch --engine=right sink
+check appctl test/step run
+AT_CHECK([appctl inc-engine/show-stats --engine=left sink recompute], [0], [dnl
+1
+])
+AT_CHECK([appctl inc-engine/show-stats --engine=left sink cancel], [0], [dnl
+1
+])
+AT_CHECK([appctl inc-engine/show-stats --engine=right sink compute], [0], [dnl
+1
+])
+AT_CHECK([appctl inc-engine/show-stats --engine=right sink recompute], [0], [dnl
+0
+])
+
+AT_CHECK([appctl inc-engine/list-stopwatches --engine=left sink > left-keys])
+AT_CHECK([appctl inc-engine/list-stopwatches --engine=right sink > right-keys])
+AT_CHECK([head -1 left-keys | awk '{print $1, $2}'], [0], [dnl
+sink ->
+])
+AT_CHECK([awk '{print $NF}' left-keys right-keys | sort -u | wc -l], [0], [dnl
+4
+])
+AT_CHECK([awk '{print $NF}' left-keys right-keys | \
+          grep -cE '^@ip:[[0-9a-f]]+:[[0-9a-f]]+$'], [0], [dnl
+4
+])
+left_sink=$(awk '/^sink / {print $NF}' left-keys)
+right_sink=$(awk '/^sink / {print $NF}' right-keys)
+left_handler=$(awk '/^test_engine_change_handler_with_long_name / {print $NF}' left-keys)
+right_handler=$(awk '/^test_engine_change_handler_with_long_name / {print $NF}' right-keys)
+AT_CHECK([appctl stopwatch/show sink], [2], [ignore], [ignore])
+AT_CHECK([appctl stopwatch/show "$left_sink" | grep -i 'samples.*1'],
+         [0], [ignore])
+AT_CHECK([appctl stopwatch/show "$right_sink" | grep -i 'samples.*0'],
+         [0], [ignore])
+AT_CHECK([appctl stopwatch/show "$left_handler" | grep -i 'samples.*0'],
+         [0], [ignore])
+AT_CHECK([appctl stopwatch/show "$right_handler" | grep -i 'samples.*1'],
+         [0], [ignore])
+check appctl stopwatch/reset "$left_sink"
+check appctl test/step sync
+AT_CHECK([appctl stopwatch/show "$left_sink" | grep -i 'samples.*0'],
+         [0], [ignore])
+AT_CHECK([appctl stopwatch/show "$right_handler" | grep -i 'samples.*1'],
+         [0], [ignore])
+
+check appctl inc-engine/clear-stats --engine=left
+AT_CHECK([appctl inc-engine/show-stats --engine=left sink cancel], [0], [dnl
+0
+])
+AT_CHECK([appctl inc-engine/show-stats --engine=right sink compute], [0], [dnl
+1
+])
+check appctl inc-engine/disable-stopwatch --engine=right sink
+check appctl test/step retire-left
+AT_CHECK([appctl inc-engine/show-stats --engine=left], [2], [ignore], [ignore])
+AT_CHECK([appctl inc-engine/show-stats sink compute], [0], [dnl
+2
+])
+AT_CHECK([appctl inc-engine/show-stats sink --engine=right], [2], [ignore],
+         [ignore])
+AT_CHECK([appctl inc-engine/list-stopwatches sink --engine=right], [2],
+         [ignore], [ignore])
+AT_CHECK([appctl inc-engine/compute-log-timeout 25 --engine=right], [2],
+         [ignore], [ignore])
+AT_CHECK([appctl stopwatch/show "$right_handler" | grep -i 'samples.*1'],
+         [0], [ignore])
+check appctl test/step retire-right
+check appctl inc-engine/list-engines
+AT_CHECK([appctl inc-engine/recompute], [2], [ignore], [ignore])
+
+dnl Long engine names and labels share a prefix.  Their compact keys must still
+dnl be distinct and the two edges sharing one handler must use one timer.
+dnl Reuse the retired engine objects with new names.
+check appctl test/step start-long-graphs
+long_left=shared_engine_name_more_than_thirty_one_bytes_left
+long_right=shared_engine_name_more_than_thirty_one_bytes_right
+AT_CHECK([appctl inc-engine/list-stopwatches "--engine=$long_left" > left-keys])
+AT_CHECK([appctl inc-engine/list-stopwatches "--engine=$long_right" > right-keys])
+AT_CHECK([awk '{print $NF}' left-keys right-keys | sort -u | wc -l], [0], [dnl
+8
+])
+AT_CHECK([awk '{print $NF}' left-keys right-keys | \
+          grep -cE '^@ip:[[0-9a-f]]+:[[0-9a-f]]+$'], [0], [10
+])
+AT_CHECK([awk '{print $NF}' left-keys right-keys | awk 'length > 31'], [0], [])
+left_source=$(awk '/^long_source_label_with_a_common_prefix_alpha / {print $NF}' left-keys)
+right_source=$(awk '/^long_source_label_with_a_common_prefix_alpha / {print $NF}' right-keys)
+left_handler=$(awk '/^test_engine_change_handler_with_long_name / {print $NF}' left-keys | sort -u)
+right_handler=$(awk '/^test_engine_change_handler_with_long_name / {print $NF}' right-keys | sort -u)
+
+check appctl inc-engine/enable-stopwatch "--engine=$long_left"
+check appctl test/step run-long-left
+AT_CHECK([appctl stopwatch/show "$left_source" | grep -i 'samples.*1'],
+         [0], [ignore])
+AT_CHECK([appctl stopwatch/show "$right_source" | grep -i 'samples.*0'],
+         [0], [ignore])
+AT_CHECK([appctl stopwatch/show "$left_handler" | grep -i 'samples.*2'],
+         [0], [ignore])
+AT_CHECK([appctl stopwatch/show "$right_handler" | grep -i 'samples.*0'],
+         [0], [ignore])
+check appctl exit
+wait "$engine_pid"
+engine_status=$?
+engine_pid=
+check test "$engine_status" = 0
+AT_CLEANUP

@@ -152,6 +152,9 @@
 #include <stdint.h>
 
 #include "compiler.h"
+#include "openvswitch/shash.h"
+
+#include "vec.h"
 
 struct engine_context {
     struct ovsdb_idl_txn *ovs_idl_txn;
@@ -172,6 +175,18 @@ struct engine_arg {
     struct ovsdb_idl *icsb_idl;
     struct ovsdb_idl *icnb_idl;
     struct ovsdb_idl *ovs_idl;
+};
+
+/* Per-graph incremental processing state. */
+struct engine {
+    const char *name;
+
+    struct vector nodes;
+    struct shash stopwatch_keys;
+
+    bool force_recompute;
+    bool run_canceled;
+    long long compute_log_timeout_msec;
 };
 
 struct engine_node;
@@ -289,30 +304,31 @@ struct engine_node {
     const char *stopwatch_key;
 };
 
-/* Initialize the data for the engine nodes. It calls each node's
- * init() method if not NULL passing the user supplied 'arg'.
- * It should be called before the main loop. */
-void engine_init(struct engine_node *node, struct engine_arg *arg);
+/* Set up the process-wide unixctl commands.
+ * Call once on the main thread during startup. */
+void engine_infra_init(void);
+
+/* Initialize and register the incremental processing engine. */
+void engine_init(struct engine *e, const char *name, struct engine_node *node,
+                 struct engine_arg *arg);
 
 /* Initialize the engine nodes for a new run. It should be called in the
  * main processing loop before every potential engine_run().
  */
-void engine_init_run(void);
+void engine_init_run(struct engine *);
 
 /* Execute the processing, which should be called in the main loop.
  * Updates the engine node's states accordingly. If 'recompute_allowed' is
  * false and a recompute is required by the current engine run then the engine
  * cancels its processing.
  */
-void engine_run(bool recompute_allowed);
+void engine_run(struct engine *, bool recompute_allowed);
 
-/* Clean up the data for the engine nodes. It calls each node's
- * cleanup() method if not NULL. It should be called before the program
- * terminates. */
-void engine_cleanup(void);
+/* Remove this engine's registration and clean up its graph. */
+void engine_cleanup(struct engine *);
 
 /* Check if engine needs to run but didn't. */
-bool engine_need_run(void);
+bool engine_need_run(struct engine *);
 
 /* Get the input node with <name> for <node> */
 struct engine_node * engine_get_input(const char *input_name,
@@ -348,20 +364,20 @@ void engine_add_input_with_compute_debug_impl(
  * in circumstances when we are not sure there is change or not, or
  * when there is change but the engine couldn't be executed in that
  * iteration, and the change can't be tracked across iterations. */
-void engine_set_force_recompute(void);
+void engine_set_force_recompute(struct engine *);
 
-void engine_dump_graph(const char *node_name);
+void engine_dump_graph(const struct engine *, const char *node_name);
 
 /* Same as "engine_set_force_recompute()", but the poll_loop is woken up
  * immediately and the next engine run is not delayed. */
-void engine_set_force_recompute_immediate(void);
+void engine_set_force_recompute_immediate(struct engine *);
 
 /* Clear the force flag for the next run so the engine does the
  * usual processing without forced full recompute. */
-void engine_clear_force_recompute(void);
+void engine_clear_force_recompute(struct engine *);
 
 /* Returns whether next engine_run() is forced to rempute. */
-bool engine_get_force_recompute(void);
+bool engine_get_force_recompute(const struct engine *);
 
 /* Return the current engine_context. The values in the context can be NULL
  * if the engine is run with allow_recompute == false in the current
@@ -377,14 +393,14 @@ void engine_set_context(const struct engine_context *);
 bool engine_node_changed(struct engine_node *node);
 
 /* Return true if the engine has run in the last iteration. */
-bool engine_has_run(void);
+bool engine_has_run(const struct engine *);
 
 /* Return true if the engine has any update in any node, i.e. any input
  * has changed; false if nothing has changed. */
-bool engine_has_updated(void);
+bool engine_has_updated(const struct engine *);
 
 /* Returns true if during the last engine run we had to cancel processing. */
-bool engine_canceled(void);
+bool engine_canceled(const struct engine *);
 
 /* Return a pointer to node data accessible for users outside the processing
  * engine. If the node data is not valid (e.g., last engine_run() failed or
@@ -406,7 +422,7 @@ void *engine_get_data(struct engine_node *node);
 void *engine_get_internal_data(struct engine_node *node);
 
 /* Trigger a full recompute. */
-void engine_trigger_recompute(void);
+void engine_trigger_recompute(struct engine *);
 
 struct ed_ovsdb_index {
     const char *name;

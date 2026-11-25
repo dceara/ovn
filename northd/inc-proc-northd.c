@@ -59,6 +59,8 @@ VLOG_DEFINE_THIS_MODULE(inc_proc_northd);
 
 static unixctl_cb_func chassis_features_list;
 
+static struct engine engine;
+
 #define NB_NODES \
     NB_NODE(nb_global) \
     NB_NODE(logical_switch) \
@@ -198,8 +200,9 @@ static ENGINE_NODE(datapath_synced_logical_router, CLEAR_TRACKED_DATA);
 static ENGINE_NODE(datapath_synced_logical_switch, CLEAR_TRACKED_DATA);
 static ENGINE_NODE(ic_learned_svc_monitors, SB_WRITE);
 
-void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
-                          struct ovsdb_idl_loop *sb)
+struct engine *
+inc_proc_northd_init(struct ovsdb_idl_loop *nb,
+                     struct ovsdb_idl_loop *sb)
 {
     /* Define relationships between nodes where first argument is dependent
      * on the second argument */
@@ -547,7 +550,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     struct ovsdb_idl_index *fdb_by_dp_key =
         ovsdb_idl_index_create1(sb->idl, &sbrec_fdb_col_dp_key);
 
-    engine_init(&en_northd_output, &engine_arg);
+    engine_init(&engine, "ovn-northd-i-p", &en_northd_output, &engine_arg);
 
     engine_ovsdb_node_add_index(&en_sb_chassis,
                                 "sbrec_chassis_by_name",
@@ -635,6 +638,7 @@ void inc_proc_northd_init(struct ovsdb_idl_loop *nb,
     unixctl_command_register("debug/chassis-features-list", "", 0, 0,
                              chassis_features_list,
                              &global_config->features);
+    return &engine;
 }
 
 /* Returns true if the incremental processing ended up updating nodes. */
@@ -644,7 +648,7 @@ bool inc_proc_northd_run(struct ovsdb_idl_txn *ovnnb_txn,
     ovs_assert(ovnnb_txn && ovnsb_txn);
 
     int64_t start = time_msec();
-    engine_init_run();
+    engine_init_run(&engine);
 
     struct engine_context eng_ctx = {
         .ovnnb_idl_txn = ovnnb_txn,
@@ -652,20 +656,20 @@ bool inc_proc_northd_run(struct ovsdb_idl_txn *ovnnb_txn,
     };
 
     engine_set_context(&eng_ctx);
-    engine_run(true);
+    engine_run(&engine, true);
 
-    if (!engine_has_run()) {
-        if (engine_need_run()) {
+    if (!engine_has_run(&engine)) {
+        if (engine_need_run(&engine)) {
             VLOG_DBG("engine did not run, force recompute next time.");
-            engine_set_force_recompute_immediate();
+            engine_set_force_recompute_immediate(&engine);
         } else {
             VLOG_DBG("engine did not run, and it was not needed");
         }
-    } else if (engine_canceled()) {
+    } else if (engine_canceled(&engine)) {
         VLOG_DBG("engine was canceled, force recompute next time.");
-        engine_set_force_recompute_immediate();
+        engine_set_force_recompute_immediate(&engine);
     } else {
-        engine_clear_force_recompute();
+        engine_clear_force_recompute(&engine);
     }
 
     int64_t now = time_msec();
@@ -673,19 +677,20 @@ bool inc_proc_northd_run(struct ovsdb_idl_txn *ovnnb_txn,
      * by "northd-backoff-interval-ms" interval. */
     ctx->next_run_ms = now + MIN(now - start, ctx->backoff_ms);
 
-    return engine_has_updated();
+    return engine_has_updated(&engine);
 }
 
 void inc_proc_northd_cleanup(void)
 {
-    engine_cleanup();
     engine_set_context(NULL);
+    engine_cleanup(&engine);
 }
 
 bool
 inc_proc_northd_can_run(struct northd_engine_context *ctx)
 {
-    if (engine_get_force_recompute() || time_msec() >= ctx->next_run_ms ||
+    if (engine_get_force_recompute(&engine) ||
+        time_msec() >= ctx->next_run_ms ||
         ctx->nb_idl_duration_ms >= IDL_LOOP_MAX_DURATION_MS ||
         ctx->sb_idl_duration_ms >= IDL_LOOP_MAX_DURATION_MS) {
         return true;

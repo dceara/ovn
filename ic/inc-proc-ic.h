@@ -29,10 +29,10 @@ struct ic_engine_context {
     uint32_t backoff_ms;
 };
 
-void inc_proc_ic_init(struct ovsdb_idl_loop *nb,
-                      struct ovsdb_idl_loop *sb,
-                      struct ovsdb_idl_loop *icnb,
-                      struct ovsdb_idl_loop *icsb);
+struct engine *inc_proc_ic_init(struct ovsdb_idl_loop *nb,
+                                struct ovsdb_idl_loop *sb,
+                                struct ovsdb_idl_loop *icnb,
+                                struct ovsdb_idl_loop *icsb);
 
 bool inc_proc_ic_run(struct ic_context *ctx,
                      struct ic_engine_context *ic_eng_ctx);
@@ -46,23 +46,5 @@ struct icsbrec_availability_zone;
  * last inc_proc_ic_run(), or NULL if none is resolved yet.  Used by the main
  * loop, which runs the AZ sequence-number bookkeeping outside the engine. */
 const struct icsbrec_availability_zone *inc_proc_ic_get_runned_az(void);
-
-static inline void
-inc_proc_ic_force_recompute(void)
-{
-    engine_set_force_recompute();
-}
-
-static inline void
-inc_proc_ic_force_recompute_immediate(void)
-{
-    engine_set_force_recompute_immediate();
-}
-
-static inline bool
-inc_proc_ic_get_force_recompute(void)
-{
-    return engine_get_force_recompute();
-}
 
 #endif /* INC_PROC_IC */

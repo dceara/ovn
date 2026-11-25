@@ -268,8 +268,12 @@ Runtime Introspection
 
 `ovn-northd`, `ovn-controller`, `ovn-ic` and `ovn-br-controller` all register
 the same set of `ovn-appctl`/`ovs-appctl` commands for inspecting and
-controlling the engine at runtime:
+controlling the engine at runtime. Except for `inc-engine/list-engines`,
+these commands accept `--engine=NAME` before their positional arguments.
+The selector is required with multiple registered engines. With one
+registered engine, omitting the selector selects that engine.
 
+- `inc-engine/list-engines`: List the names of the registered engines.
 - `inc-engine/show-stats [node] [counter]`: Display the per-node
   `recompute`, `compute` and `cancel` counters. If `node` is given, only
   that node's counters are shown; `counter` further restricts the output to
@@ -299,6 +303,7 @@ The engine core is implemented in `lib/inc-proc-eng.c` and
 Key Structures
 ~~~~~~~~~~~~~~
 
+- `struct engine`: Holds the graph and its processing state.
 - `struct engine_node`: The base structure for a node. Contains inputs, data,
   state, callback functions (`run`, `init`, `cleanup`, `is_valid`,
   `clear_tracked_data`, `get_compute_failure_info`), the per-node `stats`
@@ -312,6 +317,11 @@ Key Structures
   uses to pass its own private state (e.g. `ovn-controller`'s
   `controller_engine_ctx`) through to `run()` methods and change handlers.
   Accessed with `engine_get_context()`.
+
+Call `engine_infra_init()` once in the main thread during startup to
+install the process-wide unixctl commands. `engine_init()` registers the
+named graph and creates its stopwatches. `engine_cleanup()` withdraws the
+graph from runtime control.
 
 Usage Guidelines
 ----------------

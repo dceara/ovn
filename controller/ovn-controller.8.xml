@@ -1112,6 +1112,15 @@
         <code>lflow-cache/flush</code> instead.
       </dd>
 
+      <dt><code>inc-engine/list-engines</code></dt>
+      <dd>
+        Lists the names of the registered incremental processing engines.
+        The other <code>inc-engine/</code> commands accept
+        <code>--engine=<var>name</var></code> before their positional
+        arguments.  The selector is optional with one registered engine
+        and required with multiple registered engines.
+      </dd>
+
       <dt><code>inc-engine/show-stats</code></dt>
       <dd>
         Displays the following <code>ovn-controller</code> counters for each
