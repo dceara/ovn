@@ -25472,12 +25472,27 @@ AT_SETUP([ovn-northd - engine stopwatches enable/disable])
 AT_KEYWORDS([ovn])
 ovn_start
 
+northd_sw=$(as northd ovn-appctl -t ovn-northd \
+              inc-engine/list-stopwatches northd | awk 'NR == 1 {print $NF}')
+lr_nat_sw=$(as northd ovn-appctl -t ovn-northd \
+              inc-engine/list-stopwatches lr_nat | awk 'NR == 1 {print $NF}')
+AT_CHECK([test -n "$northd_sw" && test -n "$lr_nat_sw"])
+dnl Long handler labels must still resolve to a valid OVS stopwatch.
+AT_CHECK([as northd ovn-appctl -t ovn-northd inc-engine/list-stopwatches |
+          awk 'length($1) > 31 && $2 == "->" && length($NF) <= 31 {
+              print $NF
+              exit
+          }' > long-key])
+AT_CHECK([test -s long-key])
+AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show "$(cat long-key)"],
+         [0], [ignore])
+
+
 dnl By default, engine stopwatches are disabled.  Trigger a recompute to
 dnl ensure the engine runs, then verify that no samples were collected.
 check as northd ovn-appctl -t ovn-northd inc-engine/recompute
 check ovn-nbctl --wait=sb sync
-AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show northd], [0], [dnl
-Statistics for 'northd'
+AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show "$northd_sw" | grep -v '@ip:'], [0], [dnl
   Total samples: 0
   Maximum: 0 msec
   Minimum: 0 msec
@@ -25493,13 +25508,12 @@ check ovn-nbctl --wait=sb sync
 
 dnl The "northd" stopwatch should have collected samples.
 OVS_WAIT_UNTIL([
-    stats=$(as northd ovn-appctl -t ovn-northd stopwatch/show northd)
+    stats=$(as northd ovn-appctl -t ovn-northd stopwatch/show "$northd_sw")
     echo "$stats" | grep -q 'Total samples: [[1-9]]'
 ])
 
 dnl The "lr_nat" stopwatch should still have no samples.
-AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show lr_nat], [0], [dnl
-Statistics for 'lr_nat'
+AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show "$lr_nat_sw" | grep -v '@ip:'], [0], [dnl
   Total samples: 0
   Maximum: 0 msec
   Minimum: 0 msec
@@ -25516,7 +25530,7 @@ check ovn-nbctl --wait=sb sync
 
 dnl Now "lr_nat" should also have collected samples.
 OVS_WAIT_UNTIL([
-    stats=$(as northd ovn-appctl -t ovn-northd stopwatch/show lr_nat)
+    stats=$(as northd ovn-appctl -t ovn-northd stopwatch/show "$lr_nat_sw")
     echo "$stats" | grep -q 'Total samples: [[1-9]]'
 ])
 
@@ -25527,8 +25541,7 @@ check as northd ovn-appctl -t ovn-northd inc-engine/recompute
 check ovn-nbctl --wait=sb sync
 
 dnl Verify "northd" has no new samples but "lr_nat" still collects.
-AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show northd], [0], [dnl
-Statistics for 'northd'
+AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show "$northd_sw" | grep -v '@ip:'], [0], [dnl
   Total samples: 0
   Maximum: 0 msec
   Minimum: 0 msec
@@ -25537,7 +25550,7 @@ Statistics for 'northd'
   Long term average: 0.000000 msec
 ])
 OVS_WAIT_UNTIL([
-    stats=$(as northd ovn-appctl -t ovn-northd stopwatch/show lr_nat)
+    stats=$(as northd ovn-appctl -t ovn-northd stopwatch/show "$lr_nat_sw")
     echo "$stats" | grep -q 'Total samples: [[1-9]]'
 ])
 
@@ -25546,8 +25559,7 @@ check as northd ovn-appctl -t ovn-northd inc-engine/disable-stopwatch
 check as northd ovn-appctl -t ovn-northd stopwatch/reset
 check as northd ovn-appctl -t ovn-northd inc-engine/recompute
 check ovn-nbctl --wait=sb sync
-AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show northd], [0], [dnl
-Statistics for 'northd'
+AT_CHECK([as northd ovn-appctl -t ovn-northd stopwatch/show "$northd_sw" | grep -v '@ip:'], [0], [dnl
   Total samples: 0
   Maximum: 0 msec
   Minimum: 0 msec
