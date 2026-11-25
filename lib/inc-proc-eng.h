@@ -214,6 +214,7 @@ struct engine_node_input {
      * and the pointers are NULL, the change handler MUST return EN_UNHANDLED.
      */
     const char *change_handler_name;
+    const char *stopwatch_key;
     enum engine_input_handler_result (*change_handler)
         (struct engine_node *node, void *data);
 };
@@ -285,6 +286,7 @@ struct engine_node {
 
     /* Whether stopwatches are enabled for this node. */
     bool stopwatch_enabled;
+    const char *stopwatch_key;
 };
 
 /* Initialize the data for the engine nodes. It calls each node's

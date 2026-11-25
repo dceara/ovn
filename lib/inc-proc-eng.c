@@ -18,6 +18,7 @@
 
 #include <errno.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,6 +27,7 @@
 #include "openvswitch/dynamic-string.h"
 #include "openvswitch/hmap.h"
 #include "openvswitch/poll-loop.h"
+#include "openvswitch/shash.h"
 #include "openvswitch/vlog.h"
 #include "ovsdb-idl.h"
 #include "inc-proc-eng.h"
@@ -195,6 +197,15 @@ engine_set_log_timeout_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
     unixctl_command_reply(conn, NULL);
 }
 
+#define ENGINE_STOPWATCH_MAX_NAME 31
+#define ENGINE_STOPWATCH_PREFIX "@ip:"
+
+BUILD_ASSERT_DECL(sizeof ENGINE_STOPWATCH_PREFIX "4294967295"
+                  <= ENGINE_STOPWATCH_MAX_NAME + 1);
+
+static struct shash engine_stopwatch_keys =
+    SHASH_INITIALIZER(&engine_stopwatch_keys);
+
 static void
 engine_list_stopwatch_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
                           const char *argv[], void *arg OVS_UNUSED)
@@ -206,13 +217,15 @@ engine_list_stopwatch_cmd(struct unixctl_conn *conn, int argc OVS_UNUSED,
         if (node_name && strcmp(node->name, node_name)) {
             continue;
         }
-        ds_put_format(&output_str, "%s\n", node->name);
+        ds_put_format(&output_str, "%s -> %s\n", node->name,
+                      node->stopwatch_key);
         for (size_t i = 0; i < node->n_inputs; i++) {
             struct engine_node_input *input = &node->inputs[i];
             if (!input->change_handler) {
                 continue;
             }
-            ds_put_format(&output_str, "%s\n", input->change_handler_name);
+            ds_put_format(&output_str, "%s -> %s\n",
+                          input->change_handler_name, input->stopwatch_key);
         }
     }
 
@@ -260,6 +273,21 @@ engine_disable_stopwatches_cmd(struct unixctl_conn *conn, int argc,
     engine_set_stopwatch_cmd(conn, argc, argv, false);
 }
 
+static const char *
+engine_register_stopwatch(const char *label)
+{
+    char *key = shash_find_data(&engine_stopwatch_keys, label);
+    if (!key) {
+        size_t n_keys = shash_count(&engine_stopwatch_keys);
+        ovs_assert(n_keys <= UINT32_MAX);
+
+        key = xasprintf(ENGINE_STOPWATCH_PREFIX"%"PRIuSIZE, n_keys);
+        stopwatch_create(key, SW_MS);
+        shash_add(&engine_stopwatch_keys, label, key);
+    }
+    return key;
+}
+
 static void
 engine_get_compute_failure_info(struct engine_node *node)
 {
@@ -283,7 +311,18 @@ engine_init(struct engine_node *node, struct engine_arg *arg)
             sorted_node->get_compute_failure_info =
                 engine_get_compute_failure_info;
         }
-        stopwatch_create(sorted_node->name, SW_MS);
+    }
+
+    VECTOR_FOR_EACH (&engine_nodes, sorted_node) {
+        sorted_node->stopwatch_key =
+            engine_register_stopwatch(sorted_node->name);
+        for (size_t i = 0; i < sorted_node->n_inputs; i++) {
+            struct engine_node_input *input = &sorted_node->inputs[i];
+            if (input->change_handler) {
+                input->stopwatch_key =
+                    engine_register_stopwatch(input->change_handler_name);
+            }
+        }
     }
 
     unixctl_command_register("inc-engine/show-stats", "", 0, 2,
@@ -315,7 +354,14 @@ engine_cleanup(void)
             node->cleanup(node->data);
         }
         free(node->data);
+        node->stopwatch_enabled = false;
+        node->stopwatch_key = NULL;
+        for (size_t i = 0; i < node->n_inputs; i++) {
+            node->inputs[i].stopwatch_key = NULL;
+        }
     }
+
+    shash_destroy_free_data(&engine_stopwatch_keys);
     vector_destroy(&engine_nodes);
 }
 
@@ -349,9 +395,6 @@ engine_add_input_impl(struct engine_node *node, struct engine_node *input,
     node->inputs[node->n_inputs].node = input;
     node->inputs[node->n_inputs].change_handler = change_handler;
     node->inputs[node->n_inputs].change_handler_name = change_handler_name;
-    if (change_handler) {
-        stopwatch_create(change_handler_name, SW_MS);
-    }
     node->n_inputs ++;
 }
 
@@ -500,11 +543,11 @@ run_recompute_callback(struct engine_node *node)
 {
     enum engine_node_state ret;
     if (node->stopwatch_enabled) {
-        stopwatch_start(node->name, time_msec());
+        stopwatch_start(node->stopwatch_key, time_msec());
     }
     ret = node->run(node, node->data);
     if (node->stopwatch_enabled) {
-        stopwatch_stop(node->name, time_msec());
+        stopwatch_stop(node->stopwatch_key, time_msec());
     }
     return ret;
 }
@@ -514,11 +557,11 @@ run_change_handler(struct engine_node *node, struct engine_node_input *input)
 {
     enum engine_input_handler_result ret;
     if (node->stopwatch_enabled) {
-        stopwatch_start(input->change_handler_name, time_msec());
+        stopwatch_start(input->stopwatch_key, time_msec());
     }
     ret = input->change_handler(node, node->data);
     if (node->stopwatch_enabled) {
-        stopwatch_stop(input->change_handler_name, time_msec());
+        stopwatch_stop(input->stopwatch_key, time_msec());
     }
     return ret;
 }
