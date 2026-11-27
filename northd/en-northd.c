@@ -141,8 +141,6 @@ enum engine_node_state
 en_northd_run(const struct engine_context *eng_ctx,
               struct engine_node *node, void *data)
 {
-
-
     struct northd_input input_data;
 
     northd_destroy(data);
@@ -159,7 +157,6 @@ enum engine_input_handler_result
 northd_nb_logical_switch_handler(const struct engine_context *eng_ctx,
                                  struct engine_node *node, void *data)
 {
-
     struct northd_data *nd = data;
 
     struct northd_input input_data;

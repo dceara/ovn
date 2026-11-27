@@ -524,7 +524,6 @@ enum engine_node_state
 en_port_group_run(const struct engine_context *eng_ctx,
                   struct engine_node *node, void *data_)
 {
-
     struct port_group_input input_data = port_group_get_input_data(node);
     struct port_group_data *data = data_;
 

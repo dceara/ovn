@@ -1473,7 +1473,6 @@ en_advertised_mac_binding_sync_run(const struct engine_context *eng_ctx,
     struct ed_type_lr_nat_data *lr_nat_data =
         engine_get_input_data("lr_nat", node);
 
-
     struct hmap advertised_mac_binding_map =
         HMAP_INITIALIZER(&advertised_mac_binding_map);
 

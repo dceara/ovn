@@ -388,7 +388,6 @@ enum engine_node_state
 en_sync_to_sb_pb_run(const struct engine_context *eng_ctx,
                      struct engine_node *node, void *data OVS_UNUSED)
 {
-
     struct northd_data *northd_data = engine_get_input_data("northd", node);
     struct ed_type_lr_stateful *lr_stateful_data =
         engine_get_input_data("lr_stateful", node);

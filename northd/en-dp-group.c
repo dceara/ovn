@@ -42,7 +42,6 @@ dp_group_sync_to_sb(struct engine_node *node,
                     struct lflow_data *lflow_data,
                     struct ovsdb_idl_txn *ovnsb_idl_txn)
 {
-
     struct all_synced_datapaths *all_dps =
         engine_get_input_data("datapath_sync", node);
     struct ed_type_global_config *global_config =

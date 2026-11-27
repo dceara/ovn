@@ -129,7 +129,6 @@ en_multicast_igmp_run(const struct engine_context *eng_ctx,
             engine_get_input("SB_multicast_group", node),
             "sbrec_mcast_group_by_name");
 
-
     ovn_multicast_groups_destroy(&data->mcast_groups);
     ovn_igmp_groups_destroy(&data->igmp_groups);
 

@@ -44,7 +44,6 @@ enum engine_node_state
 en_sync_from_sb_run(const struct engine_context *eng_ctx,
                     struct engine_node *node, void *data OVS_UNUSED)
 {
-
     struct northd_data *nd = engine_get_input_data("northd", node);
 
     const struct sbrec_port_binding_table *sb_pb_table =
