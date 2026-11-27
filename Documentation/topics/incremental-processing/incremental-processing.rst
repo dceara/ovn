@@ -57,7 +57,7 @@ The engine facilitates:
 Engine Node State
 ~~~~~~~~~~~~~~~~~
 
-The whole graph is processed by a single top-level `engine_run(bool
+The whole graph is processed by a single top-level `engine_run(engine,
 recompute_allowed)` call, typically made once per main loop iteration; this
 is distinct from the per-node `run` method described above. The state of an
 engine node (`enum engine_node_state`) describes the validity of its data

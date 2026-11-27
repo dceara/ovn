@@ -63,6 +63,8 @@ struct engine {
 static struct shash registered_engines =
     SHASH_INITIALIZER(&registered_engines);
 
+static uint32_t engine_next_id;
+
 static const struct engine_context *engine_context;
 
 static const char *engine_node_state_name[EN_STATE_MAX] = {
@@ -441,9 +443,13 @@ engine_register(const char *name, struct engine_node *node,
         }
     }
 
-    size_t id = shash_count(&registered_engines);
-    ovs_assert(id <= UINT32_MAX);
+    uint32_t id = engine_next_id++;
 
+    if (id == UINT32_MAX) {
+        ovs_fatal(0, "Could not allocate id for incremental processing engine "
+                     "'%s'",
+                  name);
+    }
     VECTOR_FOR_EACH (&e->nodes, node) {
         node->stopwatch_key =
             engine_register_stopwatch(e, id, node->name);
